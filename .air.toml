@@ -1,0 +1,12 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/keygate ./cmd/server"
+  bin = "./tmp/keygate"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "bin", "web", "node_modules", "vendor"]
+  delay = 500
+
+[misc]
+  clean_on_exit = true

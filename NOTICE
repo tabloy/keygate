@@ -1,0 +1,39 @@
+Keygate
+Copyright 2026 Tabloy
+
+This product includes software developed by Tabloy (https://tabloy.app).
+
+────────────────────────────────────────────────────────────────────────
+TRADEMARK NOTICE
+────────────────────────────────────────────────────────────────────────
+
+The name "Keygate", the Keygate logo (shield + key icon), and the
+keygate.app domain are trademarks of Tabloy. These trademarks are NOT
+covered by the AGPL v3 license and may not be used by third parties
+without explicit written permission.
+
+You may fork and modify this software freely under the AGPL v3 license,
+but you must use a different name and logo for your derivative work.
+
+────────────────────────────────────────────────────────────────────────
+ATTRIBUTION REQUIREMENT (AGPL v3, Section 7b)
+────────────────────────────────────────────────────────────────────────
+
+Pursuant to Section 7(b) of the GNU Affero General Public License v3,
+all copies and derivative works of this software MUST retain the
+following author attribution notice in the user interface:
+
+  "Powered by Keygate" (linking to https://keygate.app)
+
+This notice must remain visible in all interactive user interfaces of
+the software, including but not limited to the admin panel sidebar and
+the customer portal footer. The notice must not be hidden, obscured,
+or made less prominent than its original form.
+
+This attribution requirement applies to all deployments, including
+modified versions, white-label deployments, and SaaS offerings built
+on this software. Removing or altering this attribution notice is a
+violation of the license terms.
+
+If you wish to remove the "Powered by Keygate" attribution, you may
+purchase a commercial license from Tabloy. Contact: hello@keygate.app

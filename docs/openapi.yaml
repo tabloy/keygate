@@ -1,0 +1,591 @@
+openapi: 3.1.0
+info:
+  title: Keygate API
+  description: |
+    License management API for software products.
+
+    ## Authentication
+
+    All License API endpoints require an API key passed via the `Authorization` header:
+
+    ```
+    Authorization: Bearer YOUR_API_KEY
+    ```
+
+    API keys are created in the Keygate admin dashboard under **Developer → API Keys**.
+    Each key is scoped to a single product.
+
+    ## Response Format
+
+    All responses use a consistent envelope:
+
+    ```json
+    // Success
+    {"success": true, "data": {...}}
+
+    // Error
+    {"success": false, "error": {"code": "ERROR_CODE", "message": "..."}}
+    ```
+  version: 1.0.0
+  contact:
+    name: Keygate
+    url: https://keygate.app
+  license:
+    name: AGPL v3
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: "{server}/api/v1"
+    variables:
+      server:
+        default: http://localhost:9000
+        description: Your Keygate server URL
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: License
+    description: Activate, verify, and deactivate licenses
+  - name: Entitlements
+    description: Check feature access for a license
+  - name: Usage
+    description: Record and query usage against quotas
+  - name: Seats
+    description: Manage team members on a license
+  - name: Floating
+    description: Concurrent session checkout for floating licenses
+
+paths:
+  /license/activate:
+    post:
+      tags: [License]
+      summary: Activate a license
+      description: |
+        Registers a device or user identifier against a license.
+        Returns a signed verification token.
+
+        - Idempotent: re-activating the same identifier returns `already_activated`
+        - Enforces `max_activations` limit from the plan
+        - Brute-force protected: 5 failures → 30-minute lockout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key:
+                  type: string
+                  example: "KG-ABCD1234-EFGH5678-IJKL9012-MNOP3456"
+                identifier:
+                  type: string
+                  description: Unique device ID or user email
+                  example: "device-a1b2c3d4"
+                identifier_type:
+                  type: string
+                  enum: [device, user]
+                  default: device
+                label:
+                  type: string
+                  description: Human-readable name for the activation
+                  example: "MacBook Pro"
+      responses:
+        "200":
+          description: Activation successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivateResponse"
+        "403":
+          description: License not usable (expired, suspended, revoked)
+        "404":
+          description: License not found
+        "409":
+          description: Activation limit reached
+        "429":
+          description: Brute-force lockout
+
+  /license/verify:
+    post:
+      tags: [License]
+      summary: Verify a license activation
+      description: |
+        Checks that a license is valid and the identifier is activated.
+        Returns the license status, plan features, and a signed token.
+
+        The signed token can be verified offline using HMAC-SHA256
+        with your `LICENSE_SIGNING_KEY`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key:
+                  type: string
+                identifier:
+                  type: string
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResponse"
+        "403":
+          description: Identifier not activated for this license
+        "404":
+          description: License not found
+
+  /license/deactivate:
+    post:
+      tags: [License]
+      summary: Deactivate a device or user
+      description: Removes an activation, freeing a slot for a new device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key:
+                  type: string
+                identifier:
+                  type: string
+      responses:
+        "200":
+          description: Deactivated
+        "404":
+          description: License or activation not found
+
+  /license/entitlements:
+    post:
+      tags: [Entitlements]
+      summary: Check feature entitlements
+      description: |
+        Returns all features available for the license's plan,
+        including quota usage for metered features.
+        Includes add-on features if any are attached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key]
+              properties:
+                license_key:
+                  type: string
+                feature:
+                  type: string
+                  description: Optional — check a single feature only
+      responses:
+        "200":
+          description: Entitlements check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitlementResponse"
+
+  /license/usage:
+    post:
+      tags: [Usage]
+      summary: Record usage
+      description: |
+        Increments a usage counter for a metered feature.
+        The increment is **atomic** — concurrent requests will never exceed the quota.
+
+        Returns the updated counter with remaining balance.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, feature]
+              properties:
+                license_key:
+                  type: string
+                feature:
+                  type: string
+                  example: "api_calls"
+                quantity:
+                  type: integer
+                  default: 1
+                  minimum: 1
+                metadata:
+                  type: object
+                  description: Arbitrary metadata stored with the event
+      responses:
+        "200":
+          description: Usage recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageResponse"
+        "429":
+          description: Quota exceeded
+
+  /license/usage/status:
+    post:
+      tags: [Usage]
+      summary: Get quota status
+      description: Returns current usage and remaining quota for a feature.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, feature]
+              properties:
+                license_key:
+                  type: string
+                feature:
+                  type: string
+      responses:
+        "200":
+          description: Quota status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotaStatusResponse"
+
+  /license/seats:
+    post:
+      tags: [Seats]
+      summary: List seats
+      description: Returns all team members for a license.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key]
+              properties:
+                license_key:
+                  type: string
+      responses:
+        "200":
+          description: Seat list
+
+  /license/seats/add:
+    post:
+      tags: [Seats]
+      summary: Add a team member
+      description: |
+        Adds a seat to the license. Idempotent — adding the same email returns the existing seat.
+        Enforces `max_seats` from the plan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, email]
+              properties:
+                license_key:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [owner, admin, member]
+                  default: member
+      responses:
+        "200":
+          description: Seat added or already exists
+        "409":
+          description: Seat limit reached
+
+  /license/seats/remove:
+    post:
+      tags: [Seats]
+      summary: Remove a team member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, seat_id]
+              properties:
+                license_key:
+                  type: string
+                seat_id:
+                  type: string
+      responses:
+        "200":
+          description: Seat removed
+
+  /license/floating/checkout:
+    post:
+      tags: [Floating]
+      summary: Checkout a floating session
+      description: |
+        Acquires a concurrent session slot. The session expires after the plan's
+        `floating_timeout` (default 30 minutes) unless refreshed via heartbeat.
+
+        - Atomic: concurrent checkouts will never exceed `max_activations`
+        - Re-checkout with the same identifier refreshes the existing session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key:
+                  type: string
+                identifier:
+                  type: string
+                  example: "workstation-001"
+                label:
+                  type: string
+      responses:
+        "200":
+          description: Session checked out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FloatingCheckoutResponse"
+        "409":
+          description: All sessions in use
+
+  /license/floating/checkin:
+    post:
+      tags: [Floating]
+      summary: Release a floating session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key:
+                  type: string
+                identifier:
+                  type: string
+      responses:
+        "200":
+          description: Session released
+
+  /license/floating/heartbeat:
+    post:
+      tags: [Floating]
+      summary: Extend a floating session
+      description: Refreshes the session expiry. Call periodically to keep the session alive.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key, identifier]
+              properties:
+                license_key:
+                  type: string
+                identifier:
+                  type: string
+      responses:
+        "200":
+          description: Session extended
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: API key from the admin dashboard
+
+  schemas:
+    ActivateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [activated, already_activated]
+            license_id:
+              type: string
+              format: uuid
+            token:
+              type: string
+              description: HMAC-SHA256 signed token for offline verification
+
+    VerifyResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [active, trialing, past_due, canceled, expired, suspended, revoked]
+            plan_id:
+              type: string
+            plan_name:
+              type: string
+            valid_until:
+              type: string
+              format: date-time
+              nullable: true
+            features:
+              type: object
+              description: "Key-value map of feature entitlements"
+              example:
+                premium_support: true
+                api_calls: "50000"
+                storage_gb: "100"
+            token:
+              type: string
+            grace_days:
+              type: integer
+
+    EntitlementResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            licensed:
+              type: boolean
+            status:
+              type: string
+            plan_id:
+              type: string
+            plan_name:
+              type: string
+            features:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  value_type:
+                    type: string
+                    enum: [bool, int, string, quota, flag]
+                  value:
+                    type: string
+                  used:
+                    type: integer
+                    nullable: true
+                  limit:
+                    type: integer
+                    nullable: true
+                  remaining:
+                    type: integer
+                    nullable: true
+                  period:
+                    type: string
+                  resets_at:
+                    type: string
+                    format: date-time
+
+    UsageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            accepted:
+              type: boolean
+            used:
+              type: integer
+              example: 451
+            limit:
+              type: integer
+              example: 1000
+            remaining:
+              type: integer
+              example: 549
+            period:
+              type: string
+              example: monthly
+            period_key:
+              type: string
+              example: "2026-03"
+
+    QuotaStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            feature:
+              type: string
+            used:
+              type: integer
+            limit:
+              type: integer
+            remaining:
+              type: integer
+            period:
+              type: string
+            period_key:
+              type: string
+
+    FloatingCheckoutResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            session_id:
+              type: string
+              format: uuid
+            expires_at:
+              type: string
+              format: date-time
+            active_sessions:
+              type: integer
+            max_sessions:
+              type: integer
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: QUOTA_EXCEEDED
+            message:
+              type: string
+              example: "usage quota exceeded for api_calls"
+            details:
+              type: object
+              nullable: true

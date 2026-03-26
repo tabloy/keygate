@@ -1,0 +1,17 @@
+.git
+.github
+.claude
+.env
+.env.*
+bin/
+tmp/
+tests/
+seed
+web/node_modules
+web/dist
+*.md
+LICENSE
+Makefile
+.air.toml
+.dockerignore
+.gitignore

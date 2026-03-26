@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: keygate
+          POSTGRES_PASSWORD: keygate
+          POSTGRES_DB: keygate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Lint
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test ./... -count=1
+
+      - name: Integration tests
+        env:
+          TEST_DATABASE_URL: postgres://keygate:keygate@localhost:5432/keygate?sslmode=disable
+        run: go test -count=1 -run "Atomic" ./internal/store/
+
+      - name: Build
+        run: go build -o /dev/null ./cmd/server
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Type check
+        run: cd web && bun run typecheck
+
+      - name: Lint
+        run: cd web && bun run lint
+
+      - name: Build
+        run: cd web && bun run build
