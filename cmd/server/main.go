@@ -154,6 +154,12 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.Default()
+
+	// Trust reverse proxy headers (Traefik, Nginx, etc.) to get real client IP.
+	// Trusts X-Forwarded-For / X-Real-Ip from private network ranges.
+	r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"})
+	r.RemoteIPHeaders = []string{"X-Forwarded-For", "X-Real-Ip"}
+
 	r.Use(middleware.RequestID())
 	r.Use(middleware.PrometheusMetrics())
 
@@ -275,12 +281,15 @@ func main() {
 
 	v1.POST("/webhook/stripe", middleware.RateLimitByIP(60, time.Minute), stripeH.Webhook)
 	v1.POST("/webhook/paypal", middleware.RateLimitByIP(60, time.Minute), paypalH.Webhook)
-	v1.POST("/checkout/stripe", stripeH.CreateCheckoutSession)
+	v1.POST("/checkout/stripe", middleware.RateLimitByIP(10, time.Minute), stripeH.CreateCheckoutSession)
+
+	// GET checkout — direct link redirect: /api/v1/checkout/stripe/:price_id
+	r.GET("/checkout/stripe/:price_id", middleware.RateLimitByIP(10, time.Minute), stripeH.CheckoutRedirect)
 	v1.POST("/subscription/change-plan", middleware.SessionAuth(cfg.JWTSecret, db.FindUserIsAdmin), stripeH.ChangePlan)
 	v1.POST("/subscription/cancel", middleware.SessionAuth(cfg.JWTSecret, db.FindUserIsAdmin), stripeH.CancelSubscription)
 	v1.POST("/subscription/billing-portal", middleware.SessionAuth(cfg.JWTSecret, db.FindUserIsAdmin), stripeH.CreatePortalSession)
 	v1.GET("/subscription/invoices", middleware.SessionAuth(cfg.JWTSecret, db.FindUserIsAdmin), stripeH.ListInvoices)
-	v1.POST("/checkout/paypal", paypalH.CreateSubscription)
+	v1.POST("/checkout/paypal", middleware.RateLimitByIP(10, time.Minute), paypalH.CreateSubscription)
 	v1.POST("/subscription/cancel-paypal", middleware.SessionAuth(cfg.JWTSecret, db.FindUserIsAdmin), paypalH.CancelSubscription)
 
 	portal := v1.Group("/portal", middleware.SessionAuth(cfg.JWTSecret, db.FindUserIsAdmin))
@@ -585,7 +594,7 @@ func serveFrontend(r *gin.Engine) {
 		path := c.Request.URL.Path
 
 		// Let backend routes pass through.
-		if strings.HasPrefix(path, "/api/") || path == "/health" || path == "/metrics" || strings.HasPrefix(path, "/docs") {
+		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/checkout/stripe/") || path == "/health" || path == "/metrics" || path == "/docs" || strings.HasPrefix(path, "/docs/") {
 			c.Next()
 			return
 		}

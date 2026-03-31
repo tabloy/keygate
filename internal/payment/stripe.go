@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +33,20 @@ type StripeHandler struct {
 	WebhookSvc    *service.WebhookService
 }
 
+// isSameOrigin checks that a URL shares the same scheme+host as BaseURL
+// and has no userinfo (to prevent https://evil.com@legit.com bypasses).
+func (h *StripeHandler) isSameOrigin(raw string) bool {
+	base, err := url.Parse(h.BaseURL)
+	if err != nil {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == base.Scheme && u.Host == base.Host && u.User == nil
+}
+
 func (h *StripeHandler) CreateCheckoutSession(c *gin.Context) {
 	var req struct {
 		PriceID    string `json:"price_id" binding:"required"`
@@ -50,13 +65,13 @@ func (h *StripeHandler) CreateCheckoutSession(c *gin.Context) {
 		return
 	}
 
-	success := req.SuccessURL
-	if success == "" {
-		success = h.BaseURL + "/checkout/success?session_id={CHECKOUT_SESSION_ID}"
+	success := h.BaseURL + "/checkout/success?session_id={CHECKOUT_SESSION_ID}"
+	if req.SuccessURL != "" && h.isSameOrigin(req.SuccessURL) {
+		success = req.SuccessURL
 	}
-	cancel := req.CancelURL
-	if cancel == "" {
-		cancel = h.BaseURL + "/pricing"
+	cancel := h.BaseURL + "/pricing"
+	if req.CancelURL != "" && h.isSameOrigin(req.CancelURL) {
+		cancel = req.CancelURL
 	}
 
 	mode := string(stripe.CheckoutSessionModeSubscription)
@@ -87,6 +102,50 @@ func (h *StripeHandler) CreateCheckoutSession(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"url": s.URL, "session_id": s.ID})
+}
+
+// CheckoutRedirect handles GET /checkout/stripe/:price_id — creates a Stripe
+// Checkout Session and redirects the user's browser directly to it.
+// No custom URLs accepted to prevent open redirect attacks.
+func (h *StripeHandler) CheckoutRedirect(c *gin.Context) {
+	priceID := c.Param("price_id")
+	if priceID == "" {
+		c.String(http.StatusBadRequest, "missing price_id")
+		return
+	}
+
+	plan, err := h.Store.FindPlanByStripePrice(c, priceID)
+	if err != nil || plan == nil {
+		c.String(http.StatusNotFound, "invalid price")
+		return
+	}
+
+	mode := string(stripe.CheckoutSessionModeSubscription)
+	if plan.LicenseType == "perpetual" {
+		mode = string(stripe.CheckoutSessionModePayment)
+	}
+
+	params := &stripe.CheckoutSessionParams{
+		Mode: stripe.String(mode),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{
+			{Price: stripe.String(priceID), Quantity: stripe.Int64(1)},
+		},
+		SuccessURL:          stripe.String(h.BaseURL + "/checkout/success?session_id={CHECKOUT_SESSION_ID}"),
+		CancelURL:           stripe.String(h.BaseURL + "/pricing"),
+		AllowPromotionCodes: stripe.Bool(true),
+	}
+	params.Metadata = map[string]string{
+		"plan_id":    plan.ID,
+		"product_id": plan.ProductID,
+	}
+
+	s, err := session.New(params)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "checkout unavailable")
+		return
+	}
+
+	c.Redirect(http.StatusTemporaryRedirect, s.URL)
 }
 
 func (h *StripeHandler) Webhook(c *gin.Context) {
