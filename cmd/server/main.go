@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/fs"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -164,7 +164,7 @@ func main() {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-		if cfg.IsProduction() {
+		if strings.HasPrefix(cfg.BaseURL, "https://") {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		}
 		c.Next()
@@ -575,22 +575,35 @@ func serveFrontend(r *gin.Engine) {
 		return
 	}
 
-	staticFS := http.Dir(distPath)
+	indexHTML, err := os.ReadFile(distPath + "/index.html")
+	if err != nil {
+		log.Printf("WARNING: web/dist exists but index.html not found: %v", err)
+		return
+	}
+
 	r.Use(func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		if strings.HasPrefix(path, "/api/") || path == "/health" || path == "/metrics" {
+		// Let backend routes pass through.
+		if strings.HasPrefix(path, "/api/") || path == "/health" || path == "/metrics" || strings.HasPrefix(path, "/docs") {
 			c.Next()
 			return
 		}
 
-		if f, err := fs.Stat(os.DirFS(distPath), strings.TrimPrefix(path, "/")); err == nil && !f.IsDir() {
-			c.FileFromFS(path, staticFS)
-			c.Abort()
-			return
+		// Try to serve a static file using path.Clean to prevent traversal.
+		// Uses c.File() instead of c.FileFromFS() to avoid http.FileServer's
+		// implicit 301 redirects (e.g. /index.html → /).
+		if clean := filepath.Clean(path); clean != "/" && clean != "/index.html" {
+			filePath := filepath.Join(distPath, clean)
+			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+				c.File(filePath)
+				c.Abort()
+				return
+			}
 		}
 
-		c.FileFromFS("/index.html", staticFS)
+		// SPA fallback: serve cached index.html for all other routes.
+		c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 		c.Abort()
 	})
 }
