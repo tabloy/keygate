@@ -495,3 +495,166 @@ func genSelfSignedCert(t *testing.T) tls.Certificate {
 	}
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv}
 }
+
+func newMockImplicitTLSSMTP(t *testing.T, cfg mockSMTPConfig) *mockSMTP {
+	t.Helper()
+	cert := genSelfSignedCert(t)
+	tlsConf := &tls.Config{Certificates: []tls.Certificate{cert}}
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", tlsConf)
+	if err != nil {
+		t.Fatalf("tls listen: %v", err)
+	}
+	srv := &mockSMTP{t: t, ln: ln, tlsCert: cert}
+	srv.wg.Add(1)
+	go srv.acceptImplicitTLSLoop(cfg)
+	return srv
+}
+
+func (s *mockSMTP) acceptImplicitTLSLoop(cfg mockSMTPConfig) {
+	defer s.wg.Done()
+	for {
+		conn, err := s.ln.Accept()
+		if err != nil {
+			return
+		}
+		s.wg.Add(1)
+		go func(c net.Conn) {
+			defer s.wg.Done()
+			defer c.Close() //nolint:errcheck
+			s.handleImplicitTLS(c, cfg)
+		}(conn)
+	}
+}
+
+func (s *mockSMTP) handleImplicitTLS(c net.Conn, cfg mockSMTPConfig) {
+	fmt.Fprint(c, "220 mockSMTP implicit TLS ready\r\n")
+	r := bufio.NewReader(c)
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		cmd := strings.TrimSpace(line)
+		upper := strings.ToUpper(cmd)
+		switch {
+		case strings.HasPrefix(upper, "EHLO"), strings.HasPrefix(upper, "HELO"):
+			fmt.Fprint(c, "250-mockSMTP\r\n")
+			if cfg.advertiseAuth != "" {
+				fmt.Fprintf(c, "250-AUTH %s\r\n", cfg.advertiseAuth)
+			}
+			fmt.Fprint(c, "250 HELP\r\n")
+
+		case strings.HasPrefix(upper, "AUTH PLAIN"):
+			s.mu.Lock()
+			s.selectedMech = "PLAIN"
+			s.mu.Unlock()
+			parts := strings.SplitN(cmd, " ", 3)
+			if len(parts) < 3 {
+				fmt.Fprint(c, "501 Syntax error\r\n")
+				continue
+			}
+			raw, err := base64.StdEncoding.DecodeString(parts[2])
+			if err != nil {
+				fmt.Fprint(c, "501 base64 decode\r\n")
+				continue
+			}
+			segments := strings.Split(string(raw), "\x00")
+			if len(segments) != 3 || segments[1] != cfg.wantUsername || segments[2] != cfg.wantPassword {
+				fmt.Fprint(c, "535 Authentication credentials invalid\r\n")
+				continue
+			}
+			s.mu.Lock()
+			s.authSucceeded = true
+			s.mu.Unlock()
+			fmt.Fprint(c, "235 Authentication succeeded\r\n")
+
+		case strings.HasPrefix(upper, "MAIL FROM"):
+			s.mu.Lock()
+			s.gotFrom = cmd
+			s.mu.Unlock()
+			fmt.Fprint(c, "250 OK\r\n")
+
+		case strings.HasPrefix(upper, "RCPT TO"):
+			s.mu.Lock()
+			s.gotTo = append(s.gotTo, cmd)
+			s.mu.Unlock()
+			fmt.Fprint(c, "250 OK\r\n")
+
+		case upper == "DATA":
+			fmt.Fprint(c, "354 End data with <CR><LF>.<CR><LF>\r\n")
+			var data strings.Builder
+			for {
+				dl, err := r.ReadString('\n')
+				if err != nil {
+					return
+				}
+				if dl == ".\r\n" || dl == ".\n" {
+					break
+				}
+				data.WriteString(dl)
+			}
+			s.mu.Lock()
+			s.gotData = data.String()
+			s.mu.Unlock()
+			fmt.Fprint(c, "250 OK\r\n")
+
+		case upper == "QUIT":
+			fmt.Fprint(c, "221 Bye\r\n")
+			return
+
+		default:
+			fmt.Fprint(c, "502 Command not implemented\r\n")
+		}
+	}
+}
+
+func TestSendOnce_ImplicitTLS465(t *testing.T) {
+	srv := newMockImplicitTLSSMTP(t, mockSMTPConfig{
+		advertiseAuth: "PLAIN",
+		wantUsername:  "bob",
+		wantPassword:  "secret",
+	})
+	defer srv.Close()
+
+	svc := &EmailService{
+		host:      "127.0.0.1",
+		port:      "465",
+		username:  "bob",
+		password:  "secret",
+		from:      "system@keygate.test",
+		enabled:   true,
+		logger:    slog.Default(),
+		tlsConfig: &tls.Config{InsecureSkipVerify: true, ServerName: "127.0.0.1"},
+	}
+
+	addr := fmt.Sprintf("127.0.0.1:%d", srv.Port())
+	msg := []byte("Subject: test 465\r\n\r\nhello over implicit tls")
+	cfg := svc.getConfig()
+	cfg.port = "465"
+	if err := svc.sendOnceWithConfig(cfg, addr, "recipient@test.com", msg); err != nil {
+		t.Fatalf("sendOnceWithConfig failed on 465: %v", err)
+	}
+
+	if !srv.AuthSucceeded() {
+		t.Errorf("expected AUTH to succeed over implicit TLS")
+	}
+}
+
+func TestEmailService_DynamicConfig(t *testing.T) {
+	// 1. Without store or env: not configured
+	svc := NewEmailService("", "", "", "", "", slog.Default(), nil)
+	if svc.IsConfigured() {
+		t.Errorf("expected IsConfigured() to be false when nothing is set")
+	}
+
+	// 2. Struct env settings only
+	svcEnv := NewEmailService("smtp.example.com", "587", "user", "pass", "noreply@example.com", slog.Default(), nil)
+	if !svcEnv.IsConfigured() {
+		t.Errorf("expected IsConfigured() to be true with env values")
+	}
+	cfg := svcEnv.getConfig()
+	if cfg.host != "smtp.example.com" || cfg.port != "587" {
+		t.Errorf("unexpected cfg: %+v", cfg)
+	}
+}
+

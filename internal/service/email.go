@@ -38,7 +38,56 @@ type EmailService struct {
 	tlsConfig *tls.Config
 }
 
-func (s *EmailService) IsConfigured() bool { return s.enabled }
+type smtpConfig struct {
+	host     string
+	port     string
+	username string
+	password string
+	from     string
+	enabled  bool
+}
+
+// getConfig returns the active SMTP configuration. Settings stored
+// dynamically in the database (via Admin Settings) take precedence over
+// the startup environment variables (s.host, s.port, etc.), allowing
+// administrators to configure or update SMTP from the web dashboard
+// without restarting the server.
+func (s *EmailService) getConfig() smtpConfig {
+	cfg := smtpConfig{
+		host:     s.host,
+		port:     s.port,
+		username: s.username,
+		password: s.password,
+		from:     s.from,
+	}
+	if s.store != nil {
+		settings, err := s.store.GetSettings(context.Background())
+		if err == nil {
+			if v, ok := settings["smtp_host"]; ok && strings.TrimSpace(v) != "" {
+				cfg.host = strings.TrimSpace(v)
+			}
+			if v, ok := settings["smtp_port"]; ok && strings.TrimSpace(v) != "" {
+				cfg.port = strings.TrimSpace(v)
+			}
+			if v, ok := settings["smtp_username"]; ok && (strings.TrimSpace(v) != "" || settings["smtp_host"] != "") {
+				cfg.username = strings.TrimSpace(v)
+			}
+			if v, ok := settings["smtp_password"]; ok && v != "" {
+				cfg.password = v
+			}
+			if v, ok := settings["smtp_from"]; ok && strings.TrimSpace(v) != "" {
+				cfg.from = strings.TrimSpace(v)
+			}
+		}
+	}
+	if cfg.port == "" {
+		cfg.port = "587"
+	}
+	cfg.enabled = cfg.host != "" && cfg.from != ""
+	return cfg
+}
+
+func (s *EmailService) IsConfigured() bool { return s.getConfig().enabled }
 
 func NewEmailService(host, port, username, password, from string, logger *slog.Logger, s *store.Store) *EmailService {
 	enabled := host != "" && from != ""
@@ -80,7 +129,8 @@ func DefaultTemplates() map[string]string {
 }
 
 func (s *EmailService) Send(to, subject, htmlBody string) error {
-	if !s.enabled {
+	cfg := s.getConfig()
+	if !cfg.enabled {
 		s.logger.Info("email skipped (not configured)", "to", to, "subject", subject)
 		return nil
 	}
@@ -91,7 +141,7 @@ func (s *EmailService) Send(to, subject, htmlBody string) error {
 	}
 
 	msg := strings.Join([]string{
-		"From: " + s.from,
+		"From: " + cfg.from,
 		"To: " + to,
 		"Subject: " + subject,
 		"MIME-Version: 1.0",
@@ -100,13 +150,13 @@ func (s *EmailService) Send(to, subject, htmlBody string) error {
 		htmlBody,
 	}, "\r\n")
 
-	addr := s.host + ":" + s.port
-	err := s.sendOnce(addr, to, []byte(msg))
+	addr := cfg.host + ":" + cfg.port
+	err := s.sendOnceWithConfig(cfg, addr, to, []byte(msg))
 	if err != nil {
 		// Retry once after a short delay — transient TCP / TLS hiccups.
 		s.logger.Warn("email send failed, retrying", "to", to, "error", err)
 		time.Sleep(3 * time.Second)
-		err = s.sendOnce(addr, to, []byte(msg))
+		err = s.sendOnceWithConfig(cfg, addr, to, []byte(msg))
 		if err != nil {
 			s.logger.Error("email send failed after retry", "to", to, "error", err)
 			return fmt.Errorf("email send: %w", err)
@@ -125,10 +175,10 @@ func (s *EmailService) Send(to, subject, htmlBody string) error {
 // "504 5.7.4 Unrecognized authentication type").
 //
 // Order of operations:
-//  1. TCP dial.
+//  1. TCP dial (or direct TLS dial if port == 465).
 //  2. EHLO (records server-advertised extensions).
-//  3. STARTTLS if advertised — Office 365 / Gmail / most modern
-//     submission endpoints require it on port 587.
+//  3. STARTTLS if advertised and not already on TLS — Office 365 /
+//     Gmail / most modern submission endpoints require it on port 587.
 //  4. EHLO again (Client.StartTLS does this internally; the
 //     extension list refreshes — AUTH only appears post-TLS on
 //     stricter servers).
@@ -144,6 +194,11 @@ func (s *EmailService) Send(to, subject, htmlBody string) error {
 // own guard. That's the safe default; relay-style deployments that
 // genuinely want plaintext auth can run their own postfix in front.
 func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
+	cfg := s.getConfig()
+	return s.sendOnceWithConfig(cfg, addr, to, msg)
+}
+
+func (s *EmailService) sendOnceWithConfig(cfg smtpConfig, addr, to string, msg []byte) error {
 	// The SMTP envelope sender (MAIL FROM, RFC 5321) must be a BARE
 	// address — "noreply@x.com", never "Keygate <noreply@x.com>".
 	// The display-name form is only legal in the RFC 5322 "From:"
@@ -151,9 +206,9 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 	// Postmark reject a display-name envelope with
 	// "501 Bad sender address syntax". Parse once here so operators
 	// can keep configuring the friendly form in SMTP_FROM.
-	envelopeFrom, err := parseEnvelopeAddress(s.from)
+	envelopeFrom, err := parseEnvelopeAddress(cfg.from)
 	if err != nil {
-		return fmt.Errorf("invalid SMTP_FROM %q: %w", s.from, err)
+		return fmt.Errorf("invalid SMTP_FROM %q: %w", cfg.from, err)
 	}
 	// CR/LF guard (SMTP injection) — same as net/smtp.SendMail.
 	if err := validateSMTPLine(envelopeFrom); err != nil {
@@ -163,11 +218,22 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 		return err
 	}
 
-	conn, err := net.DialTimeout("tcp", addr, 30*time.Second)
+	var conn net.Conn
+	dialer := &net.Dialer{Timeout: 30 * time.Second}
+	tlsConf := s.tlsConfig
+	if tlsConf == nil {
+		tlsConf = &tls.Config{ServerName: cfg.host, MinVersion: tls.VersionTLS12}
+	}
+
+	if cfg.port == "465" {
+		conn, err = tls.DialWithDialer(dialer, "tcp", addr, tlsConf)
+	} else {
+		conn, err = dialer.Dial("tcp", addr)
+	}
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
-	c, err := smtp.NewClient(conn, s.host)
+	c, err := smtp.NewClient(conn, cfg.host)
 	if err != nil {
 		_ = conn.Close()
 		return fmt.Errorf("smtp client: %w", err)
@@ -178,20 +244,18 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 		return fmt.Errorf("ehlo: %w", err)
 	}
 
-	// STARTTLS upgrade if the server advertises it. (Client.StartTLS
-	// internally re-EHLOs so post-TLS extensions land in c.Extension.)
-	if ok, _ := c.Extension("STARTTLS"); ok {
-		cfg := s.tlsConfig
-		if cfg == nil {
-			cfg = &tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}
-		}
-		if err := c.StartTLS(cfg); err != nil {
-			return fmt.Errorf("starttls: %w", err)
+	// STARTTLS upgrade if not on implicit TLS (port 465) and the server advertises it.
+	// (Client.StartTLS internally re-EHLOs so post-TLS extensions land in c.Extension.)
+	if cfg.port != "465" {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			if err := c.StartTLS(tlsConf); err != nil {
+				return fmt.Errorf("starttls: %w", err)
+			}
 		}
 	}
 
-	if s.username != "" {
-		auth, perr := pickAuth(c, s.host, s.username, s.password)
+	if cfg.username != "" {
+		auth, perr := pickAuth(c, cfg.host, cfg.username, cfg.password)
 		if perr != nil {
 			return perr
 		}
