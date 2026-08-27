@@ -204,10 +204,18 @@ func (s *Store) UpsertUser(ctx context.Context, u *model.User) error {
 	if u.ID == "" {
 		u.ID = newID()
 	}
-	_, err := s.DB.NewInsert().Model(u).
-		On("CONFLICT (email) DO UPDATE").
-		Set("name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url, updated_at = now()").
-		Exec(ctx)
+	role := u.Role
+	if role == "" {
+		role = model.RoleUser
+	}
+	_, err := s.DB.NewRaw(`
+		INSERT INTO users (id, email, name, avatar_url, role, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, now(), now())
+		ON CONFLICT (email) DO UPDATE SET
+			name = CASE WHEN EXCLUDED.name != '' THEN EXCLUDED.name ELSE users.name END,
+			avatar_url = CASE WHEN EXCLUDED.avatar_url != '' THEN EXCLUDED.avatar_url ELSE users.avatar_url END,
+			updated_at = now()
+	`, u.ID, u.Email, u.Name, u.AvatarURL, role).Exec(ctx)
 	return err
 }
 
