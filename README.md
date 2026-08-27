@@ -86,7 +86,7 @@ Email OTP login with constant-time hash verification, role-based access checked 
 
 ### 🌍 Self-Hosted
 
-Single Go binary + PostgreSQL + (optional) S3-compatible storage for release artifacts. No Redis, no microservices. Auto-migration on startup. Setup wizard for first run. Custom branding, email templates, and i18n (English/Chinese built-in).
+Single Go binary + PostgreSQL + (optional) S3-compatible storage for release artifacts. No Redis, no microservices. Auto-migration on startup. Setup wizard for first run. Custom branding, email templates, and i18n (English/Chinese/Turkish built-in).
 
 <br />
 

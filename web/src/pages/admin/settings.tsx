@@ -19,39 +19,34 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/hooks/use-auth"
-import { useI18n } from "@/i18n"
+import { type Locale, useI18n } from "@/i18n"
 import type { User } from "@/lib/api"
 import { admin } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
 import EmailTemplatesManager from "@/pages/admin/email-templates"
 
 const TIMEZONES = [
-  { value: "UTC", label: "UTC +0:00", city: "UTC" },
-  { value: "Pacific/Midway", label: "UTC -11:00", city: "Midway" },
-  { value: "Pacific/Honolulu", label: "UTC -10:00", city: "Honolulu" },
-  { value: "America/Anchorage", label: "UTC -9:00", city: "Anchorage" },
-  { value: "America/Los_Angeles", label: "UTC -8:00", city: "Los Angeles" },
-  { value: "America/Denver", label: "UTC -7:00", city: "Denver" },
-  { value: "America/Chicago", label: "UTC -6:00", city: "Chicago" },
-  { value: "America/New_York", label: "UTC -5:00", city: "New York" },
-  { value: "America/Caracas", label: "UTC -4:00", city: "Caracas" },
-  { value: "America/Sao_Paulo", label: "UTC -3:00", city: "Sao Paulo" },
-  { value: "Atlantic/South_Georgia", label: "UTC -2:00", city: "South Georgia" },
-  { value: "Atlantic/Azores", label: "UTC -1:00", city: "Azores" },
+  { value: "UTC", label: "UTC +0:00", city: "Universal Time" },
   { value: "Europe/London", label: "UTC +0:00", city: "London" },
-  { value: "Europe/Paris", label: "UTC +1:00", city: "Paris / Berlin" },
+  { value: "Europe/Berlin", label: "UTC +1:00", city: "Berlin / Paris" },
+  { value: "Europe/Istanbul", label: "UTC +3:00", city: "Istanbul" },
   { value: "Europe/Helsinki", label: "UTC +2:00", city: "Helsinki / Cairo" },
-  { value: "Europe/Moscow", label: "UTC +3:00", city: "Moscow" },
+  { value: "Europe/Moscow", label: "UTC +3:00", city: "Moscow / Riyadh" },
   { value: "Asia/Dubai", label: "UTC +4:00", city: "Dubai" },
-  { value: "Asia/Karachi", label: "UTC +5:00", city: "Karachi" },
   { value: "Asia/Kolkata", label: "UTC +5:30", city: "Kolkata / Mumbai" },
-  { value: "Asia/Dhaka", label: "UTC +6:00", city: "Dhaka" },
-  { value: "Asia/Bangkok", label: "UTC +7:00", city: "Bangkok" },
+  { value: "Asia/Bangkok", label: "UTC +7:00", city: "Bangkok / Jakarta" },
   { value: "Asia/Shanghai", label: "UTC +8:00", city: "Shanghai / Singapore" },
   { value: "Asia/Tokyo", label: "UTC +9:00", city: "Tokyo / Seoul" },
   { value: "Australia/Sydney", label: "UTC +10:00", city: "Sydney" },
   { value: "Pacific/Noumea", label: "UTC +11:00", city: "Noumea" },
   { value: "Pacific/Auckland", label: "UTC +12:00", city: "Auckland" },
+  { value: "America/New_York", label: "UTC -5:00", city: "New York / Toronto" },
+  { value: "America/Chicago", label: "UTC -6:00", city: "Chicago" },
+  { value: "America/Denver", label: "UTC -7:00", city: "Denver" },
+  { value: "America/Los_Angeles", label: "UTC -8:00", city: "Los Angeles" },
+  { value: "America/Anchorage", label: "UTC -9:00", city: "Anchorage" },
+  { value: "Pacific/Honolulu", label: "UTC -10:00", city: "Honolulu" },
+  { value: "America/Sao_Paulo", label: "UTC -3:00", city: "São Paulo" },
 ]
 
 // The keys this form owns. Save posts only these: the settings table
@@ -66,6 +61,7 @@ const TIMEZONES = [
 const FORM_KEYS = [
   "site_name",
   "timezone",
+  "language",
   "signup_mode",
   "brand_color",
   "logo_url",
@@ -219,13 +215,21 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t("settings.language")}</Label>
-                  <Select value={locale} onValueChange={(v) => setLocale(v as "en" | "zh")}>
+                  <Select
+                    value={locale}
+                    onValueChange={(v) => {
+                      const l = v as Locale
+                      setLocale(l)
+                      set("language", l)
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="en">English</SelectItem>
                       <SelectItem value="zh">中文</SelectItem>
+                      <SelectItem value="tr">Türkçe</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">{t("settings.languageDesc")}</p>
