@@ -15,12 +15,14 @@ const tr = {
   // Davet kabul sayfası (Accept-invite landing page)
   "acceptInvite.processing": "Davetiniz kabul ediliyor…",
   "acceptInvite.missingToken": "Davet belirteci (token) eksik",
-  "acceptInvite.missingTokenDesc": "Bu bağlantı geçerli bir davet belirteci içermiyor. E-postanızdaki bağlantıyı tekrar açın.",
+  "acceptInvite.missingTokenDesc":
+    "Bu bağlantı geçerli bir davet belirteci içermiyor. E-postanızdaki bağlantıyı tekrar açın.",
   "acceptInvite.invalidTitle": "Davet geçersiz veya süresi dolmuş",
   "acceptInvite.invalidDesc":
     "Bu davet zaten kullanılmış, iptal edilmiş veya süresi dolmuş. Ekip yöneticinizden yeni bir davet göndermesini isteyin.",
   "acceptInvite.acceptedTitle": "{product} uygulamasına hoş geldiniz",
-  "acceptInvite.acceptedDesc": "{role} rolüyle katıldınız. Lisansları ve kullanıcıları yönetmek için portala giriş yapın.",
+  "acceptInvite.acceptedDesc":
+    "{role} rolüyle katıldınız. Lisansları ve kullanıcıları yönetmek için portala giriş yapın.",
   "acceptInvite.openPortal": "Portalı aç",
   "acceptInvite.goHome": "Ana sayfaya dön",
   "common.actions": "İşlemler",
@@ -95,7 +97,8 @@ const tr = {
   "plans.modelStandard": "Standart",
   "plans.modelFloating": "Kayan / Eşzamanlı (Floating)",
   "plans.floatingTimeout": "Kayan Lisans Zaman Aşımı (dakika)",
-  "plans.hintDesktop": "Masaüstü ürünü — etkinleştirmeleri + otomatik güncelleme akışlarını destekler. Koltuklar devre dışıdır.",
+  "plans.hintDesktop":
+    "Masaüstü ürünü — etkinleştirmeleri + otomatik güncelleme akışlarını destekler. Koltuklar devre dışıdır.",
   "plans.hintSaas": "SaaS ürünü — koltukları ve kullanımı destekler. Etkinleştirmeler ve sürüm akışları devre dışıdır.",
   "plans.hintHybrid": "Hibrit ürün — etkinleştirmeler, koltuklar ve sürüm akışlarının tümü kullanılabilir.",
   "plans.notApplicableForType": "Bu ürün türü için geçerli değil",
@@ -128,7 +131,8 @@ const tr = {
   "licenses.validUntil": "Geçerlilik Tarihi",
   "licenses.perpetual": "Süresiz",
   "licenses.validUntilOptional": "Geçerlilik tarihi (isteğe bağlı)",
-  "licenses.validUntilHint": "Süresiz bir lisans için boş bırakın (deneme sürümleri yine de planın deneme günlerini kullanır).",
+  "licenses.validUntilHint":
+    "Süresiz bir lisans için boş bırakın (deneme sürümleri yine de planın deneme günlerini kullanır).",
   "licenses.validUntilEdit": "Bitiş tarihini düzenle",
   "licenses.validUntilClear": "Lisansı süresiz yapmak için boş bırakın.",
   "licenses.validUntilExpiredHint":
@@ -178,10 +182,12 @@ const tr = {
   "licenses.deactivate": "Devre Dışı Bırak",
   "licenses.invite": "Üye davet et",
   "licenses.inviteTitle": "Ekip üyesi davet et",
-  "licenses.inviteDesc": "Bu adrese tek kullanımlık bir kabul bağlantısı göndereceğiz. Bağlantının süresi 7 gün içinde dolar.",
+  "licenses.inviteDesc":
+    "Bu adrese tek kullanımlık bir kabul bağlantısı göndereceğiz. Bağlantının süresi 7 gün içinde dolar.",
   "licenses.sendInvite": "Davet gönder",
   "licenses.seatInviteSent": "Davet gönderildi",
-  "licenses.seatCapReached": "Koltuk sınırına ulaşıldı. Daha fazla üye davet etmeden önce planı yükseltin veya pasif bir üyeyi kaldırın.",
+  "licenses.seatCapReached":
+    "Koltuk sınırına ulaşıldı. Daha fazla üye davet etmeden önce planı yükseltin veya pasif bir üyeyi kaldırın.",
   "licenses.deactivateTitle": "{device} cihazı devre dışı bırakılsın mı?",
   "licenses.deactivateDesc":
     "Bu cihaz hemen erişimini kaybeder. Müşteri, lisans anahtarını bilen herhangi bir istemciden (bir etkinleştirme yuvası kullanarak) cihazı yeniden etkinleştirebilir.",
@@ -203,7 +209,8 @@ const tr = {
   "apiKeys.empty": "Henüz API anahtarı yok",
   "apiKeys.created": "API Anahtarı Oluşturuldu",
   "apiKeys.createdDesc": "Bu anahtarı şimdi kopyalayın. Tekrar görüntüleyemeyeceksiniz.",
-  "apiKeys.deleteConfirm": "Bu işlem bu anahtarı derhal geçersiz kılacaktır. Bu anahtarı kullanan tüm istemciler çalışmayı durduracaktır.",
+  "apiKeys.deleteConfirm":
+    "Bu işlem bu anahtarı derhal geçersiz kılacaktır. Bu anahtarı kullanan tüm istemciler çalışmayı durduracaktır.",
   "apiKeys.noProductsDesc": "API anahtarları oluşturmadan önce bir ürün oluşturun.",
   "apiKeys.scopes": "Yetki Kapsamları (Scopes)",
   "apiKeys.scopesNone": "Kapsam seçilmedi",
@@ -401,7 +408,8 @@ const tr = {
   "login.signInWith": "{provider} ile giriş yap",
   "login.signingIn": "Giriş yapılıyor...",
   "login.devLogin": "Geliştirici Girişi",
-  "login.devNote": "Yalnızca geliştirme ortamı içindir. Yönetici erişimi için e-postayı ADMIN_EMAILS listesine ekleyin.",
+  "login.devNote":
+    "Yalnızca geliştirme ortamı içindir. Yönetici erişimi için e-postayı ADMIN_EMAILS listesine ekleyin.",
   "login.noProviders": "Yapılandırılmış kimlik doğrulama sağlayıcısı yok.",
   "login.failed": "Giriş başarısız oldu",
   "login.sendCode": "Giriş kodu gönder",
@@ -672,7 +680,8 @@ const tr = {
   "releases.yankDesc":
     "Geri çekme işlemi bu sürümü (ve TÜM paketlerini) güncelleme akışlarından kaldırır. Mevcut kurulumlar çalışmaya devam eder. Denetim günlüğüne kaydedilmek üzere bir neden belirtin.",
   "releases.reason": "Neden",
-  "releases.yankReasonPlaceholder": "v1.2.3 sürümünde Windows kullanıcılarını etkileyen kritik hata; geri alma önerilir.",
+  "releases.yankReasonPlaceholder":
+    "v1.2.3 sürümünde Windows kullanıcılarını etkileyen kritik hata; geri alma önerilir.",
   "releases.releaseYankedToast": "Sürüm geri çekildi",
   "releases.releaseUnyankedToast": "Sürümün geri çekilmesi kaldırıldı",
   "releases.releasePublishedToast": "Sürüm yayınlandı",

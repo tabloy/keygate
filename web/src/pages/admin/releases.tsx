@@ -332,9 +332,7 @@ export default function ReleasesPage() {
                           </DropdownMenuItem>
                         )}
                         {rel.status === "yanked" && (
-                          <DropdownMenuItem onClick={() => setUnyanking(rel)}>
-                            {t("releases.unyank")}
-                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setUnyanking(rel)}>{t("releases.unyank")}</DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
                         {rel.status === "draft" ? (
@@ -550,7 +548,11 @@ function CreateReleaseDialog({
           </div>
           <div className="space-y-2">
             <Label>{t("releases.displayNameOptional")}</Label>
-            <Input placeholder={t("releases.displayNamePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              placeholder={t("releases.displayNamePlaceholder")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label>{t("releases.releaseNotesOptional")}</Label>
@@ -685,7 +687,9 @@ function ArtifactRow({
         {artifact.platform}
       </Badge>
       <span className="text-muted-foreground text-xs flex-1 truncate">
-        {ready ? `${formatBytes(artifact.file_size)} · sha256:${artifact.sha256.slice(0, 12)}…` : t("releases.notUploadedYet")}
+        {ready
+          ? `${formatBytes(artifact.file_size)} · sha256:${artifact.sha256.slice(0, 12)}…`
+          : t("releases.notUploadedYet")}
       </span>
       {ready ? (
         <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">{t("releases.statusReady")}</Badge>
@@ -1047,9 +1051,7 @@ function SigningKeysSection({ productId }: { productId: string }) {
           <CardContent className="py-8 text-center">
             <KeyRound className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
             <p className="font-medium">{t("releases.noActiveKey")}</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              {t("releases.noActiveKeyDesc")}
-            </p>
+            <p className="text-sm text-muted-foreground mb-4">{t("releases.noActiveKeyDesc")}</p>
             <Button onClick={() => generateMut.mutate()} disabled={generateMut.isPending}>
               <Plus className="h-4 w-4 mr-2" />
               {generateMut.isPending ? t("releases.generating") : t("releases.generateKey")}
@@ -1117,7 +1119,9 @@ function ActiveSigningKeyCard({
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium text-sm">{t("releases.activeSigningKey")}</p>
-            <p className="text-xs text-muted-foreground">{t("releases.createdDate", { date: formatDate(keyRow.created_at) })}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("releases.createdDate", { date: formatDate(keyRow.created_at) })}
+            </p>
           </div>
           <Badge className="bg-emerald-100 text-emerald-800">{t("common.active")}</Badge>
         </div>
@@ -1129,9 +1133,7 @@ function ActiveSigningKeyCard({
               {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("releases.publicKeyEmbedHint")}
-          </p>
+          <p className="text-xs text-muted-foreground mt-1">{t("releases.publicKeyEmbedHint")}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>

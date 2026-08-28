@@ -621,15 +621,13 @@ const zh = {
   "releases.unyankDesc":
     "这将恢复该发布版本至公共更新源。受影响通道上的 SDK 客户端将重新将 v{version} 作为有效更新接收。",
   "releases.deleteDraftTitle": "删除草稿版本？",
-  "releases.deleteDraftDesc":
-    "将永久删除该草稿及其上传的发布包。已发布或已撤回的版本无法删除。",
+  "releases.deleteDraftDesc": "将永久删除该草稿及其上传的发布包。已发布或已撤回的版本无法删除。",
   "releases.publishBelowLatestTitle": "发布低于当前最新版本的版本？",
   "releases.publishBelowLatestDesc":
     "正在发布 {version}，该版本早于 {latest}。Velopack 和 Tauri 默认拒绝降级；Sparkle 标准比较器不感知 SemVer。此发布版本将乱序显示在您的历史记录中 — 适用于补丁回溯 (backports)。",
   "releases.publishAnyway": "仍然发布",
   "releases.createTitle": "新建发布",
-  "releases.createDesc":
-    "创建发布记录。您将在下一步添加特定平台的二进制文件（发布包）。",
+  "releases.createDesc": "创建发布记录。您将在下一步添加特定平台的二进制文件（发布包）。",
   "releases.displayNameOptional": "显示名称（可选）",
   "releases.displayNamePlaceholder": "MyApp Pro",
   "releases.releaseNotesOptional": "发布说明（可选，Markdown）",
@@ -644,8 +642,7 @@ const zh = {
   "releases.addArtifactRemaining": "添加发布包 (还剩 {count} 个平台)",
   "releases.notUploadedYet": "尚未上传",
   "releases.addArtifactTitle": "添加发布包",
-  "releases.addArtifactDesc":
-    "上传 {version} 的平台二进制文件。文件将直接传输至存储；我们在发布时签名并最终确认。",
+  "releases.addArtifactDesc": "上传 {version} 的平台二进制文件。文件将直接传输至存储；我们在发布时签名并最终确认。",
   "releases.platform": "平台",
   "releases.artifactFile": "发布包文件",
   "releases.platformAndFileRequired": "平台和文件为必填项",
