@@ -13,7 +13,7 @@
 [![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/tabloy/keygate?label=release&color=green)](https://github.com/tabloy/keygate/releases)
 [![Stars](https://img.shields.io/github/stars/tabloy/keygate?style=flat)](https://github.com/tabloy/keygate/stargazers)
-[![Sponsor](https://img.shields.io/badge/sponsor-❤-ff69b4)](https://keygate.app/sponsorships)
+[![Sponsor](https://img.shields.io/badge/sponsor-❤-ff69b4)](https://ko-fi.com/alanisme)
 
 **[English](README.md)** · **[简体中文](README.zh-CN.md)**
 
@@ -148,15 +148,29 @@ make build && ./bin/keygate
 - **[博客](https://keygate.app/blog)** — 产品更新和技术文章
 - **[赞助](https://keygate.app/sponsorships)** — 支持项目发展
 
+## 赞助
+
+Keygate 免费且可自托管。如果它帮你省下了托管授权服务的开销，在 [Ko-fi 上赞助](https://ko-fi.com/alanisme) 能让开发持续下去。
+
+<!-- sponsors:start -->
+_虚位以待。_
+<!-- sponsors:end -->
+
 ## 贡献
 
 欢迎所有形式的贡献 — Bug 修复、新功能、文档改进、翻译等。查看 [open issues](https://github.com/tabloy/keygate/issues) 或发起 [讨论](https://github.com/tabloy/keygate/discussions)，然后提交 PR。
+
+## 商业授权
+
+AGPL 要求基于 Keygate 的改动同样开源，且 UI 中的 **"Powered by Keygate"** 署名必须保留。商业授权解除这两条：可闭源部署，可移除署名。
+
+适合把 Keygate 嵌进自己商业产品里的团队。报价请联系 [hello@keygate.app](mailto:hello@keygate.app)。
 
 ## 许可证
 
 [AGPL v3 License](LICENSE)（附 [Section 7(b)](https://www.gnu.org/licenses/agpl-3.0.en.html#section7) 附加条款）— Copyright © 2026 [Tabloy](https://tabloy.app)
 
-你可以在 AGPL v3 下自由 fork、修改和自托管本软件。UI 中的 **"Powered by Keygate"** 署名须保留（详见 [NOTICE](NOTICE)）。如需移除署名，可购买商业许可 — 联系 [hello@keygate.app](mailto:hello@keygate.app)。
+你可以在 AGPL v3 下自由 fork、修改和自托管本软件。UI 中的 **"Powered by Keygate"** 署名须保留（详见 [NOTICE](NOTICE)）。
 
 ## Star 趋势
 

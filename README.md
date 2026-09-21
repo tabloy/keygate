@@ -13,7 +13,7 @@ The self-hosted alternative to Keygen, Cryptlex, and LicenseSpring.
 [![License](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/tabloy/keygate?label=release&color=green)](https://github.com/tabloy/keygate/releases)
 [![Stars](https://img.shields.io/github/stars/tabloy/keygate?style=flat)](https://github.com/tabloy/keygate/stargazers)
-[![Sponsor](https://img.shields.io/badge/sponsor-❤-ff69b4)](https://keygate.app/sponsorships)
+[![Sponsor](https://img.shields.io/badge/sponsor-❤-ff69b4)](https://ko-fi.com/alanisme)
 
 **[English](README.md)** · **[简体中文](README.zh-CN.md)**
 
@@ -148,15 +148,30 @@ Open **http://localhost:9000** — the setup wizard guides you from there.
 - **[Blog](https://keygate.app/blog)** — Updates and engineering stories
 - **[Sponsor](https://keygate.app/sponsorships)** — Support the project
 
+## Sponsors
+
+Keygate is free and self-hosted. If it saves you the cost of a hosted licensing
+service, [sponsoring on Ko-fi](https://ko-fi.com/alanisme) keeps development going.
+
+<!-- sponsors:start -->
+_Be the first._
+<!-- sponsors:end -->
+
 ## Contributing
 
 All contributions welcome — bugs, features, docs, translations. Check [open issues](https://github.com/tabloy/keygate/issues) or start a [discussion](https://github.com/tabloy/keygate/discussions), then submit a PR.
+
+## Commercial License
+
+The AGPL requires that anything you build on Keygate stays open, and the **"Powered by Keygate"** line stays in the UI. A commercial license removes both conditions: closed-source deployment and no attribution.
+
+Written for teams shipping Keygate inside a product they sell. Contact [hello@keygate.app](mailto:hello@keygate.app) for pricing.
 
 ## License
 
 [AGPL v3 License](LICENSE) with additional terms per [Section 7(b)](https://www.gnu.org/licenses/agpl-3.0.en.html#section7) — Copyright © 2026 [Tabloy](https://tabloy.app)
 
-You are free to fork, modify, and self-host this software under the AGPL v3. The **"Powered by Keygate"** attribution in the UI must be preserved (see [NOTICE](NOTICE)). A commercial license to remove the attribution is available — contact [hello@keygate.app](mailto:hello@keygate.app).
+You are free to fork, modify, and self-host this software under the AGPL v3. The **"Powered by Keygate"** attribution in the UI must be preserved (see [NOTICE](NOTICE)).
 
 ## Star History
 
