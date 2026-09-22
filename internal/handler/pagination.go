@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/tabloy/keygate/internal/store"
@@ -57,4 +62,75 @@ func listOK[T any](c *gin.Context, key string, items []T, total int, p store.Pag
 		}
 	}
 	response.OK(c, body)
+}
+
+// sortCol is one entry in an endpoint's sortable-column allowlist:
+// the SQL expression the client-facing name resolves to, and the
+// direction that name reads in when the client has not said. Dates
+// want newest first; names want A to Z. A single default per endpoint
+// would get one of the two wrong on the first click.
+type sortCol struct {
+	Expr string
+	Desc bool
+}
+
+// listSort reads ?sort= and ?order= for a list endpoint.
+//
+// `allowed` maps the names a client may ask for to the column each one
+// means. The map is the whole of the validation: a name that is not a
+// key is refused with 400, so nothing a caller typed is ever spliced
+// into an ORDER BY. Refusing rather than quietly falling back to the
+// default is deliberate — a client that misspells a column and is
+// served a different order has no way to notice.
+//
+// An absent ?sort= is not an error; it takes the endpoint's default,
+// which is what every caller that does not care about order gets.
+func listSort(c *gin.Context, allowed map[string]sortCol, defCol string) (store.Sort, bool) {
+	name := c.Query("sort")
+	if name == "" {
+		name = defCol
+	}
+	col, ok := allowed[name]
+	if !ok {
+		names := make([]string, 0, len(allowed))
+		for k := range allowed {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		response.Err(c, http.StatusBadRequest, "INVALID_SORT",
+			"unknown sort column "+strconv.Quote(clipForMessage(name))+", expected one of: "+strings.Join(names, ", "))
+		return store.Sort{}, false
+	}
+
+	desc := col.Desc
+	switch c.Query("order") {
+	case "":
+		// Not asked for: the column's natural direction.
+	case "asc":
+		desc = false
+	case "desc":
+		desc = true
+	default:
+		response.Err(c, http.StatusBadRequest, "INVALID_ORDER",
+			`order must be "asc" or "desc"`)
+		return store.Sort{}, false
+	}
+	return store.Sort{Expr: col.Expr, Desc: desc}, true
+}
+
+// clipForMessage bounds a piece of the request that is quoted back in
+// an error.
+//
+// Saying which column was not recognised is what makes the refusal
+// useful, but the value came from the caller and a query string can
+// carry a great deal of it. Echoing it whole turns a 400 into an
+// amplifier: fifty kilobytes in, fifty kilobytes back, and the same
+// again in every log line that records the error. A name long enough
+// to be cut off is a name that was never going to match.
+func clipForMessage(s string) string {
+	const max = 64
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }

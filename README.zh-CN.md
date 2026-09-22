@@ -162,9 +162,11 @@ _虚位以待。_
 
 ## 商业授权
 
-AGPL 要求基于 Keygate 的改动同样开源，且 UI 中的 **"Powered by Keygate"** 署名必须保留。商业授权解除这两条：可闭源部署，可移除署名。
+使用 Keygate 是免费的，商用也免费。自己部署运行、用它给你销售的软件发授权、面向自己的客户提供服务，都不用付费。
 
-适合把 Keygate 嵌进自己商业产品里的团队。报价请联系 [hello@keygate.app](mailto:hello@keygate.app)。
+AGPL 只要求两件事：界面上保留 **"Powered by Keygate"** 署名；如果你修改了 Keygate 并让别人使用，把改动公开。商业授权解除这两条，白标或以闭源服务转售需要它。
+
+请联系 [hello@keygate.app](mailto:hello@keygate.app)。
 
 ## 许可证
 

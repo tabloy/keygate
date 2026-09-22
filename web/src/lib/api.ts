@@ -193,6 +193,12 @@ export const admin = {
     search?: string
     external_customer_id?: string
     external_workspace_id?: string
+    // Server-side ordering. The API refuses a column it does not
+    // know rather than quietly serving a different order, so these
+    // have to match its allowlist: created_at, valid_until, email,
+    // status, product, plan.
+    sort?: string
+    order?: "asc" | "desc"
     offset?: number
     limit?: number
   }) => {
@@ -202,11 +208,17 @@ export const admin = {
     if (params?.search) q.set("search", params.search)
     if (params?.external_customer_id) q.set("external_customer_id", params.external_customer_id)
     if (params?.external_workspace_id) q.set("external_workspace_id", params.external_workspace_id)
+    if (params?.sort) q.set("sort", params.sort)
+    if (params?.order) q.set("order", params.order)
     if (params?.offset) q.set("offset", String(params.offset))
     if (params?.limit) q.set("limit", String(params.limit))
-    return get<{ licenses: License[]; total: number; license_key_hints: Record<string, string> }>(
-      `/admin/licenses?${q}`,
-    )
+    return get<{
+      licenses: License[]
+      total: number
+      limit: number
+      offset: number
+      license_key_hints: Record<string, string>
+    }>(`/admin/licenses?${q}`)
   },
   // The licence keeps its own shape; only the key is gone, replaced by
   // a last-four hint.
@@ -214,6 +226,10 @@ export const admin = {
   // The key is never in a list or detail payload — one explicit
   // request per key, audited server-side.
   revealLicenseKey: (id: string) => get<{ license_key: string }>(`/admin/licenses/${id}/key`),
+  // Re-queues the "here is your key" mail. The address is the one on
+  // the licence; the server does not accept one from here.
+  resendLicenseEmail: (id: string) =>
+    post<{ queued: boolean; email: string }>(`/admin/licenses/${id}/resend-email`, {}),
   createLicense: (data: {
     product_id: string
     plan_id: string
@@ -586,6 +602,14 @@ export interface License {
   updated_at: string
   product?: Product
   plan?: Plan
+  // How many activations the licence has. Present on list rows, where
+  // the activations themselves are not; the detail payload carries
+  // both and they agree.
+  activation_count?: number
+  // Floating seats in use right now. A floating plan keeps occupancy
+  // in its own table, so activation_count reads zero for one however
+  // full it is; this is the number that answers "how full" there.
+  active_session_count?: number
   activations?: Activation[]
   seats?: Seat[]
   addons?: LicenseAddon[]

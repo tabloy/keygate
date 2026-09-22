@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -54,6 +54,58 @@ const DataTableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttribu
 )
 DataTableHead.displayName = "DataTableHead"
 
+// ─── Sortable column header ───
+
+// A header that asks the server to reorder the list. The label stays a
+// button rather than the whole cell so the hit area is the text, and
+// aria-sort sits on the th, which is the element a screen reader reads
+// the sort state off.
+function DataTableSortHead({
+  sort,
+  column,
+  firstOrder = "asc",
+  className,
+  children,
+}: {
+  sort: ServerSort
+  column: string
+  // The direction this column reads best in on the first click. Dates
+  // want newest first; names want A to Z. It mirrors the default the
+  // API applies for the same column, so the arrow drawn here matches
+  // the order that comes back.
+  firstOrder?: SortOrder
+  className?: string
+  children: React.ReactNode
+}) {
+  const active = sort.sort === column
+  return (
+    <th
+      aria-sort={active ? (sort.order === "asc" ? "ascending" : "descending") : "none"}
+      className={cn("h-10 p-0 text-left align-middle [&:has([role=checkbox])]:pr-0", className)}
+    >
+      <button
+        type="button"
+        onClick={() => sort.toggle(column, firstOrder)}
+        className={cn(
+          "group flex h-10 w-full items-center gap-1 px-3 text-left text-xs font-semibold uppercase tracking-wider transition-colors",
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {children}
+        {active ? (
+          sort.order === "asc" ? (
+            <ArrowUp className="h-3 w-3 shrink-0" />
+          ) : (
+            <ArrowDown className="h-3 w-3 shrink-0" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-50" />
+        )}
+      </button>
+    </th>
+  )
+}
+
 const DataTableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
     <td
@@ -104,9 +156,12 @@ function DataTablePagination({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 px-1 py-3">
+    // Two rows on a phone, one on a wide screen. Side by side at 390px
+    // the controls ran past the edge and the next/last buttons became
+    // unreachable, which is a pager that cannot page.
+    <div className="flex flex-col gap-3 px-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>
+        <span className="whitespace-nowrap">
           {from}-{to} of {total.toLocaleString()}
         </span>
         {onPageSizeChange && (
@@ -131,7 +186,7 @@ function DataTablePagination({
         )}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-center gap-1 sm:justify-end">
         <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === 0} onClick={() => onPageChange(0)}>
           <ChevronsLeft className="h-3.5 w-3.5" />
         </Button>
@@ -145,26 +200,36 @@ function DataTablePagination({
           <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
 
-        {pages.map((p, i) =>
-          p === "ellipsis" ? (
-            <span
-              key={`ellipsis-${i < pages.length / 2 ? "start" : "end"}`}
-              className="px-1 text-xs text-muted-foreground"
-            >
-              ...
-            </span>
-          ) : (
-            <Button
-              key={p}
-              variant={p === page ? "default" : "ghost"}
-              size="icon"
-              className={cn("h-7 w-7 text-xs", p === page && "pointer-events-none")}
-              onClick={() => onPageChange(p)}
-            >
-              {p + 1}
-            </Button>
-          ),
-        )}
+        {/* A list of a thousand pages does not fit on a phone as
+          buttons, and a row of them that overflows takes the next
+          and last buttons off the screen with it. Narrow screens get
+          the position instead; the buttons come back at sm. */}
+        <span className="px-2 text-xs tabular-nums text-muted-foreground sm:hidden">
+          {page + 1} / {totalPages}
+        </span>
+
+        <div className="hidden items-center gap-1 sm:flex">
+          {pages.map((p, i) =>
+            p === "ellipsis" ? (
+              <span
+                key={`ellipsis-${i < pages.length / 2 ? "start" : "end"}`}
+                className="px-1 text-xs text-muted-foreground"
+              >
+                ...
+              </span>
+            ) : (
+              <Button
+                key={p}
+                variant={p === page ? "default" : "ghost"}
+                size="icon"
+                className={cn("h-7 w-7 text-xs", p === page && "pointer-events-none")}
+                onClick={() => onPageChange(p)}
+              >
+                {p + 1}
+              </Button>
+            ),
+          )}
+        </div>
 
         <Button
           variant="ghost"
@@ -291,6 +356,49 @@ function useServerPagination(defaultPageSize = 20, filters?: unknown) {
   }
 }
 
+// ─── Server-side sorting ───
+
+type SortOrder = "asc" | "desc"
+
+interface ServerSort {
+  sort: string
+  order: SortOrder
+  params: { sort: string; order: SortOrder }
+  toggle: (column: string, firstOrder?: SortOrder) => void
+}
+
+// Sorting is server-side for the same reason paging is: the order has
+// to be decided over the whole list, not over the fifty rows that
+// happen to be on screen.
+//
+// `params` goes into the request beside the paging params. Feed
+// `sort` and `order` into useServerPagination's filter list as well:
+// reordering reshuffles every page, so the first page of the new order
+// is the only page it makes sense to land on.
+function useServerSort(defaultColumn: string, defaultOrder: SortOrder = "desc"): ServerSort {
+  const [sort, setSort] = React.useState(defaultColumn)
+  const [order, setOrder] = React.useState<SortOrder>(defaultOrder)
+
+  return {
+    sort,
+    order,
+    params: { sort, order },
+    toggle(column: string, firstOrder: SortOrder = "asc") {
+      if (column === sort) {
+        setOrder((o) => (o === "asc" ? "desc" : "asc"))
+        return
+      }
+      // A different column starts in its own natural direction rather
+      // than inheriting the previous column's: clicking "Email" after
+      // sorting by newest-first should read A to Z, not Z to A.
+      setSort(column)
+      setOrder(firstOrder)
+    },
+  }
+}
+
+export type { ServerSort, SortOrder }
+
 export {
   DataTable,
   DataTableBody,
@@ -300,6 +408,8 @@ export {
   DataTableHeader,
   DataTablePagination,
   DataTableRow,
+  DataTableSortHead,
   useClientPagination,
   useServerPagination,
+  useServerSort,
 }

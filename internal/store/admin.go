@@ -395,6 +395,25 @@ func (s *Store) FindLicenseByID(ctx context.Context, id string) (*model.License,
 		Scan(ctx)
 }
 
+// FindLicenseByIDWithCounts is FindLicenseByID with the computed
+// fields a list response carries filled in, so a caller reading one
+// license sees the same numbers as the row it clicked on.
+func (s *Store) FindLicenseByIDWithCounts(ctx context.Context, id string) (*model.License, error) {
+	l, err := s.FindLicenseByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	l.ActivationCount = len(l.Activations)
+	if l.Plan != nil && l.Plan.LicenseModel == "floating" {
+		n, err := s.CountActiveFloating(ctx, l.ID)
+		if err != nil {
+			return nil, err
+		}
+		l.ActiveSessionCount = n
+	}
+	return l, nil
+}
+
 func (s *Store) RevokeLicense(ctx context.Context, id string) error {
 	_, _ = s.DB.NewDelete().Model((*model.Activation)(nil)).Where("license_id = ?", id).Exec(ctx)
 	res, err := s.DB.NewUpdate().Model((*model.License)(nil)).

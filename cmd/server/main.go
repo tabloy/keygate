@@ -1019,6 +1019,9 @@ func main() {
 		licWrite.GET("/licenses/export", adminH.ExportLicenses)
 		licWrite.GET("/licenses/:id", adminH.GetLicense)
 		licWrite.GET("/licenses/:id/key", adminH.RevealLicenseKey)
+		// Mails the key to the address on the licence, for a send
+		// that never arrived. Recipient is not caller-supplied.
+		licWrite.POST("/licenses/:id/resend-email", adminH.ResendLicenseEmail)
 		licWrite.POST("/licenses", adminH.CreateLicense)
 		licWrite.POST("/licenses/:id/refund", adminH.RefundLicense)
 		licWrite.POST("/licenses/:id/revoke", adminH.RevokeLicense)

@@ -51,6 +51,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useI18n } from "@/i18n"
 import {
   admin,
   RELEASE_CHANNELS,
@@ -69,6 +70,11 @@ const PAGE_SIZE = 20
 const RELEASE_PRODUCT_TYPES = ["desktop", "hybrid"]
 
 export default function ReleasesPage() {
+  // Only the heading is translated so far: the sidebar names this
+  // section from the same key, and the two reading differently on one
+  // screen is the confusing part. The rest of the page is still
+  // English.
+  const { t } = useI18n()
   const qc = useQueryClient()
   const [productFilter, setProductFilter] = useState("")
   const [channelFilter, setChannelFilter] = useState("")
@@ -148,7 +154,7 @@ export default function ReleasesPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Releases</h1>
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("nav.releases")}</h1>
           <p className="text-muted-foreground">
             Distribute software updates to your customers via Sparkle, Velopack, or Tauri.
           </p>
@@ -183,9 +189,9 @@ export default function ReleasesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Releases</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("nav.releases")}</h1>
           <p className="text-muted-foreground">
             Distribute software updates to your customers via Sparkle, Velopack, or Tauri.
           </p>
@@ -512,7 +518,7 @@ function CreateReleaseDialog({ onClose, onCreated }: { onClose: () => void; onCr
                 types={RELEASE_PRODUCT_TYPES}
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Version</Label>
                 <Input placeholder="1.2.3" value={version} onChange={(e) => setVersion(e.target.value)} />

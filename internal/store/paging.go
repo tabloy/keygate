@@ -41,3 +41,36 @@ func scanPage(ctx context.Context, q *bun.SelectQuery, p Page) (int, error) {
 	}
 	return q.Limit(p.Limit).ScanAndCount(ctx)
 }
+
+// Sort is a validated ordering for a list query.
+//
+// Expr is a SQL expression, so it must never be built from anything a
+// caller sent. The handler picks it out of a fixed map keyed by the
+// name the client asked for; an unrecognised name is refused there and
+// never reaches this struct. Keeping the resolved expression here
+// rather than the client's word for it is what makes the concatenation
+// in applySort safe.
+type Sort struct {
+	Expr string
+	Desc bool
+}
+
+// applySort puts a stable ORDER BY on a paged query.
+//
+// The tiebreaker is not decoration. Paging is OFFSET/LIMIT over a
+// fresh query per page, so rows that compare equal under the chosen
+// column may come back in a different order each time; a row can then
+// appear on two pages, or on none. A unique column last makes the
+// order total, which is what makes the pages line up.
+//
+// NULLS LAST on both directions is deliberate. valid_until is empty
+// for a perpetual license, and an order by expiry that leads with
+// every license that never expires has not answered the question that
+// was asked, whichever way round it was asked.
+func applySort(q *bun.SelectQuery, s Sort, tiebreak string) *bun.SelectQuery {
+	dir := "ASC"
+	if s.Desc {
+		dir = "DESC"
+	}
+	return q.OrderExpr(s.Expr + " " + dir + " NULLS LAST").OrderExpr(tiebreak + " DESC")
+}

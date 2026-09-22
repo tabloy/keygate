@@ -1812,6 +1812,27 @@ func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
 
 // ─── Licenses ───
 
+// licenseSortColumns is what ?sort= accepts on the license list. Only
+// columns the table actually shows are here: a sort the dashboard
+// cannot express is a column nobody can read the result of.
+//
+// Product and plan are joined by name rather than id so the order
+// matches what is on screen, and status sorts alphabetically because
+// its stored values have no rank worth inventing one for.
+var licenseSortColumns = map[string]sortCol{
+	"created_at": {Expr: "license.created_at", Desc: true},
+	// Soonest first. Asked to order by expiry and not told which way,
+	// the question behind it is which licenses are about to lapse,
+	// not which ones run longest. The dashboard's first click on this
+	// column sends asc for the same reason; leaving the two disagreeing
+	// would mean a direct API caller got the opposite answer.
+	"valid_until": {Expr: "license.valid_until"},
+	"email":       {Expr: "license.email"},
+	"status":      {Expr: "license.status"},
+	"product":     {Expr: "product.name"},
+	"plan":        {Expr: "plan.name"},
+}
+
 func (h *AdminHandler) ListLicenses(c *gin.Context) {
 	productID := c.Query("product_id")
 	// When the request comes from an API key bound to a specific
@@ -1829,12 +1850,17 @@ func (h *AdminHandler) ListLicenses(c *gin.Context) {
 		}
 	}
 	page := listPage(c)
+	order, ok := listSort(c, licenseSortColumns, "created_at")
+	if !ok {
+		return
+	}
 	licenses, total, err := h.Store.ListLicenses(c, store.LicenseListFilter{
 		ProductID:           productID,
 		Status:              c.Query("status"),
 		Search:              c.Query("search"),
 		ExternalCustomerID:  c.Query("external_customer_id"),
 		ExternalWorkspaceID: c.Query("external_workspace_id"),
+		Sort:                order,
 		Offset:              page.Offset,
 		Limit:               page.Limit,
 	})
@@ -1856,7 +1882,7 @@ func (h *AdminHandler) ListLicenses(c *gin.Context) {
 
 func (h *AdminHandler) GetLicense(c *gin.Context) {
 	id := c.Param("id")
-	l, err := h.Store.FindLicenseByID(c, id)
+	l, err := h.Store.FindLicenseByIDWithCounts(c, id)
 	if err != nil {
 		response.NotFound(c, "license not found")
 		return
@@ -2102,6 +2128,76 @@ func (h *AdminHandler) RevealLicenseKey(c *gin.Context) {
 
 	c.Header("Cache-Control", "no-store")
 	response.OK(c, gin.H{"license_key": key})
+}
+
+// ResendLicenseEmail mails the customer their key again, for when the
+// original send was lost: SMTP was down when the license was created,
+// the mail hit a spam folder, or the customer deleted it.
+//
+// The recipient is never taken from the request body. This endpoint
+// puts a license key in an inbox, so letting the caller name the
+// address would turn the admin API into a way to post somebody else's
+// key wherever they liked. It is the address on the license or
+// nothing.
+//
+// The mail is queued rather than sent inline. An SMTP server that
+// accepts the connection and then stalls would otherwise hold this
+// HTTP request open for the full session timeout, and a send that
+// failed would simply be gone. Queued, it retries with backoff and
+// survives a restart, which is the whole point of a resend button.
+func (h *AdminHandler) ResendLicenseEmail(c *gin.Context) {
+	id := c.Param("id")
+	if !h.checkLicenseScope(c, id) {
+		return
+	}
+	l, err := h.Store.FindLicenseByID(c, id)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+	if l.Email == "" {
+		response.Err(c, http.StatusConflict, "NO_EMAIL",
+			"this license has no email address on file")
+		return
+	}
+	if h.Email == nil || !h.Email.IsConfigured() {
+		response.Err(c, http.StatusConflict, "SMTP_NOT_CONFIGURED",
+			"SMTP is not configured on this server, so no mail can be sent")
+		return
+	}
+
+	key := h.Store.DecryptLicenseKey(l)
+	if key == "" {
+		// Ciphertext unreadable or the master key is gone —
+		// DecryptLicenseKey has already logged it and bumped the metric.
+		response.Err(c, http.StatusServiceUnavailable, "LICENSE_KEY_UNAVAILABLE",
+			"license key could not be decrypted")
+		return
+	}
+
+	productName, planName := "", ""
+	if l.Product != nil {
+		productName = l.Product.Name
+	}
+	if l.Plan != nil {
+		planName = l.Plan.Name
+	}
+	subject, body := h.Email.RenderLicenseCreated(productName, planName, key)
+	if err := h.Store.EnqueueEmail(c, l.Email, subject, body); err != nil {
+		response.Err(c, http.StatusInternalServerError, "EMAIL_QUEUE_FAILED",
+			"could not queue the email")
+		return
+	}
+
+	// Audited with the same weight as a reveal: both put the key
+	// somewhere a person can read it.
+	h.Store.Audit(c, &model.AuditLog{
+		Entity: "license", EntityID: l.ID, Action: "key_emailed",
+		ActorType: "admin", ActorID: adminID(c), IPAddress: c.ClientIP(),
+		Changes: map[string]any{"email": l.Email},
+	})
+
+	response.OK(c, gin.H{"queued": true, "email": l.Email})
 }
 
 func (h *AdminHandler) RevokeLicense(c *gin.Context) {

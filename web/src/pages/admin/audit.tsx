@@ -53,11 +53,11 @@ export default function AuditPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("audit.title")}</h1>
+        <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("audit.title")}</h1>
         <p className="text-muted-foreground">{t("audit.subtitle")}</p>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-3">
         <Select
           value={entityFilter || "all"}
           onValueChange={(v) => {
@@ -65,7 +65,7 @@ export default function AuditPage() {
             setPage(0)
           }}
         >
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t("audit.filterEntity")} />
           </SelectTrigger>
           <SelectContent>
@@ -87,7 +87,7 @@ export default function AuditPage() {
             setEntityIdFilter(e.target.value)
             setPage(0)
           }}
-          className="w-64"
+          className="w-full sm:w-64"
         />
         {/* Searched on the server: an install past the first page of
             products could otherwise never filter the log by the rest
@@ -100,7 +100,7 @@ export default function AuditPage() {
           }}
           allLabel={t("audit.allProducts")}
           placeholder={t("audit.filterProduct")}
-          className="w-64"
+          className="w-full sm:w-64"
           withType
         />
       </div>

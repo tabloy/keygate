@@ -36,7 +36,29 @@ func (s *Store) CheckOutFloatingWithLimit(ctx context.Context, sess *model.Float
 	}
 	defer tx.Rollback()
 
-	// Check if this identifier already has an active session
+	// Lock the license row first, so everything below runs one caller
+	// at a time for this license.
+	//
+	// The order matters. When the "has this machine already got a
+	// session" check ran before the lock, two requests from the SAME
+	// machine could both miss it: one took the slot, and the other
+	// then counted the slot it had just been given and refused it with
+	// FLOATING_LIMIT. A client retrying a timed-out checkout, or an
+	// app opened twice, was told the license it already holds is full.
+	//
+	// Locking the license rather than the sessions is deliberate:
+	// FOR UPDATE on floating_sessions locks nothing when there are no
+	// rows yet, which would let two first-ever checkouts both pass the
+	// count and exceed the limit.
+	_, err = tx.NewRaw(`
+		SELECT id FROM licenses WHERE id = ? FOR UPDATE
+	`, sess.LicenseID).Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	// This machine may already be holding a running lease, in which
+	// case it is renewing rather than competing for a slot.
 	var existingID string
 	scanErr := tx.NewRaw(`
 		SELECT id FROM floating_sessions
@@ -45,7 +67,6 @@ func (s *Store) CheckOutFloatingWithLimit(ctx context.Context, sess *model.Float
 	`, sess.LicenseID, sess.Identifier).Scan(ctx, &existingID)
 
 	if scanErr == nil && existingID != "" {
-		// Refresh existing session
 		_, err = tx.NewRaw(`
 			UPDATE floating_sessions SET heartbeat = now(), expires_at = ?, ip_address = ?, label = ?
 			WHERE id = ?
@@ -55,16 +76,6 @@ func (s *Store) CheckOutFloatingWithLimit(ctx context.Context, sess *model.Float
 		}
 		sess.ID = existingID
 		return false, tx.Commit()
-	}
-
-	// Lock the license row to serialize concurrent checkouts for the same license.
-	// FOR UPDATE on floating_sessions would lock nothing if no sessions exist,
-	// allowing two concurrent checkouts to both succeed and exceed maxSessions.
-	_, err = tx.NewRaw(`
-		SELECT id FROM licenses WHERE id = ? FOR UPDATE
-	`, sess.LicenseID).Exec(ctx)
-	if err != nil {
-		return false, err
 	}
 
 	// Now safely count active sessions (no other checkout can modify them while we hold the lock)
@@ -81,8 +92,26 @@ func (s *Store) CheckOutFloatingWithLimit(ctx context.Context, sess *model.Float
 		return false, ErrFloatingLimitReached
 	}
 
-	// Create new session
-	_, err = tx.NewInsert().Model(sess).Exec(ctx)
+	// Take the slot.
+	//
+	// An upsert rather than a plain insert, because this machine may
+	// still own a row: the refresh branch above only matches a lease
+	// that is still running, so a client that was offline longer than
+	// the timeout falls through to here with its lapsed row still on
+	// the table. (license_id, identifier) is unique, so inserting over
+	// it failed, and a machine that dropped off the network could
+	// never check out again until the cleanup sweep happened to
+	// remove the row. Reusing it is also the right thing on its own
+	// terms: one machine, one row, whose lease starts again now.
+	//
+	// The id is read back because a conflict keeps the row that is
+	// already there, and the caller hands its id to the client as the
+	// session id.
+	_, err = tx.NewInsert().Model(sess).
+		On("CONFLICT (license_id, identifier) DO UPDATE").
+		Set("heartbeat = now(), expires_at = EXCLUDED.expires_at, ip_address = EXCLUDED.ip_address, label = EXCLUDED.label").
+		Returning("id").
+		Exec(ctx, &sess.ID)
 	if err != nil {
 		return false, err
 	}
@@ -96,11 +125,30 @@ func (s *Store) CheckInFloating(ctx context.Context, licenseID, identifier strin
 	return err
 }
 
-func (s *Store) HeartbeatFloating(ctx context.Context, licenseID, identifier string, newExpiry time.Time) error {
-	_, err := s.DB.NewUpdate().Model((*model.FloatingSession)(nil)).
+// HeartbeatFloating extends a session that is still running, and
+// reports whether there was one to extend.
+//
+// The `expires_at > now()` guard is what keeps the concurrency cap
+// honest. Without it a client whose lease had already lapsed could
+// raise itself from the dead with a heartbeat: the slot it used to
+// hold has by then been handed to somebody else by CheckOut, and
+// renewing the old row puts the license over its limit with neither
+// call ever seeing the other. A machine that drops off the network
+// for longer than the timeout has lost its seat, and has to compete
+// for one again through CheckOut like any other.
+func (s *Store) HeartbeatFloating(ctx context.Context, licenseID, identifier string, newExpiry time.Time) (bool, error) {
+	res, err := s.DB.NewUpdate().Model((*model.FloatingSession)(nil)).
 		Set("heartbeat = now(), expires_at = ?", newExpiry).
-		Where("license_id = ? AND identifier = ?", licenseID, identifier).Exec(ctx)
-	return err
+		Where("license_id = ? AND identifier = ? AND expires_at > now()", licenseID, identifier).
+		Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 func (s *Store) CountActiveFloating(ctx context.Context, licenseID string) (int, error) {

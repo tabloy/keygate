@@ -41,7 +41,7 @@ export default function CustomersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("customers.title")}</h1>
+        <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("customers.title")}</h1>
         <p className="text-muted-foreground">{t("customers.subtitle", { count: total })}</p>
       </div>
 
@@ -204,7 +204,7 @@ function CustomerDetailDialog({
                   </Card>
 
                   {/* Summary stats */}
-                  <div className="grid grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
                     {[
                       { label: t("analytics.totalLicenses"), value: detail.licenses?.length ?? 0 },
                       {

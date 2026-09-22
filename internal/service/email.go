@@ -349,15 +349,24 @@ func validateSMTPLine(s string) error {
 // "localhost" or empty values; "[127.0.0.1]" is universally accepted.
 func localHostname() string { return "[127.0.0.1]" }
 
-func (s *EmailService) SendLicenseCreated(to, productName, planName, licenseKey string) {
-	body := renderTemplate(s.getTemplate("license_created", tmplLicenseCreated), map[string]string{
+// RenderLicenseCreated builds the "here is your key" mail. Subject and
+// template live here rather than at the call sites so a resend is byte
+// for byte the mail the customer was originally sent, including any
+// template the operator has customised in the dashboard.
+func (s *EmailService) RenderLicenseCreated(productName, planName, licenseKey string) (subject, body string) {
+	body = renderTemplate(s.getTemplate("license_created", tmplLicenseCreated), map[string]string{
 		"Product":    productName,
 		"Plan":       planName,
 		"LicenseKey": licenseKey,
 	})
+	return "Your license for " + productName, body
+}
+
+func (s *EmailService) SendLicenseCreated(to, productName, planName, licenseKey string) {
+	subject, body := s.RenderLicenseCreated(productName, planName, licenseKey)
 	go func() {
-		if err := s.Send(to, "Your license for "+productName, body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", "Your license for "+productName, "error", err)
+		if err := s.Send(to, subject, body); err != nil {
+			s.logger.Error("email delivery failed", "to", to, "subject", subject, "error", err)
 		}
 	}()
 }
@@ -683,6 +692,17 @@ func (s *EmailService) StartEmailQueueProcessor(ctx context.Context, db *store.S
 const emailQueueBatch = 20
 
 func (s *EmailService) processQueue(ctx context.Context, db *store.Store) {
+	// With no SMTP configured there is nothing to send with, and
+	// draining the queue anyway destroys what is in it: Send returns
+	// nil for a server it cannot reach, so every mail is claimed,
+	// skipped, and then marked delivered. Running without SMTP is a
+	// supported mode — the sample env ships it empty and OTP codes go
+	// to the log — so a licence key queued by Stripe fulfilment would
+	// be silently consumed on exactly the installs least able to
+	// notice. Left alone, the backlog goes out once SMTP is set up.
+	if !s.enabled {
+		return
+	}
 	for i := 0; i < emailQueueBatch; i++ {
 		if ctx.Err() != nil {
 			return

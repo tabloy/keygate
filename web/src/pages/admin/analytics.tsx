@@ -231,7 +231,7 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("analytics.title")}</h1>
+        <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("analytics.title")}</h1>
         <p className="text-muted-foreground">{t("analytics.subtitle")}</p>
       </div>
 
@@ -250,11 +250,11 @@ export default function AnalyticsPage() {
         </div>
         <div className="space-y-2">
           <Label className="text-xs">{t("analytics.start")}</Label>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
+          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-full sm:w-40" />
         </div>
         <div className="space-y-2">
           <Label className="text-xs">{t("analytics.end")}</Label>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
+          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-full sm:w-40" />
         </div>
         <div className="space-y-2">
           <Label className="text-xs">{t("analytics.granularity")}</Label>
@@ -279,7 +279,7 @@ export default function AnalyticsPage() {
               if (v) setLicenseType("")
             }}
             allLabel={t("filter.allPlans")}
-            className="w-44"
+            className="w-full sm:w-44"
             disabled={!productFilter}
           />
         </div>
@@ -292,7 +292,7 @@ export default function AnalyticsPage() {
               if (v !== "all") setPlanFilter("")
             }}
           >
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue placeholder={t("filter.allTypes")} />
             </SelectTrigger>
             <SelectContent>
@@ -306,7 +306,7 @@ export default function AnalyticsPage() {
         <div className="space-y-2">
           <Label className="text-xs">{t("common.status")}</Label>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue placeholder={t("filter.allStatuses")} />
             </SelectTrigger>
             <SelectContent>

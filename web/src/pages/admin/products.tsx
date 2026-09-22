@@ -85,9 +85,9 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("products.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("products.title")}</h1>
           <p className="text-muted-foreground">{t("products.subtitle")}</p>
         </div>
         <Button onClick={() => setCreating(true)}>
@@ -276,7 +276,7 @@ function ProductDialog({
             </div>
             <div className="space-y-2">
               <Label>{t("common.type")}</Label>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <ProductTypeCard
                   value="desktop"
                   icon={Laptop}

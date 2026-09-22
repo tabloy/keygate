@@ -781,7 +781,21 @@ func (s *Store) ListLicensesByEmail(ctx context.Context, email string) ([]*model
 		Relation("Product").Relation("Activations").Relation("Seats").
 		Where("license.email = ? OR license.id IN (SELECT license_id FROM seats WHERE email = ? AND removed_at IS NULL)", email, email).
 		OrderExpr("license.created_at DESC, license.id DESC").Scan(ctx)
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	// The computed counts are filled here rather than by the caller, so
+	// a license that leaves this store is complete however it is read.
+	// The activations themselves are loaded above, so that count is
+	// their length; floating seats live in their own table and need
+	// the extra query.
+	for _, l := range out {
+		l.ActivationCount = len(l.Activations)
+	}
+	if err := s.fillFloatingCounts(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // HasAccountOrLicense reports whether email already belongs to this
@@ -828,14 +842,27 @@ type LicenseListFilter struct {
 	Search              string
 	ExternalCustomerID  string
 	ExternalWorkspaceID string
-	Offset              int
-	Limit               int
+	// Sort is the column the caller asked to order by. The zero
+	// value orders by newest first, which is what every caller that
+	// does not care about order wants.
+	Sort   Sort
+	Offset int
+	// Limit must be positive. Unlike Page, a zero here is not "every
+	// row": bun drops the LIMIT clause entirely, and the whole table
+	// then comes back and has its activations counted in one IN list.
+	// The handler clamps what it reads from the query string before
+	// it gets here, so no request can ask for that.
+	Limit int
 }
 
 func (s *Store) ListLicenses(ctx context.Context, f LicenseListFilter) ([]*model.License, int, error) {
+	sort := f.Sort
+	if sort.Expr == "" {
+		sort = Sort{Expr: "license.created_at", Desc: true}
+	}
 	q := s.DB.NewSelect().Model((*model.License)(nil)).
-		Relation("Plan").Relation("Product").
-		OrderExpr("license.created_at DESC")
+		Relation("Plan").Relation("Product")
+	q = applySort(q, sort, "license.id")
 	if f.ProductID != "" {
 		q = q.Where("license.product_id = ?", f.ProductID)
 	}
@@ -857,8 +884,95 @@ func (s *Store) ListLicenses(ctx context.Context, f LicenseListFilter) ([]*model
 		return nil, 0, err
 	}
 	var out []*model.License
-	err = q.Offset(f.Offset).Limit(f.Limit).Scan(ctx, &out)
-	return out, total, err
+	if err := q.Offset(f.Offset).Limit(f.Limit).Scan(ctx, &out); err != nil {
+		return nil, 0, err
+	}
+	if err := s.fillActivationCounts(ctx, out); err != nil {
+		return nil, 0, err
+	}
+	if err := s.fillFloatingCounts(ctx, out); err != nil {
+		return nil, 0, err
+	}
+	return out, total, nil
+}
+
+// fillFloatingCounts populates ActiveSessionCount for the floating
+// licenses on one page.
+//
+// Only floating plans are asked about: on any other plan the number
+// would always be zero, and the query is skipped entirely when a page
+// has none, which is the common case.
+func (s *Store) fillFloatingCounts(ctx context.Context, licenses []*model.License) error {
+	ids := make([]string, 0, len(licenses))
+	for _, l := range licenses {
+		if l.Plan != nil && l.Plan.LicenseModel == "floating" {
+			ids = append(ids, l.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	var rows []struct {
+		LicenseID string `bun:"license_id"`
+		N         int    `bun:"n"`
+	}
+	err := s.DB.NewSelect().Model((*model.FloatingSession)(nil)).
+		ColumnExpr("license_id").
+		ColumnExpr("count(*) AS n").
+		Where("license_id IN (?) AND expires_at > now()", bun.In(ids)).
+		GroupExpr("license_id").
+		Scan(ctx, &rows)
+	if err != nil {
+		return err
+	}
+	counts := make(map[string]int, len(rows))
+	for _, r := range rows {
+		counts[r.LicenseID] = r.N
+	}
+	for _, l := range licenses {
+		l.ActiveSessionCount = counts[l.ID]
+	}
+	return nil
+}
+
+// fillActivationCounts populates ActivationCount for one page of
+// licenses.
+//
+// It is a second statement rather than a joined count because the
+// first one is what the pager counts rows with: a GROUP BY on the
+// paged query would have to survive Count(), and a has-many relation
+// would pull every activation row of every license on the page back
+// just to take its length. One extra query over at most a page of ids
+// is both cheaper and easier to be sure of.
+func (s *Store) fillActivationCounts(ctx context.Context, licenses []*model.License) error {
+	if len(licenses) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(licenses))
+	for _, l := range licenses {
+		ids = append(ids, l.ID)
+	}
+	var rows []struct {
+		LicenseID string `bun:"license_id"`
+		N         int    `bun:"n"`
+	}
+	err := s.DB.NewSelect().Model((*model.Activation)(nil)).
+		ColumnExpr("license_id").
+		ColumnExpr("count(*) AS n").
+		Where("license_id IN (?)", bun.In(ids)).
+		GroupExpr("license_id").
+		Scan(ctx, &rows)
+	if err != nil {
+		return err
+	}
+	counts := make(map[string]int, len(rows))
+	for _, r := range rows {
+		counts[r.LicenseID] = r.N
+	}
+	for _, l := range licenses {
+		l.ActivationCount = counts[l.ID]
+	}
+	return nil
 }
 
 // ─── Plan ───
@@ -1559,8 +1673,24 @@ func (s *Store) ClaimNextEmail(ctx context.Context) (*QueuedEmail, error) {
 // what it holds it by: a processor that stalled past its lease finds
 // the row taken over and changes nothing.
 func (s *Store) MarkEmailSent(ctx context.Context, id, token string) {
+	// The body goes with it.
+	//
+	// These mails carry license keys: fulfilment, the maintenance
+	// reminder, an admin resend. The queue is a delivery buffer, not
+	// an archive, and a delivered mail has no further use for its
+	// text, so keeping it would leave a credential in the database for
+	// as long as the row lives, which is forever. What an operator
+	// needs afterwards is who it went to, what it was about and when,
+	// and those all stay.
+	//
+	// Rows written before this was added still hold their text. They
+	// are left alone on purpose: licenses.license_key is itself still
+	// plaintext until Phase C drops it, so clearing the queue's copy
+	// today changes nothing about what a database dump exposes.
+	// Clearing them belongs with Phase C, which would otherwise leave
+	// this table as the last plaintext copy of every key it ever sent.
 	res, err := s.DB.NewRaw(
-		"UPDATE email_queue SET status = 'sent', sent_at = now(), attempts = attempts + 1 WHERE id = ? AND claim_token = ?",
+		"UPDATE email_queue SET status = 'sent', sent_at = now(), attempts = attempts + 1, body = '' WHERE id = ? AND claim_token = ?",
 		id, token,
 	).Exec(ctx)
 	if err != nil {
@@ -1584,7 +1714,13 @@ func (s *Store) MarkEmailFailed(ctx context.Context, id, token, errMsg string) {
 				error = ?,
 				status = CASE WHEN attempts + 1 >= max_attempts THEN 'failed' ELSE 'pending' END,
 				next_retry = CASE WHEN attempts + 1 < max_attempts THEN now() + (interval '1 minute' * power(2, attempts)) ELSE NULL END,
-				claim_token = ''
+				claim_token = '',
+				-- Kept while there are attempts left, because a retry
+				-- sends this same text. Dropped once the mail is given
+				-- up on, for the reason MarkEmailSent drops it: a row
+				-- nobody will send again must not keep the license key
+				-- it was carrying.
+				body = CASE WHEN attempts + 1 >= max_attempts THEN '' ELSE body END
 			WHERE id = ? AND claim_token = ?
 			RETURNING status, notification_id
 		`, errMsg, id, token).Scan(ctx, &status, &notificationID)

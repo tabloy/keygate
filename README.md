@@ -163,9 +163,11 @@ All contributions welcome — bugs, features, docs, translations. Check [open is
 
 ## Commercial License
 
-The AGPL requires that anything you build on Keygate stays open, and the **"Powered by Keygate"** line stays in the UI. A commercial license removes both conditions: closed-source deployment and no attribution.
+Using Keygate is free, commercially included. Run it for your own business, license the software you sell with it, or serve your own customers from it, and you owe nothing.
 
-Written for teams shipping Keygate inside a product they sell. Contact [hello@keygate.app](mailto:hello@keygate.app) for pricing.
+The AGPL asks two things in return: the **"Powered by Keygate"** line stays visible in the interface, and if you modify Keygate and let others use it, your changes are published. A commercial license lifts both, which is what white labelling or reselling it as a closed service needs.
+
+Contact [hello@keygate.app](mailto:hello@keygate.app).
 
 ## License
 

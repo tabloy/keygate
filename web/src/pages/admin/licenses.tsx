@@ -4,6 +4,7 @@ import {
   Check,
   Copy,
   Eye,
+  Mail,
   Package,
   Pause,
   Pencil,
@@ -41,7 +42,9 @@ import {
   DataTableHeader,
   DataTablePagination,
   DataTableRow,
+  DataTableSortHead,
   useServerPagination,
+  useServerSort,
 } from "@/components/ui/data-table"
 import {
   Dialog,
@@ -91,7 +94,10 @@ export default function LicensesPage() {
   const [productFilter, setProductFilter] = useState<string>("")
   const [statusFilter, setStatusFilter] = useState<string>("")
   const [search, setSearch] = useState("")
-  const pg = useServerPagination(20, [productFilter, statusFilter, search])
+  // Reordering reshuffles every page, so the sort state joins the
+  // filters that send the pager back to page one.
+  const srt = useServerSort("created_at", "desc")
+  const pg = useServerPagination(20, [productFilter, statusFilter, search, srt.sort, srt.order])
 
   const { data: productsData } = useQuery({
     // One row is all this page needs from the catalogue: whether the
@@ -101,12 +107,13 @@ export default function LicensesPage() {
     queryFn: () => admin.listProducts({ limit: 1 }),
   })
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "licenses", productFilter, statusFilter, search, pg.page, pg.pageSize],
+    queryKey: ["admin", "licenses", productFilter, statusFilter, search, srt.sort, srt.order, pg.page, pg.pageSize],
     queryFn: () =>
       admin.listLicenses({
         product_id: productFilter || undefined,
         status: statusFilter || undefined,
         search: search || undefined,
+        ...srt.params,
         ...pg.params,
       }),
   })
@@ -131,7 +138,7 @@ export default function LicensesPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("licenses.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("licenses.title")}</h1>
           <p className="text-muted-foreground">Manage software licenses.</p>
         </div>
         <Card>
@@ -152,9 +159,9 @@ export default function LicensesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("licenses.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("licenses.title")}</h1>
           <p className="text-muted-foreground">
             {total} {t("licenses.title").toLowerCase()} total
           </p>
@@ -164,8 +171,11 @@ export default function LicensesPage() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
+      {/* Three controls do not fit side by side on a phone, so they
+        wrap, and the search box takes the whole first row rather than
+        being squeezed to a few characters. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={t("common.search")}
@@ -174,20 +184,30 @@ export default function LicensesPage() {
             className="pl-9"
           />
         </div>
-        <ProductSelect value={productFilter} onChange={setProductFilter} allLabel={t("filter.allProducts")} />
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder={t("filter.allStatuses")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("filter.allStatuses")}</SelectItem>
-            {["active", "trialing", "past_due", "canceled", "expired", "suspended", "revoked"].map((s) => (
-              <SelectItem key={s} value={s}>
-                {t(`status.${s}` as any)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* The two dropdowns share one row on a phone rather than
+          taking one each: they fit side by side, and the search box
+          above them is the control that needs the full width. */}
+        <div className="flex w-full gap-3 sm:w-auto">
+          <ProductSelect
+            value={productFilter}
+            onChange={setProductFilter}
+            allLabel={t("filter.allProducts")}
+            className="flex-1 sm:w-48 sm:flex-none"
+          />
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+            <SelectTrigger className="flex-1 sm:w-40 sm:flex-none">
+              <SelectValue placeholder={t("filter.allStatuses")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("filter.allStatuses")}</SelectItem>
+              {["active", "trialing", "past_due", "canceled", "expired", "suspended", "revoked"].map((s) => (
+                <SelectItem key={s} value={s}>
+                  {t(`status.${s}` as any)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card>
@@ -199,18 +219,31 @@ export default function LicensesPage() {
               <DataTable>
                 <DataTableHeader>
                   <DataTableRow>
-                    <DataTableHead>{t("common.email")}</DataTableHead>
+                    <DataTableSortHead sort={srt} column="email">
+                      {t("common.email")}
+                    </DataTableSortHead>
                     <DataTableHead>{t("licenses.licenseKey")}</DataTableHead>
-                    <DataTableHead>{t("common.product")}</DataTableHead>
-                    <DataTableHead>{t("common.plan")}</DataTableHead>
-                    <DataTableHead>{t("common.status")}</DataTableHead>
-                    <DataTableHead>{t("licenses.validUntil")}</DataTableHead>
-                    <DataTableHead>{t("common.created")}</DataTableHead>
+                    <DataTableSortHead sort={srt} column="product">
+                      {t("common.product")}
+                    </DataTableSortHead>
+                    <DataTableSortHead sort={srt} column="plan">
+                      {t("common.plan")}
+                    </DataTableSortHead>
+                    <DataTableHead>{t("licenses.activations")}</DataTableHead>
+                    <DataTableSortHead sort={srt} column="status">
+                      {t("common.status")}
+                    </DataTableSortHead>
+                    <DataTableSortHead sort={srt} column="valid_until" firstOrder="asc">
+                      {t("licenses.validUntil")}
+                    </DataTableSortHead>
+                    <DataTableSortHead sort={srt} column="created_at" firstOrder="desc">
+                      {t("common.created")}
+                    </DataTableSortHead>
                     <DataTableHead className="w-16" />
                   </DataTableRow>
                 </DataTableHeader>
                 <DataTableBody>
-                  {licenses.length === 0 && <DataTableEmpty colSpan={8} message={t("licenses.empty")} />}
+                  {licenses.length === 0 && <DataTableEmpty colSpan={9} message={t("licenses.empty")} />}
                   {licenses.map((lic) => (
                     <DataTableRow key={lic.id}>
                       <DataTableCell className="font-medium">{lic.email}</DataTableCell>
@@ -221,6 +254,21 @@ export default function LicensesPage() {
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground">{lic.product?.name || "-"}</DataTableCell>
                       <DataTableCell className="text-muted-foreground">{lic.plan?.name || "-"}</DataTableCell>
+                      {/* What "in use" counts depends on the plan. A
+                        floating plan holds its seats in its own table,
+                        so reading activations there reports an empty
+                        licence however full it is. SaaS is seat-based
+                        and has neither, so it gets nothing rather than
+                        a number that never moves. */}
+                      <DataTableCell className="text-muted-foreground text-xs whitespace-nowrap">
+                        {lic.product?.type === "saas"
+                          ? "-"
+                          : `${
+                              lic.plan?.license_model === "floating"
+                                ? (lic.active_session_count ?? 0)
+                                : (lic.activation_count ?? 0)
+                            } / ${lic.plan?.max_activations || "-"}`}
+                      </DataTableCell>
                       <DataTableCell>
                         <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as any)}</Badge>
                       </DataTableCell>
@@ -392,7 +440,7 @@ function CreateLicenseDialog({
               to map their own user/workspace model to this license.
               Both optional; leave blank if not integrating with an
               external system. */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>{t("licenses.externalCustomerID")}</Label>
                 <Input
@@ -444,6 +492,14 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin"] })
     },
+    onError: (e: Error) => showToast(e.message, "error"),
+  })
+  const resendMut = useMutation({
+    mutationFn: () => admin.resendLicenseEmail(id),
+    // Queued, not delivered: the mail goes into the retry queue and
+    // leaves over SMTP a moment later, so the toast says it is on its
+    // way rather than claiming it has arrived.
+    onSuccess: (r) => showToast(t("toast.licenseEmailQueued", { email: r.email }), "success"),
     onError: (e: Error) => showToast(e.message, "error"),
   })
   const suspendMut = useMutation({
@@ -556,7 +612,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <TabsContent value="info" className="-mr-6 min-h-0 flex-1 overflow-y-auto pr-6">
               <div className="space-y-6">
                 {/* Info */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                   <div>
                     <p className="text-muted-foreground">{t("licenses.licenseKey")}</p>
                     <div className="flex items-center gap-2 mt-1">
@@ -748,7 +804,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                   </div>
                 )}
                 {(lic.external_customer_id || lic.external_workspace_id) && (
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                     {lic.external_customer_id && (
                       <div>
                         <p className="text-muted-foreground">{t("licenses.externalCustomerID")}</p>
@@ -766,6 +822,34 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
 
                 {/* Actions */}
                 <div className="flex gap-2 flex-wrap">
+                  {/* Sends the key to the address on the licence again,
+                    for a first send that never arrived. Behind a confirm
+                    because it mails a credential, and disabled while
+                    in flight so a second click cannot post a second
+                    copy. */}
+                  {lic.email && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={resendMut.isPending}>
+                          <Mail className="h-4 w-4 mr-1" /> {t("licenses.resendEmail")}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{t("licenses.resendEmail")}</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {t("licenses.resendEmailConfirm", { email: lic.email })}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="flex justify-end gap-2 mt-4">
+                          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => resendMut.mutate()}>
+                            {t("licenses.resendEmailAction")}
+                          </AlertDialogAction>
+                        </div>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                   {(lic.status === "active" || lic.status === "trialing") && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -921,7 +1005,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     <Separator />
                     <div>
                       <h3 className="font-semibold mb-3">{t("plans.entitlements")}</h3>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {lic.plan.entitlements.map((e) => (
                           <div key={e.id} className="flex justify-between bg-muted/50 rounded px-3 py-2 text-sm">
                             <span className="font-medium">{e.feature}</span>

@@ -11,7 +11,11 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      // Wraps rather than scrolls: a tab bar that runs off a narrow
+      // screen hides the tabs at the end behind a sideways scroll
+      // nobody thinks to try. min-h keeps the single-row height
+      // identical on a wide screen.
+      "inline-flex min-h-9 flex-wrap items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
       className,
     )}
     {...props}

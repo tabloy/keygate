@@ -358,11 +358,26 @@ type License struct {
 	CreatedAt time.Time `bun:",nullzero,default:now()" json:"created_at"`
 	UpdatedAt time.Time `bun:",nullzero,default:now()" json:"updated_at"`
 
-	Product     *Product        `bun:"rel:belongs-to,join:product_id=id" json:"product,omitempty"`
-	Plan        *Plan           `bun:"rel:belongs-to,join:plan_id=id" json:"plan,omitempty"`
-	Activations []*Activation   `bun:"rel:has-many,join:id=license_id" json:"activations,omitempty"`
-	Seats       []*Seat         `bun:"rel:has-many,join:id=license_id" json:"seats,omitempty"`
-	Addons      []*LicenseAddon `bun:"rel:has-many,join:id=license_id" json:"addons,omitempty"`
+	Product     *Product      `bun:"rel:belongs-to,join:product_id=id" json:"product,omitempty"`
+	Plan        *Plan         `bun:"rel:belongs-to,join:plan_id=id" json:"plan,omitempty"`
+	Activations []*Activation `bun:"rel:has-many,join:id=license_id" json:"activations,omitempty"`
+
+	// ActivationCount is how many activations this license has, filled
+	// in on list responses where loading the activations themselves
+	// would mean dragging every row of every license back with the
+	// page. It is computed, never stored, so it is scan-only.
+	ActivationCount int `bun:"activation_count,scanonly" json:"activation_count"`
+
+	// ActiveSessionCount is how many floating seats are in use right
+	// now. A floating plan records occupancy in floating_sessions, not
+	// in activations, so ActivationCount answers the wrong question
+	// for one: a license with every seat taken has no activation rows
+	// at all. Both counts exist because a floating license can still
+	// activate devices; which one means "how full is it" depends on
+	// the plan's license_model.
+	ActiveSessionCount int             `bun:"active_session_count,scanonly" json:"active_session_count"`
+	Seats              []*Seat         `bun:"rel:has-many,join:id=license_id" json:"seats,omitempty"`
+	Addons             []*LicenseAddon `bun:"rel:has-many,join:id=license_id" json:"addons,omitempty"`
 }
 
 const (

@@ -114,7 +114,16 @@ func (s *FloatingService) Heartbeat(ctx context.Context, licenseKey, identifier,
 	}
 
 	newExpiry := time.Now().Add(time.Duration(timeout) * time.Minute)
-	if err := s.store.HeartbeatFloating(ctx, lic.ID, identifier, newExpiry); err != nil {
+	// A heartbeat that renewed nothing is the answer, not a silent
+	// success: either this machine never checked out, or its lease
+	// lapsed while it was away and the slot has moved on. Both mean
+	// the same thing to the client, which is that it has to check out
+	// again before it may carry on.
+	renewed, err := s.store.HeartbeatFloating(ctx, lic.ID, identifier, newExpiry)
+	if err != nil {
+		return nil, apperr.Internal(err)
+	}
+	if !renewed {
 		return nil, apperr.NotFound("SESSION", identifier)
 	}
 

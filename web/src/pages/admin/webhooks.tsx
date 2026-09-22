@@ -149,7 +149,7 @@ export default function WebhooksPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("webhooks.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("webhooks.title")}</h1>
           <p className="text-muted-foreground">{t("webhooks.subtitle")}</p>
         </div>
         <Card>
@@ -170,9 +170,9 @@ export default function WebhooksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("webhooks.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("webhooks.title")}</h1>
           <p className="text-muted-foreground">{t("webhooks.subtitle")}</p>
         </div>
         <Button onClick={() => setCreating(true)}>
@@ -180,13 +180,13 @@ export default function WebhooksPage() {
         </Button>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-3">
         <ProductSelect value={productFilter} onChange={setProductFilter} allLabel={t("filter.allProducts")} />
         <Input
           placeholder={t("common.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-64"
+          className="w-full sm:w-64"
         />
       </div>
 
@@ -389,7 +389,7 @@ function CreateWebhookDialog({
             </div>
             <div className="space-y-2">
               <Label>{t("webhooks.events")}</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {WEBHOOK_EVENTS.map((event) => (
                   <label
                     key={event}

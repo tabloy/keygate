@@ -147,9 +147,9 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("settings.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("settings.title")}</h1>
           <p className="text-muted-foreground">{t("settings.subtitle")}</p>
         </div>
         {/* The outcome goes to a toast, like every other page. Swapping
@@ -177,7 +177,7 @@ export default function SettingsPage() {
               <CardTitle className="text-base">{t("settings.general")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>{t("settings.siteName")}</Label>
                   <Input
@@ -240,7 +240,7 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">{t("settings.brandColorDesc")}</p>
                 </div>
-                <div className="space-y-2 col-span-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label>{t("settings.logoUrl")}</Label>
                   <div className="flex items-center gap-3">
                     {form.logo_url && <img src={form.logo_url} alt="Custom logo" className="h-8 w-8 rounded border" />}
@@ -309,7 +309,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-2">
               <Label>{t("settings.signupMode")}</Label>
               <Select value={form.signup_mode || "open"} onValueChange={(v) => set("signup_mode", v)}>
-                <SelectTrigger className="w-72">
+                <SelectTrigger className="w-full sm:w-72">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -343,7 +343,7 @@ export default function SettingsPage() {
               <CardTitle className="text-base">{t("settings.rateLimit")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>{t("settings.rateLimitApi")}</Label>
                   <Input
@@ -373,7 +373,7 @@ export default function SettingsPage() {
               <CardTitle className="text-base">{t("settings.webhookConfig")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>{t("settings.webhookMaxAttempts")}</Label>
                   <Input
@@ -416,7 +416,7 @@ export default function SettingsPage() {
               <CardTitle className="text-base">{t("settings.versionInfo")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
                 <div>
                   <p className="text-muted-foreground">{t("settings.currentVersion")}</p>
                   <p className="font-mono font-semibold mt-1">{versionData?.version || "dev"}</p>
@@ -581,10 +581,15 @@ function TeamManagement() {
             />
           )}
 
-          {/* Invite form (owner only) */}
+          {/* Invite form (owner only).
+
+            The row wraps: three controls do not fit across a phone,
+            and unwrapped the address field was left 46px, which is not
+            a field. The address keeps a floor wide enough to read what
+            you typed, so it is the one that pushes the others down. */}
           {isOwner ? (
-            <div className="flex items-end gap-3 pt-4 border-t">
-              <div className="flex-1 space-y-2">
+            <div className="flex flex-wrap items-end gap-3 pt-4 border-t">
+              <div className="min-w-[200px] flex-1 space-y-2">
                 <Label className="text-xs">{t("team.email")}</Label>
                 <Input
                   type="email"
@@ -593,7 +598,7 @@ function TeamManagement() {
                   placeholder="colleague@company.com"
                 />
               </div>
-              <div className="w-32 space-y-2">
+              <div className="w-32 shrink-0 space-y-2">
                 <Label className="text-xs">{t("team.role")}</Label>
                 <Select value={role} onValueChange={setRole}>
                   <SelectTrigger>

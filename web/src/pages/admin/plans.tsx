@@ -99,7 +99,7 @@ export default function PlansPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("plans.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("plans.title")}</h1>
           <p className="text-muted-foreground">{t("plans.subtitle")}</p>
         </div>
         <Card>
@@ -120,9 +120,9 @@ export default function PlansPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("plans.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("plans.title")}</h1>
           <p className="text-muted-foreground">{t("plans.subtitle")}</p>
         </div>
         <Button onClick={() => setCreating(true)}>
@@ -130,16 +130,21 @@ export default function PlansPage() {
         </Button>
       </div>
 
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-3">
         <Input
           placeholder={t("common.search")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-64"
+          className="w-full sm:w-64"
         />
         {/* "all" maps back to no filter here: it used to be sent as a
             product_id of its own, which matched nothing. */}
-        <ProductSelect value={productFilter} onChange={setProductFilter} allLabel={t("plans.allProducts")} />
+        <ProductSelect
+          value={productFilter}
+          onChange={setProductFilter}
+          allLabel={t("plans.allProducts")}
+          className="w-full sm:w-48"
+        />
       </div>
 
       <Card>
@@ -402,8 +407,8 @@ function PlanDialog({
           className="flex min-h-0 flex-1 flex-col gap-4"
         >
           <DialogBody className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2 col-span-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label>{t("common.product")}</Label>
 
                 {/* A plan cannot move to another product — its licences
@@ -740,7 +745,7 @@ function EntitlementSection({ planId, entitlements: initial }: { planId: string;
       )}
       {adding && (
         <div className="border rounded p-3 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-xs">{t("plans.feature")}</Label>
               <Input
@@ -803,7 +808,7 @@ function EntitlementSection({ planId, entitlements: initial }: { planId: string;
                     meter event the background sync pushes to Stripe.
                     Configure the meter (and event_name) in your Stripe
                     dashboard first. */}
-                <div className="space-y-2 col-span-2">
+                <div className="space-y-2 sm:col-span-2">
                   <Label className="text-xs">{t("plans.stripeMeterEventName")}</Label>
                   <Input
                     value={newEnt.stripe_meter_event_name}

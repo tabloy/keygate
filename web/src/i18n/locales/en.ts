@@ -57,6 +57,7 @@ const en = {
   "nav.customers": "Customers",
   "nav.settings": "Settings",
   "nav.sponsor": "Sponsor Us",
+  "nav.menu": "Menu",
   "nav.portal": "User Portal",
   "nav.logout": "Logout",
 
@@ -145,6 +146,9 @@ const en = {
   "licenses.noProductsDesc": "Create a product and plan first before issuing licenses.",
   "licenses.detail": "License Detail",
   "licenses.activations": "Activations",
+  "licenses.resendEmail": "Resend email",
+  "licenses.resendEmailConfirm": "Send the license key to {email} again? Use this when the first email never arrived.",
+  "licenses.resendEmailAction": "Send",
   "licenses.revoke": "Revoke",
   "licenses.revokeConfirm":
     "This will permanently revoke the license. The customer will lose access immediately. This cannot be undone.",
@@ -627,6 +631,7 @@ const en = {
   "toast.planCreated": "Plan created successfully.",
   "toast.planDeleted": "Plan deleted.",
   "toast.licenseCreated": "License issued successfully.",
+  "toast.licenseEmailQueued": "License email on its way to {email}.",
   "toast.apiKeyCreated": "API key created successfully.",
   "toast.addonCreated": "Addon created successfully.",
   "toast.webhookCreated": "Webhook created successfully.",
