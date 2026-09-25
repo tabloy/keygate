@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/hooks/use-auth"
-import { useI18n } from "@/i18n"
+import { type TranslationKeys, useI18n } from "@/i18n"
 import { portal } from "@/lib/api"
 import { formatDate, statusColor } from "@/lib/utils"
 
@@ -183,7 +183,7 @@ export default function PortalAccountPage() {
                       {lic.plan?.name} &middot; {t("licenses.validUntil")} {formatDate(lic.valid_until)}
                     </p>
                   </div>
-                  <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as any)}</Badge>
+                  <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as TranslationKeys)}</Badge>
                 </div>
               ))}
             </div>

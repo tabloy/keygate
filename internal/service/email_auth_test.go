@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -33,6 +34,13 @@ import (
 //
 // We also cover the no-creds path (anonymous SMTP relay) where the
 // client must NOT attempt AUTH at all.
+// envCfgOf resolves the env-mode config for a test EmailService (store
+// is nil, so resolve never errors).
+func envCfgOf(svc *EmailService) resolvedConfig {
+	c, _ := svc.resolve(context.Background())
+	return c
+}
+
 func TestSendOnce_AuthPickerMatrix(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -99,7 +107,7 @@ func TestSendOnce_AuthPickerMatrix(t *testing.T) {
 				tlsConfig: &tls.Config{ServerName: "127.0.0.1", InsecureSkipVerify: true}, //nolint:gosec
 			}
 
-			err := svc.sendOnce(svc.host+":"+svc.port, "to@example.com",
+			err := svc.sendSMTP(envCfgOf(svc), svc.host+":"+svc.port, "to@example.com",
 				[]byte("Subject: ok\r\n\r\nhi\r\n"))
 
 			if tc.wantErrSubstr != "" {
@@ -148,7 +156,7 @@ func TestSendOnce_RejectsBadLoginCredentials(t *testing.T) {
 		tlsConfig: &tls.Config{ServerName: "127.0.0.1", InsecureSkipVerify: true}, //nolint:gosec
 	}
 
-	err := svc.sendOnce(svc.host+":"+svc.port, "to@example.com",
+	err := svc.sendSMTP(envCfgOf(svc), svc.host+":"+svc.port, "to@example.com",
 		[]byte("Subject: ok\r\n\r\nhi\r\n"))
 	if err == nil {
 		t.Fatal("expected auth error with wrong password, got nil")
@@ -573,7 +581,7 @@ func TestSendOnce_ImplicitTLS(t *testing.T) {
 			}
 
 			addr := fmt.Sprintf("127.0.0.1:%d", srv.Port())
-			if err := svc.sendOnce(addr, "to@example.com",
+			if err := svc.sendSMTP(envCfgOf(svc), addr, "to@example.com",
 				[]byte("Subject: ok\r\n\r\nhi\r\n")); err != nil {
 				t.Fatalf("send over implicit TLS: %v", err)
 			}
@@ -613,7 +621,7 @@ func TestSendOnce_StartTLSStillUsedOn587(t *testing.T) {
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", srv.Port())
-	if err := svc.sendOnce(addr, "to@example.com",
+	if err := svc.sendSMTP(envCfgOf(svc), addr, "to@example.com",
 		[]byte("Subject: ok\r\n\r\nhi\r\n")); err != nil {
 		t.Fatalf("send over STARTTLS: %v", err)
 	}

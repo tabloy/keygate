@@ -40,7 +40,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useI18n } from "@/i18n"
-import { admin } from "@/lib/api"
+import { type Addon, admin, type Product } from "@/lib/api"
 import { boolColor, formatDate } from "@/lib/utils"
 
 export default function AddonsPage() {
@@ -61,8 +61,8 @@ export default function AddonsPage() {
     queryFn: () => admin.listAddons({ product_id: productFilter, search, ...pg.params }),
   })
   const [creating, setCreating] = useState(false)
-  const [editing, setEditing] = useState<any>(null)
-  const [deleting, setDeleting] = useState<any>(null)
+  const [editing, setEditing] = useState<Addon | null>(null)
+  const [deleting, setDeleting] = useState<Addon | null>(null)
 
   const products = productsData?.products || []
   const { items: addons, total, totalPages } = pg.from(data, data?.addons)
@@ -142,7 +142,7 @@ export default function AddonsPage() {
                 </DataTableHeader>
                 <DataTableBody>
                   {addons.length === 0 && <DataTableEmpty colSpan={8} message={t("addons.empty")} />}
-                  {addons.map((a: any) => (
+                  {addons.map((a: Addon) => (
                     <DataTableRow key={a.id}>
                       <DataTableCell className="font-medium">{a.name}</DataTableCell>
                       <DataTableCell className="text-muted-foreground">{a.product?.name || a.product_id}</DataTableCell>
@@ -220,8 +220,8 @@ function AddonDialog({
 }: {
   open: boolean
   onClose: () => void
-  products: any[]
-  addon?: any
+  products: Product[]
+  addon?: Addon
 }) {
   const { t } = useI18n()
   const qc = useQueryClient()
@@ -256,7 +256,7 @@ function AddonDialog({
   // reason the server gave — a slug that is taken, a quota value that
   // is not a number — never reaches the screen.
   const createMut = useMutation({
-    mutationFn: () => (addon ? admin.updateAddon(addon.id, form) : admin.createAddon(form as any)),
+    mutationFn: () => (addon ? admin.updateAddon(addon.id, form) : admin.createAddon(form)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "addons"] })
       if (!addon) showToast(t("toast.addonCreated"), "success")

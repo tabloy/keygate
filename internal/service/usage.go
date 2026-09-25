@@ -143,7 +143,7 @@ func (s *UsageService) RecordUsage(ctx context.Context, in RecordUsageInput) (*R
 			}); err != nil {
 				s.logger.Error("webhook dispatch failed", "event", model.EventQuotaWarning, "error", err)
 			}
-			if s.email != nil && s.email.IsConfigured() && lic.Email != "" {
+			if s.email != nil && lic.Email != "" {
 				productName := ""
 				if lic.Product != nil {
 					productName = lic.Product.Name

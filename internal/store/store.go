@@ -919,7 +919,7 @@ func (s *Store) fillFloatingCounts(ctx context.Context, licenses []*model.Licens
 	err := s.DB.NewSelect().Model((*model.FloatingSession)(nil)).
 		ColumnExpr("license_id").
 		ColumnExpr("count(*) AS n").
-		Where("license_id IN (?) AND expires_at > now()", bun.In(ids)).
+		Where("license_id IN (?) AND expires_at > now()", bun.List(ids)).
 		GroupExpr("license_id").
 		Scan(ctx, &rows)
 	if err != nil {
@@ -959,7 +959,7 @@ func (s *Store) fillActivationCounts(ctx context.Context, licenses []*model.Lice
 	err := s.DB.NewSelect().Model((*model.Activation)(nil)).
 		ColumnExpr("license_id").
 		ColumnExpr("count(*) AS n").
-		Where("license_id IN (?)", bun.In(ids)).
+		Where("license_id IN (?)", bun.List(ids)).
 		GroupExpr("license_id").
 		Scan(ctx, &rows)
 	if err != nil {
@@ -1737,6 +1737,30 @@ func (s *Store) MarkEmailSent(ctx context.Context, id, token string) {
 // holds, keyed by the same token as MarkEmailSent: a stalled
 // processor must not push the row another one is sending back to
 // pending, or reopen a reminder that has meanwhile gone out.
+// MarkEmailDeferred reschedules a mail that failed for a reason only an
+// operator can fix — a bad SMTP/Cloudflare credential, a wrong account
+// id, an auth rejection — rather than anything wrong with the message
+// itself. Unlike MarkEmailFailed it does NOT count against max_attempts
+// and does NOT drop the body: the mail carries a licence key and must
+// survive until the config is corrected, however long that takes.
+// Otherwise a token rotation that lasted past the five backoff attempts
+// (~15 minutes) would wipe licence mail for good. The row goes back to
+// pending on a fixed delay; a later pass sends it once resolve() returns
+// a working provider.
+func (s *Store) MarkEmailDeferred(ctx context.Context, id, token, errMsg string) {
+	_, err := s.DB.NewRaw(`
+		UPDATE email_queue SET
+			error = ?,
+			status = 'pending',
+			next_retry = now() + interval '10 minutes',
+			claim_token = ''
+		WHERE id = ? AND claim_token = ?
+	`, errMsg, id, token).Exec(ctx)
+	if err != nil {
+		slog.Warn("email queue: could not defer mail", "email_id", id, "error", err)
+	}
+}
+
 func (s *Store) MarkEmailFailed(ctx context.Context, id, token, errMsg string) {
 	_ = RunInTx(ctx, s.DB, func(ctx context.Context, tx bun.Tx) error {
 		var status, notificationID string
@@ -1776,6 +1800,28 @@ func (s *Store) MarkEmailFailed(ctx context.Context, id, token, errMsg string) {
 		).Exec(ctx)
 		return err
 	})
+}
+
+// MarkEmailFailedPermanent gives up on a mail immediately, without
+// scheduling a retry. It is for failures that retrying cannot fix — a
+// rejected request, bad credentials, a permanent bounce — where trying
+// again just re-delivers to a bad address and burns sending reputation.
+// The body is dropped for the same reason MarkEmailSent drops it: a row
+// nobody will send again must not keep the credential it carried.
+func (s *Store) MarkEmailFailedPermanent(ctx context.Context, id, token, errMsg string) {
+	_, err := s.DB.NewRaw(`
+		UPDATE email_queue SET
+			attempts = attempts + 1,
+			error = ?,
+			status = 'failed',
+			next_retry = NULL,
+			claim_token = '',
+			body = ''
+		WHERE id = ? AND claim_token = ?
+	`, errMsg, id, token).Exec(ctx)
+	if err != nil {
+		slog.Warn("email queue: could not mark mail permanently failed", "email_id", id, "error", err)
+	}
 }
 
 // ClearStripeSubscription unlinks a licence from the Stripe

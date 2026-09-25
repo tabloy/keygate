@@ -130,7 +130,7 @@ func (s *SeatService) AddSeat(ctx context.Context, in AddSeatInput) (*model.Seat
 			"license_id": lic.ID, "seat_id": seat.ID, "email": in.Email,
 			"role": in.Role, "outcome": string(outcome),
 		})
-		if s.email != nil && s.email.IsConfigured() {
+		if s.email != nil {
 			productName := ""
 			if lic.Product != nil {
 				productName = lic.Product.Name

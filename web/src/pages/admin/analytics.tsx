@@ -46,7 +46,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useI18n } from "@/i18n"
+import { type TranslationKeys, useI18n } from "@/i18n"
 import type { AggregatedSnapshot, AnalyticsSnapshot } from "@/lib/api"
 import { admin } from "@/lib/api"
 import { formatDate } from "@/lib/utils"
@@ -61,7 +61,7 @@ function defaultTo(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function periodLabel(granularity: string, t: (key: any) => string): string {
+function periodLabel(granularity: string, t: (key: TranslationKeys) => string): string {
   switch (granularity) {
     case "weekly":
       return t("analytics.weekOf")
@@ -186,7 +186,7 @@ export default function AnalyticsPage() {
     total: snapTotal,
     totalPages: snapTotalPages,
     paginatedItems: paginatedSnapshots,
-  } = useClientPagination(snapshots as any[], 15)
+  } = useClientPagination(snapshots, 15)
 
   // Chart data
   const trendChartData = useMemo(

@@ -113,8 +113,10 @@ export const portal = {
   listPlans: (productId: string) => get<{ plans: Plan[] }>(`/portal/plans?product_id=${productId}`),
   updateProfile: (data: { name: string }) =>
     put<{ id: string; email: string; name: string; avatar_url: string; role: string }>("/portal/profile", data),
-  recordUsage: (data: { license_key: string; feature: string; quantity?: number }) => post<any>("/portal/usage", data),
-  quotaStatus: (data: { license_key: string; feature: string }) => post<any>("/portal/usage/status", data),
+  recordUsage: (data: { license_key: string; feature: string; quantity?: number }) =>
+    post<{ status?: string }>("/portal/usage", data),
+  quotaStatus: (data: { license_key: string; feature: string }) =>
+    post<{ used?: number; limit?: number; remaining?: number }>("/portal/usage/status", data),
   // Customer-facing team management for multi-seat plans. Session-
   // authed (cookie); the body's license_key only names the target
   // license — the cookie is the actual authentication.
@@ -423,10 +425,11 @@ export const admin = {
     get<{
       settings: Record<string, string>
       secrets_set?: Record<string, boolean>
-      email?: { configured: boolean; host: string; from: string }
+      email?: { configured: boolean; provider: string; source: string; host: string; from: string }
     }>("/admin/settings"),
   updateSettings: (settings: Record<string, string>) => put<{ status: string }>("/admin/settings", { settings }),
-  sendTestEmail: () => post<{ status: string }>("/admin/settings/test-email"),
+  sendTestEmail: (to?: string) => post<{ status: string }>("/admin/settings/test-email", to ? { to } : {}),
+  clearSecretSetting: (key: string) => del<{ status: string; key: string }>(`/admin/settings/secrets/${key}`),
 
   // Email Templates
   getEmailTemplates: () =>

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -2051,7 +2052,7 @@ func (h *AdminHandler) CreateLicense(c *gin.Context) {
 	// Email the customer their new license key. Best-effort: SMTP failure
 	// is logged inside SendLicenseCreated but doesn't fail the API call —
 	// the license is already persisted, and admin can resend manually.
-	if h.Email != nil && h.Email.IsConfigured() {
+	if h.Email != nil {
 		productName := ""
 		if prod, err := h.Store.FindProductByID(c, l.ProductID); err == nil {
 			productName = prod.Name
@@ -2289,7 +2290,7 @@ func (h *AdminHandler) SuspendLicense(c *gin.Context) {
 				"license_id": id, "email": lic.Email,
 			})
 		}
-		if h.Email != nil && h.Email.IsConfigured() && lic.Email != "" {
+		if h.Email != nil && lic.Email != "" {
 			productName := ""
 			if prod, perr := h.Store.FindProductByID(c, lic.ProductID); perr == nil {
 				productName = prod.Name
@@ -3474,7 +3475,7 @@ func (h *AdminHandler) ChangeLicensePlan(c *gin.Context) {
 		})
 	}
 
-	if h.Email != nil && h.Email.IsConfigured() && l.Email != "" {
+	if h.Email != nil && l.Email != "" {
 		productName := ""
 		if prod, perr := h.Store.FindProductByID(c, l.ProductID); perr == nil {
 			productName = prod.Name
@@ -3507,6 +3508,19 @@ var settingsWritable = map[string]bool{
 	"email_template_quota_warning":     true,
 	"email_template_seat_invite":       true,
 	"email_template_payment_failed":    true,
+	// Email. Each provider owns an independent, namespaced config; the
+	// env vars are the fallback when nothing is set here (see
+	// EmailService.resolve). email_provider only selects which one is
+	// active.
+	"email_provider":        true,
+	"smtp_from":             true,
+	"smtp_host":             true,
+	"smtp_port":             true,
+	"smtp_username":         true,
+	"smtp_password":         true, // secret (see settingsSecret)
+	"cloudflare_from":       true,
+	"cloudflare_account_id": true,
+	"cloudflare_api_token":  true, // secret (see settingsSecret)
 }
 
 // settingsSecret lists keys that can be written but never read back.
@@ -3514,12 +3528,13 @@ var settingsWritable = map[string]bool{
 // submission means "leave it alone", because a form that cannot show
 // the current value would otherwise wipe it on every save.
 //
-// Currently empty. SMTP used to live here, but the mailer only ever
-// read the environment, so the stored values were dead — the keys
-// were removed rather than wired up, and SMTP stays env-only like
-// the rest of the server config. The mechanism is kept for the next
-// secret that genuinely needs to be set from the dashboard.
-var settingsSecret = map[string]bool{}
+// The email credentials live here: the SMTP password and the
+// Cloudflare API token. They are encrypted at rest (store layer) and
+// GetSettings reports only whether each is set, never the value.
+var settingsSecret = map[string]bool{
+	"cloudflare_api_token": true,
+	"smtp_password":        true,
+}
 
 // settingsEnum lists the settings whose value is a fixed choice rather
 // than free text. Saving a typo here fails quietly and in the unsafe
@@ -3527,7 +3542,8 @@ var settingsSecret = map[string]bool{}
 // "licensed_only" as open registration, so "licensedonly" would report
 // saved while leaving the endpoint open to strangers.
 var settingsEnum = map[string][]string{
-	"signup_mode": {"open", "licensed_only"},
+	"signup_mode":    {"open", "licensed_only"},
+	"email_provider": {"smtp", "cloudflare"},
 }
 
 // settingsServerOwned lists keys the server writes for itself — the
@@ -3572,14 +3588,65 @@ func (h *AdminHandler) GetSettings(c *gin.Context) {
 		}
 	}
 
-	// SMTP is configured from the environment; the dashboard shows
-	// where mail goes so an admin can tell "not set up" from "set up
-	// but broken" before pressing the test button.
-	email := gin.H{"configured": false, "host": "", "from": ""}
+	// The dashboard shows the effective email config (provider, and
+	// whether it came from the DB or the env fallback) so an admin can
+	// tell "not set up" from "set up but broken" before pressing test.
+	email := gin.H{"configured": false, "provider": "smtp", "source": "env", "host": "", "from": ""}
 	if h.Email != nil {
-		email = gin.H{"configured": h.Email.IsConfigured(), "host": h.Email.Host(), "from": h.Email.From()}
+		st := h.Email.Status()
+		email = gin.H{
+			"configured": st.Configured, "provider": st.Provider,
+			"source": st.Source, "host": st.Host, "from": st.From,
+		}
 	}
 	response.OK(c, gin.H{"settings": out, "secrets_set": secretsSet, "email": email})
+}
+
+// emailWriteTouchesConfig reports whether a settings write changes any
+// email configuration key, so validation runs on those saves even when
+// email_provider itself is unchanged.
+func emailWriteTouchesConfig(writes map[string]string) bool {
+	for k := range writes {
+		if k == "email_provider" || strings.HasPrefix(k, "smtp_") || strings.HasPrefix(k, "cloudflare_") {
+			return true
+		}
+	}
+	return false
+}
+
+// validateEmailProvider returns "" when the chosen provider has every
+// field it needs (merging this save with what is already stored), or a
+// human message naming what is missing. Secrets count as present if
+// they are in this save or already stored (a blank secret means "keep
+// the existing one").
+func (h *AdminHandler) validateEmailProvider(c *gin.Context, provider string, writes map[string]string) string {
+	stored, _ := h.Store.GetSettings(c)
+	has := func(key string) bool {
+		if v, ok := writes[key]; ok {
+			return strings.TrimSpace(v) != ""
+		}
+		return strings.TrimSpace(stored[key]) != ""
+	}
+	switch provider {
+	case "smtp":
+		if !has("smtp_from") {
+			return "a From address is required (smtp_from)"
+		}
+		if !has("smtp_host") {
+			return "SMTP host is required for the smtp provider (smtp_host)"
+		}
+	case "cloudflare":
+		if !has("cloudflare_from") {
+			return "a From address is required (cloudflare_from)"
+		}
+		if !has("cloudflare_account_id") {
+			return "Cloudflare account ID is required (cloudflare_account_id)"
+		}
+		if !has("cloudflare_api_token") {
+			return "Cloudflare API token is required (cloudflare_api_token)"
+		}
+	}
+	return ""
 }
 
 func (h *AdminHandler) UpdateSettings(c *gin.Context) {
@@ -3616,6 +3683,38 @@ func (h *AdminHandler) UpdateSettings(c *gin.Context) {
 		response.OK(c, gin.H{"status": "saved"})
 		return
 	}
+
+	// Changing any email field must not silently disable email. This
+	// runs whenever the save touches an email field, not only when it
+	// carries email_provider — the dashboard sends only changed keys,
+	// so clearing smtp_host on an already-configured install would
+	// otherwise slip through and stop all mail. The active provider is
+	// the one in this save, or the one already stored, and its required
+	// fields are validated against the merged (write + stored) config.
+	if emailWriteTouchesConfig(writes) {
+		provider := writes["email_provider"]
+		if provider == "" {
+			stored, err := h.Store.GetSetting(c, "email_provider")
+			// ErrNoRows is a genuine "no provider set" (fresh install) —
+			// treat as empty and let a full config be validated below. Any
+			// other read error must NOT be swallowed: proceeding as if no
+			// provider were set skips required-field validation, so a save
+			// that clears smtp_host would persist a config that silently
+			// disables email. Fail the request instead.
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				response.Internal(c, err)
+				return
+			}
+			provider = stored
+		}
+		provider = strings.TrimSpace(provider)
+		if provider != "" {
+			if msg := h.validateEmailProvider(c, provider, writes); msg != "" {
+				response.BadRequest(c, msg)
+				return
+			}
+		}
+	}
 	// The wait a gated feed imposes is measured against this, so a
 	// value that does not parse — or one that is zero, negative or
 	// absurd — would end the wait early or never. Lowering it is
@@ -3646,6 +3745,13 @@ func (h *AdminHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	if err := h.Store.SetSettings(c, writes); err != nil {
+		// A missing master key is an operator config problem, not a
+		// server fault: say so plainly instead of a bare 500.
+		if errors.Is(err, store.ErrSecretEncryptionUnavailable) {
+			response.Err(c, http.StatusServiceUnavailable, "ENCRYPTION_NOT_CONFIGURED",
+				"cannot store email credentials without an encryption key — set RELEASE_KEY_ENCRYPTION_KEY and restart")
+			return
+		}
 		response.Internal(c, err)
 		return
 	}
@@ -3727,7 +3833,7 @@ func (h *AdminHandler) RunExpiryChecks(c *gin.Context) {
 func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 	if h.Email == nil || !h.Email.IsConfigured() {
 		response.Err(c, http.StatusServiceUnavailable, "EMAIL_NOT_CONFIGURED",
-			"SMTP is not configured on this server — set SMTP_HOST / SMTP_FROM / etc.")
+			"email is not configured — set it up in Settings, or via SMTP_* env vars")
 		return
 	}
 	var req struct {
@@ -3871,7 +3977,7 @@ func (h *AdminHandler) InviteTeamMember(c *gin.Context) {
 	// out-of-band). The inviter (actor) name is shown so the
 	// recipient knows who added them, which helps spot social
 	// engineering ("why am I suddenly admin on Keygate?").
-	if roleChanged && h.Email != nil && h.Email.IsConfigured() {
+	if roleChanged && h.Email != nil {
 		siteName, _ := h.Store.GetSetting(c, "site_name")
 		if siteName == "" {
 			siteName = "Keygate"

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -205,7 +206,7 @@ func (s *Store) GetPublicSettings(ctx context.Context) (map[string]string, error
 	publicKeys := []string{"site_name", "timezone", "brand_color", "language", "logo_url"}
 	var settings []Setting
 	err := s.DB.NewSelect().Model(&settings).
-		Where("key IN (?)", bun.In(publicKeys)).Scan(ctx)
+		Where("key IN (?)", bun.List(publicKeys)).Scan(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -217,8 +218,12 @@ func (s *Store) GetPublicSettings(ctx context.Context) (map[string]string, error
 }
 
 func (s *Store) SetSetting(ctx context.Context, key, value string) error {
-	setting := &Setting{Key: key, Value: value}
-	_, err := s.DB.NewInsert().Model(setting).
+	encoded, err := s.encodeSettingValue(key, value)
+	if err != nil {
+		return err
+	}
+	setting := &Setting{Key: key, Value: encoded}
+	_, err = s.DB.NewInsert().Model(setting).
 		On("CONFLICT (key) DO UPDATE").
 		Set("value = EXCLUDED.value").
 		Exec(ctx)
@@ -246,7 +251,11 @@ func (s *Store) SetSettings(ctx context.Context, settings map[string]string) err
 	}
 	defer tx.Rollback()
 	for key, value := range settings {
-		setting := &Setting{Key: key, Value: value}
+		encoded, encErr := s.encodeSettingValue(key, value)
+		if encErr != nil {
+			return encErr
+		}
+		setting := &Setting{Key: key, Value: encoded}
 		if _, err := tx.NewInsert().Model(setting).
 			On("CONFLICT (key) DO UPDATE").
 			Set("value = EXCLUDED.value").
@@ -255,4 +264,82 @@ func (s *Store) SetSettings(ctx context.Context, settings map[string]string) err
 		}
 	}
 	return tx.Commit()
+}
+
+// ─── Secret settings ───
+//
+// A few settings hold credentials (mail API keys, the SMTP password).
+// They are stored encrypted at rest with the same master key that
+// protects license keys, and the settings API never returns them to
+// the UI (see settingsSecret in the handler). This keeps a DB dump or
+// a read of the settings table from handing over live credentials.
+
+// ErrSecretEncryptionUnavailable is returned when a secret setting is
+// saved on an install with no master key. Storing it plaintext would
+// leak a long-lived credential, so the write is refused instead.
+var ErrSecretEncryptionUnavailable = errors.New(
+	"cannot store a secret without an encryption key: set RELEASE_KEY_ENCRYPTION_KEY")
+
+var settingSecretKeys = map[string]bool{
+	"cloudflare_api_token": true,
+	"smtp_password":        true,
+}
+
+const settingEncPrefix = "enc:v1:"
+
+// encodeSettingValue encrypts a secret setting's value for storage.
+// Non-secret keys, empty values, and installs without an encryption
+// key pass through unchanged; the value is still redacted from the UI.
+func (s *Store) encodeSettingValue(key, value string) (string, error) {
+	if value == "" || !settingSecretKeys[key] {
+		return value, nil
+	}
+	// A secret must never be written in the clear. Without a master key
+	// there is nowhere safe to put it, so refuse rather than silently
+	// store plaintext an admin believes is encrypted. Same if the
+	// encryption itself fails.
+	if s.LicenseKeyAEAD == nil {
+		return "", ErrSecretEncryptionUnavailable
+	}
+	ct, err := s.LicenseKeyAEAD.Encrypt([]byte(value), []byte("setting:"+key))
+	if err != nil {
+		return "", fmt.Errorf("encrypt %s: %w", key, err)
+	}
+	return settingEncPrefix + base64.StdEncoding.EncodeToString(ct), nil
+}
+
+// GetSecretSetting returns the decrypted plaintext of a secret setting,
+// or "" if it is not set. A value stored before encryption was enabled
+// (no prefix) is returned as-is, so turning encryption on does not
+// strand existing config.
+func (s *Store) GetSecretSetting(ctx context.Context, key string) (string, error) {
+	raw, err := s.GetSetting(ctx, key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil // not set
+	}
+	if err != nil {
+		return "", err // a real read error must not look like "unset"
+	}
+	if raw == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(raw, settingEncPrefix) {
+		return raw, nil // stored before encryption was enabled
+	}
+	// A prefixed value is ciphertext. Without the key it cannot be
+	// decrypted, and returning the ciphertext as if it were the secret
+	// would silently feed "enc:v1:..." to SMTP AUTH or Cloudflare and
+	// fail every send while the status still reads "configured". Refuse.
+	if s.LicenseKeyAEAD == nil {
+		return "", ErrSecretEncryptionUnavailable
+	}
+	ct, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(raw, settingEncPrefix))
+	if err != nil {
+		return "", err
+	}
+	pt, err := s.LicenseKeyAEAD.Decrypt(ct, []byte("setting:"+key))
+	if err != nil {
+		return "", err
+	}
+	return string(pt), nil
 }

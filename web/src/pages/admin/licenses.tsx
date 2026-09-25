@@ -60,7 +60,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useI18n } from "@/i18n"
+import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin, type Plan } from "@/lib/api"
 import { formatDate, statusColor } from "@/lib/utils"
 
@@ -202,7 +202,7 @@ export default function LicensesPage() {
               <SelectItem value="all">{t("filter.allStatuses")}</SelectItem>
               {["active", "trialing", "past_due", "canceled", "expired", "suspended", "revoked"].map((s) => (
                 <SelectItem key={s} value={s}>
-                  {t(`status.${s}` as any)}
+                  {t(`status.${s}` as TranslationKeys)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -270,7 +270,9 @@ export default function LicensesPage() {
                             } / ${lic.plan?.max_activations || "-"}`}
                       </DataTableCell>
                       <DataTableCell>
-                        <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as any)}</Badge>
+                        <Badge className={statusColor(lic.status)}>
+                          {t(`status.${lic.status}` as TranslationKeys)}
+                        </Badge>
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground text-xs">
                         {lic.valid_until ? formatDate(lic.valid_until) : t("licenses.perpetual")}
@@ -638,7 +640,9 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                   </div>
                   <div>
                     <p className="text-muted-foreground">{t("common.status")}</p>
-                    <Badge className={`mt-1 ${statusColor(lic.status)}`}>{t(`status.${lic.status}` as any)}</Badge>
+                    <Badge className={`mt-1 ${statusColor(lic.status)}`}>
+                      {t(`status.${lic.status}` as TranslationKeys)}
+                    </Badge>
                   </div>
                   <div>
                     <p className="text-muted-foreground">{t("common.product")}</p>

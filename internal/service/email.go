@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -38,11 +39,60 @@ type EmailService struct {
 	tlsConfig *tls.Config
 }
 
-func (s *EmailService) IsConfigured() bool { return s.enabled }
+func (s *EmailService) IsConfigured() bool {
+	ok, err := s.Configured()
+	return err == nil && ok
+}
+
+// Configured resolves the effective config and reports whether a
+// provider is fully set up, keeping a transient config read error
+// distinct from a clean "not configured". Callers that would otherwise
+// fall back to an insecure path on false — printing an OTP code to the
+// log — must use this and fail closed on err, so a DB blip or a decrypt
+// failure never leaks a login code to the log.
+func (s *EmailService) Configured() (bool, error) {
+	cfg, err := s.resolve(context.Background())
+	if err != nil {
+		return false, err
+	}
+	return cfg.configured(), nil
+}
 
 // Host and From are shown read-only in the dashboard.
-func (s *EmailService) Host() string { return s.host }
-func (s *EmailService) From() string { return s.from }
+func (s *EmailService) Host() string {
+	cfg, _ := s.resolve(context.Background())
+	return cfg.host
+}
+func (s *EmailService) From() string {
+	cfg, _ := s.resolve(context.Background())
+	return cfg.from
+}
+
+// EmailStatus is what the settings page shows about email delivery.
+type EmailStatus struct {
+	Configured bool   `json:"configured"`
+	Provider   string `json:"provider"`
+	Source     string `json:"source"` // "db" | "env"
+	Host       string `json:"host"`   // SMTP only; empty for HTTP providers
+	From       string `json:"from"`
+}
+
+// Status resolves the effective config once and reports it. The
+// credentials themselves are never included.
+func (s *EmailService) Status() EmailStatus {
+	c, err := s.resolve(context.Background())
+	if err != nil {
+		// Display only: a read error is not "configured".
+		return EmailStatus{Provider: "smtp", Source: "env"}
+	}
+	return EmailStatus{
+		Configured: c.configured(),
+		Provider:   c.provider,
+		Source:     c.source,
+		Host:       c.host,
+		From:       c.from,
+	}
+}
 
 func NewEmailService(host, port, username, password, from string, logger *slog.Logger, s *store.Store) *EmailService {
 	// Trim once, here, where the configuration arrives. These come
@@ -96,40 +146,78 @@ func DefaultTemplates() map[string]string {
 }
 
 func (s *EmailService) Send(to, subject, htmlBody string) error {
-	if !s.enabled {
+	cfg, err := s.resolve(context.Background())
+	if err != nil {
+		// A config read error is a real failure, not "skip": returning
+		// nil would silently drop the mail (login codes, invites).
+		return fmt.Errorf("email config: %w", err)
+	}
+	if !cfg.configured() {
+		// Best-effort: with no email configured there is nothing to
+		// send with, and this is a supported mode (OTP codes go to the
+		// log). Direct callers treat this as "skipped", not failure.
+		// The QUEUE must not go through here — a "skipped" would look
+		// like success and mark the mail sent; it uses sendResolved
+		// with a config it has already checked.
 		s.logger.Info("email skipped (not configured)", "to", to, "subject", subject)
 		return nil
 	}
+	return s.sendResolved(cfg, to, subject, htmlBody)
+}
 
+// sendResolved delivers one message with a config the caller has
+// already resolved and checked. It always reports failure as an error,
+// so a caller that has claimed a queue row never mistakes "could not
+// send" for "sent".
+func (s *EmailService) sendResolved(cfg resolvedConfig, to, subject, htmlBody string) error {
 	// Append attribution footer (AGPL v3 Section 7b — see NOTICE)
 	if !strings.Contains(htmlBody, branding.Domain) {
 		htmlBody = strings.Replace(htmlBody, "</body>", emailFooter()+"</body>", 1)
 	}
 
-	msg := strings.Join([]string{
-		"From: " + s.from,
-		"To: " + to,
-		"Subject: " + subject,
-		"MIME-Version: 1.0",
-		"Content-Type: text/html; charset=UTF-8",
-		"",
-		htmlBody,
-	}, "\r\n")
-
-	addr := s.addr()
-	err := s.sendOnce(addr, to, []byte(msg))
+	err := s.deliver(cfg, to, subject, htmlBody)
 	if err != nil {
-		// Retry once after a short delay — transient TCP / TLS hiccups.
+		// Only a 429/5xx/network hiccup is worth an immediate retry.
+		// A terminal bounce or a credential/config error will not be
+		// fixed by waiting 3 seconds, so return at once and let the
+		// caller (the queue) decide whether to keep the mail.
+		if !isRetryable(err) {
+			s.logger.Error("email send failed", "to", to, "error", err, "terminal", isPermanent(err))
+			return fmt.Errorf("email send: %w", err)
+		}
 		s.logger.Warn("email send failed, retrying", "to", to, "error", err)
 		time.Sleep(3 * time.Second)
-		err = s.sendOnce(addr, to, []byte(msg))
-		if err != nil {
+		if err = s.deliver(cfg, to, subject, htmlBody); err != nil {
 			s.logger.Error("email send failed after retry", "to", to, "error", err)
 			return fmt.Errorf("email send: %w", err)
 		}
 	}
-	s.logger.Info("email sent", "to", to, "subject", subject)
+	s.logger.Info("email sent", "to", to, "subject", subject, "provider", cfg.provider)
 	return nil
+}
+
+// deliver dispatches one already-shaped message to whichever provider
+// the resolved config names. This is the single point every provider
+// goes through, so retry, logging and the attribution footer above are
+// shared and provider-agnostic.
+func (s *EmailService) deliver(cfg resolvedConfig, to, subject, htmlBody string) error {
+	switch cfg.provider {
+	case "cloudflare":
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		defer cancel()
+		return s.sendCloudflare(ctx, cfg, to, subject, htmlBody, htmlToText(htmlBody))
+	default:
+		msg := []byte(strings.Join([]string{
+			"From: " + cfg.from,
+			"To: " + to,
+			"Subject: " + subject,
+			"MIME-Version: 1.0",
+			"Content-Type: text/html; charset=UTF-8",
+			"",
+			htmlBody,
+		}, "\r\n"))
+		return s.sendSMTP(cfg, cfg.addr(), to, msg)
+	}
 }
 
 // sendOnce drives the SMTP conversation manually so we can negotiate
@@ -180,7 +268,7 @@ func (s *EmailService) implicitTLS() bool {
 	return s.port == "465"
 }
 
-func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
+func (s *EmailService) sendSMTP(cfg resolvedConfig, addr, to string, msg []byte) error {
 	// The SMTP envelope sender (MAIL FROM, RFC 5321) must be a BARE
 	// address — "noreply@x.com", never "Keygate <noreply@x.com>".
 	// The display-name form is only legal in the RFC 5322 "From:"
@@ -188,9 +276,9 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 	// Postmark reject a display-name envelope with
 	// "501 Bad sender address syntax". Parse once here so operators
 	// can keep configuring the friendly form in SMTP_FROM.
-	envelopeFrom, err := parseEnvelopeAddress(s.from)
+	envelopeFrom, err := parseEnvelopeAddress(cfg.from)
 	if err != nil {
-		return fmt.Errorf("invalid SMTP_FROM %q: %w", s.from, err)
+		return fmt.Errorf("invalid SMTP_FROM %q: %w", cfg.from, err)
 	}
 	// CR/LF guard (SMTP injection) — same as net/smtp.SendMail.
 	if err := validateSMTPLine(envelopeFrom); err != nil {
@@ -202,7 +290,7 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 
 	tlsCfg := s.tlsConfig
 	if tlsCfg == nil {
-		tlsCfg = &tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}
+		tlsCfg = &tls.Config{ServerName: cfg.host, MinVersion: tls.VersionTLS12}
 	}
 
 	// Two ways a submission port speaks TLS, and the port says which.
@@ -214,16 +302,16 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 	// with something that looks nothing like a TLS problem. Cloudflare
 	// and Fastmail offer 465 only, so this is not an exotic case.
 	var conn net.Conn
-	if s.implicitTLS() {
+	if cfg.implicitTLS() {
 		d := &net.Dialer{Timeout: 30 * time.Second}
 		conn, err = tls.DialWithDialer(d, "tcp", addr, tlsCfg)
 		if err != nil {
-			return fmt.Errorf("tls dial: %w", err)
+			return smtpErr("tls dial", err, false)
 		}
 	} else {
 		conn, err = net.DialTimeout("tcp", addr, 30*time.Second)
 		if err != nil {
-			return fmt.Errorf("dial: %w", err)
+			return smtpErr("dial", err, false)
 		}
 	}
 	// A server that accepts the connection and then stalls must not
@@ -231,15 +319,15 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 	// send that outlives its lease would be repeated by another
 	// replica. One attempt plus the retry stays well inside the lease.
 	_ = conn.SetDeadline(time.Now().Add(smtpSessionTimeout))
-	c, err := smtp.NewClient(conn, s.host)
+	c, err := smtp.NewClient(conn, cfg.host)
 	if err != nil {
 		_ = conn.Close()
-		return fmt.Errorf("smtp client: %w", err)
+		return smtpErr("smtp client", err, false)
 	}
 	defer c.Close() //nolint:errcheck
 
 	if err := c.Hello(localHostname()); err != nil {
-		return fmt.Errorf("ehlo: %w", err)
+		return smtpErr("ehlo", err, false)
 	}
 
 	// STARTTLS upgrade if the server advertises it. (Client.StartTLS
@@ -248,38 +336,133 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 	// not advertise the extension at all.
 	if ok, _ := c.Extension("STARTTLS"); ok {
 		if err := c.StartTLS(tlsCfg); err != nil {
-			return fmt.Errorf("starttls: %w", err)
+			return smtpErr("starttls", err, false)
 		}
 	}
 
-	if s.username != "" {
-		auth, perr := pickAuth(c, s.host, s.username, s.password)
+	if cfg.username != "" {
+		auth, perr := pickAuth(c, cfg.host, cfg.username, cfg.password)
 		if perr != nil {
 			return perr
 		}
 		if err := c.Auth(auth); err != nil {
-			return fmt.Errorf("auth: %w", err)
+			return smtpErr("auth", err, false)
 		}
 	}
 
 	if err := c.Mail(envelopeFrom); err != nil {
-		return fmt.Errorf("mail from: %w", err)
+		return smtpErr("mail from", err, false)
 	}
 	if err := c.Rcpt(to); err != nil {
-		return fmt.Errorf("rcpt to: %w", err)
+		return smtpErr("rcpt to", err, true)
 	}
 	w, err := c.Data()
 	if err != nil {
-		return fmt.Errorf("data: %w", err)
+		return smtpErr("data", err, false)
 	}
 	if _, err := w.Write(msg); err != nil {
 		_ = w.Close()
-		return fmt.Errorf("data write: %w", err)
+		return smtpErr("data write", err, false)
 	}
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("data close: %w", err)
+		return smtpErr("data close", err, false)
 	}
-	return c.Quit()
+	// w.Close() returning nil means the server accepted end-of-DATA
+	// (a 250): the message IS delivered. QUIT is only the polite
+	// teardown, so a failure here (EOF, RST) must NOT be reported as a
+	// send failure — doing so would re-queue an already-delivered mail
+	// and, via MarkEmailDeferred, re-send it every 10 minutes forever.
+	if err := c.Quit(); err != nil {
+		s.logger.Warn("smtp quit failed after delivery (message already accepted)", "to", to, "error", err)
+	}
+	return nil
+}
+
+// smtpErr maps an SMTP-phase failure to the queue's retry policy so an
+// immediate retry (sendResolved) and the queue's backoff both apply to
+// SMTP the same way they already do to the HTTP provider:
+//
+//   - No SMTP reply at all (dial, TLS handshake, a dropped connection
+//     mid-session): a transport hiccup, worth retrying → retryableError.
+//   - A 4xx reply ("421 try again later", greylisting): transient by
+//     definition → retryableError.
+//   - A 5xx RCPT reply that names a permanently invalid RECIPIENT (by
+//     its RFC 3463 enhanced status code): a terminal bounce, the message
+//     can never be delivered → permanentError.
+//   - Anything else — a 535 auth failure, and crucially a bare 5xx RCPT
+//     rejection that is really a relay/policy/config error (530 auth
+//     required, 550 relaying denied, 554 sender domain rejected): not the
+//     message's fault and no immediate retry helps, but recoverable once
+//     an operator fixes the config, so a plain error keeps it (and its
+//     body, which holds the licence key) in the queue to retry later.
+func smtpErr(phase string, err error, recipient bool) error {
+	var proto *textproto.Error
+	if errors.As(err, &proto) {
+		switch {
+		case proto.Code >= 400 && proto.Code < 500:
+			return retryable("%s: %w", phase, err)
+		case recipient && proto.Code >= 500 && rcptPermanent(proto.Msg):
+			return permanent("%s: %w", phase, err)
+		default:
+			return fmt.Errorf("%s: %w", phase, err)
+		}
+	}
+	// No structured reply → a transport/session failure: transient.
+	return retryable("%s: %w", phase, err)
+}
+
+// rcptPermanent reports whether a 5xx RCPT rejection names a permanently
+// invalid RECIPIENT — the only case where dropping the message (and its
+// body) is right. It keys off the RFC 3463 enhanced status code, not the
+// bare 5xx, because a 550/554 with no such code, or one in the policy
+// (5.7.x) or sender (5.1.7/5.1.8) ranges, is a relay/auth/config
+// rejection an operator can fix, and must stay in the queue. Absent a
+// recognised recipient-invalid code we assume NOT permanent: such a mail
+// falls through to a plain error, which processQueue keeps and retries
+// via MarkEmailDeferred rather than ever wiping licence mail on an
+// ambiguous 550. The trade-off is that a hard bounce from a server that
+// sends no enhanced code is retried indefinitely instead of given up on;
+// keeping the key-bearing body is deliberately preferred to reclaiming a
+// dead address, and an operator can purge such a row from the queue.
+func rcptPermanent(msg string) bool {
+	switch enhancedStatusCode(msg) {
+	case "5.1.1", // bad destination mailbox address
+		"5.1.2",  // bad destination system address
+		"5.1.3",  // bad destination mailbox address syntax
+		"5.1.6",  // destination mailbox has moved, no forwarding address
+		"5.1.10": // recipient address has a null MX
+		return true
+	default:
+		return false
+	}
+}
+
+// enhancedStatusCode pulls a leading RFC 3463 "class.subject.detail"
+// token (e.g. "5.1.1") off an SMTP reply line, or "" if the line does
+// not start with one. net/smtp puts the reply text after the basic code
+// in textproto.Error.Msg, and a compliant server leads that text with
+// the enhanced code.
+func enhancedStatusCode(msg string) string {
+	fields := strings.Fields(strings.TrimSpace(msg))
+	if len(fields) == 0 {
+		return ""
+	}
+	tok := fields[0]
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	for _, p := range parts {
+		if p == "" {
+			return ""
+		}
+		for _, r := range p {
+			if r < '0' || r > '9' {
+				return ""
+			}
+		}
+	}
+	return tok
 }
 
 // pickAuth selects an SMTP AUTH mechanism based on what the server
@@ -739,15 +922,31 @@ func (s *EmailService) StartEmailQueueProcessor(ctx context.Context, db *store.S
 const emailQueueBatch = 20
 
 func (s *EmailService) processQueue(ctx context.Context, db *store.Store) {
-	// With no SMTP configured there is nothing to send with, and
+	// With no email configured there is nothing to send with, and
 	// draining the queue anyway destroys what is in it: Send returns
-	// nil for a server it cannot reach, so every mail is claimed,
-	// skipped, and then marked delivered. Running without SMTP is a
+	// nil for a provider it cannot reach, so every mail is claimed,
+	// skipped, and then marked delivered. Running without email is a
 	// supported mode — the sample env ships it empty and OTP codes go
 	// to the log — so a licence key queued by Stripe fulfilment would
 	// be silently consumed on exactly the installs least able to
-	// notice. Left alone, the backlog goes out once SMTP is set up.
-	if !s.enabled {
+	// notice. Left alone, the backlog goes out once email is set up.
+	//
+	// resolve(), not s.enabled: email may be configured in the DB even
+	// when the boot-time env was empty, and the backlog must drain in
+	// that case too.
+	//
+	// Resolve ONCE and reuse it for the whole batch. If it were
+	// re-resolved per mail (as Send does), an admin who clears a
+	// credential mid-batch would flip resolve() to "not configured",
+	// Send would return nil, and the claimed mail would be marked sent
+	// and have its body wiped without ever leaving. A captured config
+	// either sends or fails with an error that keeps the row.
+	cfg, err := s.resolve(ctx)
+	if err != nil {
+		s.logger.Error("email queue: could not resolve config; leaving backlog", "error", err)
+		return
+	}
+	if !cfg.configured() {
 		return
 	}
 	for range emailQueueBatch {
@@ -760,8 +959,24 @@ func (s *EmailService) processQueue(ctx context.Context, db *store.Store) {
 		if err != nil || e == nil {
 			return
 		}
-		if err := s.Send(e.ToAddr, e.Subject, e.Body); err != nil {
-			db.MarkEmailFailed(ctx, e.ID, e.ClaimToken, err.Error())
+		if err := s.sendResolved(cfg, e.ToAddr, e.Subject, e.Body); err != nil {
+			switch {
+			case isPermanent(err):
+				// Terminal bounce: retrying just re-delivers to a bad
+				// address. Give up at once and drop the body.
+				db.MarkEmailFailedPermanent(ctx, e.ID, e.ClaimToken, err.Error())
+			case isRetryable(err):
+				// A 429/5xx/network hiccup: back off and try again, up
+				// to max_attempts.
+				db.MarkEmailFailed(ctx, e.ID, e.ClaimToken, err.Error())
+			default:
+				// A config/credential error (bad token, wrong account
+				// id, relay/auth rejection): not the message's fault and
+				// no retry helps until an operator fixes it. Keep the
+				// mail and its body without burning max_attempts, so a
+				// token rotation can't silently discard licence mail.
+				db.MarkEmailDeferred(ctx, e.ID, e.ClaimToken, err.Error())
+			}
 		} else {
 			db.MarkEmailSent(ctx, e.ID, e.ClaimToken)
 		}

@@ -33,7 +33,7 @@ func (s *Store) ListProducts(ctx context.Context, search string, types []string,
 	var out []*model.Product
 	q := s.DB.NewSelect().Model(&out).OrderExpr("created_at DESC, id DESC")
 	if len(types) > 0 {
-		q = q.Where("type IN (?)", bun.In(types))
+		q = q.Where("type IN (?)", bun.List(types))
 	}
 	if search != "" {
 		q = q.Where("name ILIKE ? OR slug ILIKE ?", "%"+search+"%", "%"+search+"%")

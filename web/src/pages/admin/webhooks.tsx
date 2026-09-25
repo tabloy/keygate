@@ -50,7 +50,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useI18n } from "@/i18n"
+import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin, type WebhookConfig } from "@/lib/api"
 import { boolColor, formatDate } from "@/lib/utils"
 
@@ -574,7 +574,7 @@ function DeliveryLogDialog({ webhookId, onClose }: { webhookId: string; onClose:
                                   : "bg-amber-100 text-amber-800"
                             }
                           >
-                            {t(`status.${d.status}` as any)}
+                            {t(`status.${d.status}` as TranslationKeys)}
                           </Badge>
                         </DataTableCell>
                         <DataTableCell className="text-muted-foreground">{d.response_code ?? "-"}</DataTableCell>

@@ -77,11 +77,28 @@ func (h *AuthHandler) OTPSend(c *gin.Context) {
 		return
 	}
 
-	if h.Email != nil && h.Email.IsConfigured() {
-		h.Email.SendOTPCode(email, code)
-	} else {
+	logCodeFallback := func() {
 		slog.Warn("SMTP not configured — OTP code printed to log (configure SMTP for email delivery)",
 			"email", email, "code", code)
+	}
+	switch {
+	case h.Email == nil:
+		logCodeFallback()
+	default:
+		configured, cErr := h.Email.Configured()
+		switch {
+		case cErr != nil:
+			// A transient config read error (DB blip, decrypt failure)
+			// must NOT fall back to logging the code in plaintext: that
+			// would leak a live login code on an infra hiccup. Fail
+			// closed — the user simply retries once the read recovers.
+			slog.Error("otp email config unavailable; code not sent and not logged",
+				"email", email, "error", cErr)
+		case configured:
+			h.Email.SendOTPCode(email, code)
+		default:
+			logCodeFallback()
+		}
 	}
 
 	response.OK(c, gin.H{"status": "sent"})

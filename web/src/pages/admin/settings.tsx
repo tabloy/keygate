@@ -75,6 +75,15 @@ const FORM_KEYS = [
   "webhook_timeout",
   "quota_warning_threshold",
   "maintenance_features_enabled",
+  "email_provider",
+  "smtp_from",
+  "smtp_host",
+  "smtp_port",
+  "smtp_username",
+  "smtp_password",
+  "cloudflare_from",
+  "cloudflare_account_id",
+  "cloudflare_api_token",
 ] as const
 
 type FormKey = (typeof FORM_KEYS)[number]
@@ -90,9 +99,16 @@ export default function SettingsPage() {
   const [form, setForm] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    if (data?.settings) {
-      setForm(data.settings)
-    }
+    if (!data?.settings) return
+    // Re-seed from the server only when the form has no unsaved edits.
+    // A background refetch — most of all the one clearing a secret
+    // triggers, which flips secrets_set and so changes the query data —
+    // would otherwise overwrite the whole form and silently discard any
+    // field the admin has edited but not yet saved.
+    setForm((prev) => {
+      const dirty = FORM_KEYS.some((k) => k in prev && prev[k] !== (data.settings[k] ?? ""))
+      return dirty ? prev : data.settings
+    })
   }, [data])
 
   // Only the fields this page actually changed are sent. Posting the
@@ -100,23 +116,66 @@ export default function SettingsPage() {
   // values back — most of all the maintenance switch, where saving an
   // unrelated field would silently re-confirm a rollout that an
   // incompatible build has since switched off.
-  const changedSettings = () =>
-    Object.fromEntries(
+  const changedSettings = () => {
+    const changed = Object.fromEntries(
       FORM_KEYS.filter((k) => k in form && form[k] !== (data?.settings?.[k] ?? "")).map((k) => [k, form[k]]),
     )
+    // A fresh install shows "SMTP" via the fallback without writing it
+    // into the form, so filling the SMTP fields and saving would send
+    // the credentials but not email_provider — the backend would store
+    // them and keep using the env fallback, configured but never
+    // active. Whenever the save configures a provider's fields, send
+    // the active provider with them so it actually takes effect.
+    const touchesEmail = Object.keys(changed).some((k) => k.startsWith("smtp_") || k.startsWith("cloudflare_"))
+    if (touchesEmail && !("email_provider" in changed)) {
+      changed.email_provider = emailProvider
+    }
+    return changed
+  }
 
   const saveMut = useMutation({
     mutationFn: () => admin.updateSettings(changedSettings()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "settings"] })
+      // Secrets are write-only: the API never returns them, so replacing
+      // one leaves the settings response byte-identical and the [data]
+      // effect (guarded by structural sharing) never re-seeds the form.
+      // Clear the secret inputs here so they fall back to the "saved"
+      // placeholder instead of holding the plaintext — otherwise the
+      // field stays dirty, the test button stays disabled, and every
+      // later save re-submits the key.
+      setForm((f) => {
+        const next = { ...f }
+        delete next.smtp_password
+        delete next.cloudflare_api_token
+        return next
+      })
       showToast(t("settings.saved"), "success")
     },
     onError: (e: Error) => showToast(e.message, "error"),
   })
 
+  const [testTo, setTestTo] = useState("")
   const testEmailMut = useMutation({
-    mutationFn: admin.sendTestEmail,
+    mutationFn: () => admin.sendTestEmail(testTo.trim() || undefined),
     onSuccess: () => showToast(t("settings.testEmailSent"), "success"),
+    onError: (e: Error) => showToast(e.message, "error"),
+  })
+
+  // A blank field means "leave the stored secret alone", so removing a
+  // saved credential (e.g. purging a rotated-out Cloudflare token) needs
+  // its own explicit call — the empty input can't express it.
+  const clearSecretMut = useMutation({
+    mutationFn: (key: string) => admin.clearSecretSetting(key),
+    onSuccess: (_res, key) => {
+      qc.invalidateQueries({ queryKey: ["admin", "settings"] })
+      setForm((f) => {
+        const next = { ...f }
+        delete next[key]
+        return next
+      })
+      showToast(t("settings.secretCleared"), "success")
+    },
     onError: (e: Error) => showToast(e.message, "error"),
   })
 
@@ -136,6 +195,15 @@ export default function SettingsPage() {
   })
 
   const set = (key: FormKey, value: string) => setForm((f) => ({ ...f, [key]: value }))
+  // The provider drives which fields show. Falls back to what the
+  // server resolved (DB value, or "smtp" in env-fallback mode).
+  const emailProvider = form.email_provider || data?.email?.provider || "smtp"
+  // The test sends through the SAVED config, so it must not be offered
+  // while the form holds unsaved email changes — otherwise "send test"
+  // would verify the old config, not what is on screen.
+  const emailDirty = Object.keys(changedSettings()).some(
+    (k) => k === "email_provider" || k.startsWith("smtp_") || k.startsWith("cloudflare_"),
+  )
 
   if (isLoading) {
     return (
@@ -156,7 +224,10 @@ export default function SettingsPage() {
             the label to "Saved" resized the button under the cursor and
             was the only place in the dashboard that reported a result
             inside a control. */}
-        <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+        <Button
+          onClick={() => saveMut.mutate()}
+          disabled={saveMut.isPending || Object.keys(changedSettings()).length === 0}
+        >
           {saveMut.isPending ? t("common.loading") : t("common.save")}
         </Button>
       </div>
@@ -268,31 +339,169 @@ export default function SettingsPage() {
               <CardTitle className="text-base">{t("settings.email")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* SMTP is env-only (SMTP_HOST, SMTP_PORT, SMTP_USERNAME,
-                  SMTP_PASSWORD, SMTP_FROM). The dashboard just reports
-                  what the server is using. */}
-              {data?.email?.configured ? (
-                <div className="space-y-2 text-sm">
-                  <p className="flex items-center gap-2 text-emerald-600">
-                    <Check className="h-4 w-4" /> {t("settings.emailConfigured")}
-                  </p>
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-muted-foreground">
-                    <dt>{t("settings.emailHost")}</dt>
-                    <dd className="font-mono text-foreground">{data.email.host}</dd>
-                    <dt>{t("settings.emailFrom")}</dt>
-                    <dd className="font-mono text-foreground">{data.email.from}</dd>
-                  </dl>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t("settings.emailNotConfigured")}</p>
+              {/* Email is configured here and stored in the database.
+                  The SMTP_* env vars are the fallback when nothing is
+                  set here — see EmailService.resolve. */}
+              {data?.email?.source === "env" && (
+                <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  {t("settings.emailEnvBanner")}
+                </p>
               )}
-              <p className="text-xs text-muted-foreground">{t("settings.emailEnvHint")}</p>
-              <div className="flex items-center gap-4 pt-2">
-                <Button variant="outline" onClick={() => testEmailMut.mutate()} disabled={testEmailMut.isPending}>
+
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>{t("settings.emailProvider")}</Label>
+                  <Select value={emailProvider} onValueChange={(v) => set("email_provider", v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="smtp">SMTP</SelectItem>
+                      <SelectItem value="cloudflare">Cloudflare Email</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{t("settings.emailProviderDesc")}</p>
+                </div>
+              </div>
+
+              {emailProvider === "smtp" && (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailFrom")}</Label>
+                    <Input
+                      value={form.smtp_from ?? ""}
+                      onChange={(e) => set("smtp_from", e.target.value)}
+                      placeholder="noreply@yourdomain.com"
+                    />
+                    <p className="text-xs text-muted-foreground">{t("settings.emailFromDesc")}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailHost")}</Label>
+                    <Input
+                      value={form.smtp_host ?? ""}
+                      onChange={(e) => set("smtp_host", e.target.value)}
+                      placeholder="smtp.example.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailPort")}</Label>
+                    <Input
+                      value={form.smtp_port ?? ""}
+                      onChange={(e) => set("smtp_port", e.target.value)}
+                      placeholder="587"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailUsername")}</Label>
+                    <Input
+                      value={form.smtp_username ?? ""}
+                      onChange={(e) => set("smtp_username", e.target.value)}
+                      placeholder="apikey"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailPassword")}</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="password"
+                        value={form.smtp_password ?? ""}
+                        onChange={(e) => set("smtp_password", e.target.value)}
+                        placeholder={data?.secrets_set?.smtp_password ? t("settings.secretSaved") : ""}
+                        autoComplete="new-password"
+                        className="flex-1"
+                      />
+                      {data?.secrets_set?.smtp_password && !form.smtp_password && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => clearSecretMut.mutate("smtp_password")}
+                          disabled={clearSecretMut.isPending}
+                        >
+                          {t("settings.secretClear")}
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{t("settings.secretKeepHint")}</p>
+                  </div>
+                </div>
+              )}
+
+              {emailProvider === "cloudflare" && (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailFrom")}</Label>
+                    <Input
+                      value={form.cloudflare_from ?? ""}
+                      onChange={(e) => set("cloudflare_from", e.target.value)}
+                      placeholder="noreply@yourdomain.com"
+                    />
+                    <p className="text-xs text-muted-foreground">{t("settings.emailFromDesc")}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailCfAccount")}</Label>
+                    <Input
+                      value={form.cloudflare_account_id ?? ""}
+                      onChange={(e) => set("cloudflare_account_id", e.target.value)}
+                      placeholder="Cloudflare account ID"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("settings.emailApiToken")}</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="password"
+                        value={form.cloudflare_api_token ?? ""}
+                        onChange={(e) => set("cloudflare_api_token", e.target.value)}
+                        placeholder={data?.secrets_set?.cloudflare_api_token ? t("settings.secretSaved") : ""}
+                        autoComplete="new-password"
+                        className="flex-1"
+                      />
+                      {data?.secrets_set?.cloudflare_api_token && !form.cloudflare_api_token && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => clearSecretMut.mutate("cloudflare_api_token")}
+                          disabled={clearSecretMut.isPending}
+                        >
+                          {t("settings.secretClear")}
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{t("settings.secretKeepHint")}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+                {data?.email?.configured ? (
+                  <span className="flex items-center gap-2 text-sm text-emerald-600">
+                    <Check className="h-4 w-4" /> {t("settings.emailConfigured")}
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground">{t("settings.emailNotConfigured")}</span>
+                )}
+                <div className="flex-1" />
+                <Input
+                  className="w-full sm:w-56"
+                  value={testTo}
+                  onChange={(e) => setTestTo(e.target.value)}
+                  placeholder={t("settings.testEmailToPlaceholder")}
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => testEmailMut.mutate()}
+                  disabled={testEmailMut.isPending || emailDirty || !data?.email?.configured}
+                >
                   <Send className="h-4 w-4 mr-2" />
                   {t("settings.testEmail")}
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                {emailDirty ? t("settings.testEmailDirtyHint") : t("settings.testEmailSaveHint")}
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -589,7 +798,7 @@ function TeamManagement() {
             you typed, so it is the one that pushes the others down. */}
           {isOwner ? (
             <div className="flex flex-wrap items-end gap-3 pt-4 border-t">
-              <div className="min-w-[200px] flex-1 space-y-2">
+              <div className="min-w-50 flex-1 space-y-2">
                 <Label className="text-xs">{t("team.email")}</Label>
                 <Input
                   type="email"

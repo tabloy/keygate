@@ -21,8 +21,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/hooks/use-auth"
-import { useI18n } from "@/i18n"
-import { type Activation, type Entitlement, type PortalLicense, portal, type Seat } from "@/lib/api"
+import { type TranslationKeys, useI18n } from "@/i18n"
+import {
+  type Activation,
+  type Entitlement,
+  type Invoice,
+  type Plan,
+  type PortalLicense,
+  portal,
+  type Seat,
+} from "@/lib/api"
 import { cn, formatDate, statusColor } from "@/lib/utils"
 
 export default function PortalLicensesPage() {
@@ -153,7 +161,7 @@ function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense
             <CardTitle className="text-lg">{lic.product?.name || "License"}</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">{lic.plan?.name}</p>
           </div>
-          <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as any)}</Badge>
+          <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as TranslationKeys)}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -845,7 +853,7 @@ function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: ()
             <p className="text-sm text-muted-foreground text-center py-8">{t("common.noData")}</p>
           ) : (
             <div className="space-y-2">
-              {invoices.map((inv: any) => (
+              {invoices.map((inv: Invoice) => (
                 <div
                   key={inv.id}
                   className="flex items-center justify-between bg-muted/50 rounded-lg px-4 py-3 text-sm"
@@ -896,7 +904,7 @@ function ChangePlanDialog({ license, onClose }: { license: PortalLicense; onClos
   // can move between prices, not become a one-time purchase. Mirrors
   // the backend's change-plan gate.
   const plans = (plansData?.plans || []).filter(
-    (p: any) => p.id !== license.plan_id && p.license_type === "subscription" && p.stripe_price_id,
+    (p: Plan) => p.id !== license.plan_id && p.license_type === "subscription" && p.stripe_price_id,
   )
 
   const changeMut = useMutation({
@@ -920,7 +928,7 @@ function ChangePlanDialog({ license, onClose }: { license: PortalLicense; onClos
             <p className="text-sm text-muted-foreground text-center py-4">{t("portal.noOtherPlans")}</p>
           ) : (
             <div className="space-y-2">
-              {plans.map((plan: any) => (
+              {plans.map((plan: Plan) => (
                 <div key={plan.id} className="flex items-center justify-between bg-muted/50 rounded-lg px-4 py-3">
                   <div>
                     <p className="font-medium text-sm">{plan.name}</p>

@@ -718,12 +718,12 @@ func (s *Store) GetUserDetail(ctx context.Context, userID string) (*UserDetail, 
 		}
 		_ = s.DB.NewSelect().TableExpr("usage_events").
 			ColumnExpr("COALESCE(SUM(quantity), 0) AS total").
-			Where("license_id IN (?)", bun.In(licenseIDs)).
+			Where("license_id IN (?)", bun.List(licenseIDs)).
 			Scan(ctx, &usageResult)
 		detail.TotalUsage = usageResult.Total
 
 		activations, _ := s.DB.NewSelect().TableExpr("activations").
-			Where("license_id IN (?)", bun.In(licenseIDs)).
+			Where("license_id IN (?)", bun.List(licenseIDs)).
 			Count(ctx)
 		detail.Activations = activations
 	}

@@ -17,7 +17,7 @@ import {
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useI18n } from "@/i18n"
+import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
 import { formatDate, statusColor } from "@/lib/utils"
@@ -252,7 +252,9 @@ function CustomerDetailDialog({
                           <DataTableCell className="font-medium">{l.product?.name || l.product_id}</DataTableCell>
                           <DataTableCell>{l.plan?.name || l.plan_id}</DataTableCell>
                           <DataTableCell>
-                            <Badge className={statusColor(l.status)}>{t(`status.${l.status}` as any)}</Badge>
+                            <Badge className={statusColor(l.status)}>
+                              {t(`status.${l.status}` as TranslationKeys)}
+                            </Badge>
                           </DataTableCell>
                           <DataTableCell>
                             {/* Only the tail — the key itself is revealed
@@ -300,7 +302,9 @@ function CustomerDetailDialog({
                         <DataTableRow key={sub.id}>
                           <DataTableCell className="font-medium">{sub.plan?.name || sub.plan_id}</DataTableCell>
                           <DataTableCell>
-                            <Badge className={statusColor(sub.status)}>{t(`status.${sub.status}` as any)}</Badge>
+                            <Badge className={statusColor(sub.status)}>
+                              {t(`status.${sub.status}` as TranslationKeys)}
+                            </Badge>
                           </DataTableCell>
                           <DataTableCell className="text-muted-foreground">{sub.payment_provider || "-"}</DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">
