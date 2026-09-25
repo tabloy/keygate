@@ -45,6 +45,17 @@ func (s *EmailService) Host() string { return s.host }
 func (s *EmailService) From() string { return s.from }
 
 func NewEmailService(host, port, username, password, from string, logger *slog.Logger, s *store.Store) *EmailService {
+	// Trim once, here, where the configuration arrives. These come
+	// from the environment, and a trailing space in SMTP_PORT is an
+	// ordinary typo that used to be read two different ways further
+	// in: the TLS decision trimmed it, the dial address did not, so
+	// " 465 " chose implicit TLS and then asked to connect to a port
+	// of that name. Holding the clean value is what keeps every later
+	// reader agreeing about what was configured; it also means a host
+	// of only spaces counts as unset, as it should.
+	host = strings.TrimSpace(host)
+	port = strings.TrimSpace(port)
+	from = strings.TrimSpace(from)
 	enabled := host != "" && from != ""
 	if !enabled {
 		logger.Warn("email service disabled: SMTP not configured")
@@ -105,7 +116,7 @@ func (s *EmailService) Send(to, subject, htmlBody string) error {
 		htmlBody,
 	}, "\r\n")
 
-	addr := s.host + ":" + s.port
+	addr := s.addr()
 	err := s.sendOnce(addr, to, []byte(msg))
 	if err != nil {
 		// Retry once after a short delay — transient TCP / TLS hiccups.
@@ -153,6 +164,22 @@ func (s *EmailService) Send(to, subject, htmlBody string) error {
 // the queue claim lease (store.emailClaimLease), with margin.
 const smtpSessionTimeout = 2 * time.Minute
 
+// addr is what the dialer is handed.
+func (s *EmailService) addr() string { return s.host + ":" + s.port }
+
+// implicitTLS reports whether this server expects TLS from the first
+// byte rather than a STARTTLS upgrade.
+//
+// The port is the signal because that is the only thing an operator
+// configures and the only thing the convention is attached to: 465 is
+// the submission port reserved for implicit TLS, everything else
+// starts in the clear. Deciding by port rather than by a new setting
+// means an operator who reads their provider's "use port 465" and
+// types it in gets a working install without a second question.
+func (s *EmailService) implicitTLS() bool {
+	return s.port == "465"
+}
+
 func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 	// The SMTP envelope sender (MAIL FROM, RFC 5321) must be a BARE
 	// address — "noreply@x.com", never "Keygate <noreply@x.com>".
@@ -173,9 +200,31 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 		return err
 	}
 
-	conn, err := net.DialTimeout("tcp", addr, 30*time.Second)
-	if err != nil {
-		return fmt.Errorf("dial: %w", err)
+	tlsCfg := s.tlsConfig
+	if tlsCfg == nil {
+		tlsCfg = &tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}
+	}
+
+	// Two ways a submission port speaks TLS, and the port says which.
+	//
+	// 587 and 25 start in the clear and are upgraded with STARTTLS.
+	// 465 is TLS from the first byte (RFC 8314 calls this implicit TLS
+	// and prefers it): greeting a 465 server in the clear reads its
+	// handshake as if it were text, and the session dies at the EHLO
+	// with something that looks nothing like a TLS problem. Cloudflare
+	// and Fastmail offer 465 only, so this is not an exotic case.
+	var conn net.Conn
+	if s.implicitTLS() {
+		d := &net.Dialer{Timeout: 30 * time.Second}
+		conn, err = tls.DialWithDialer(d, "tcp", addr, tlsCfg)
+		if err != nil {
+			return fmt.Errorf("tls dial: %w", err)
+		}
+	} else {
+		conn, err = net.DialTimeout("tcp", addr, 30*time.Second)
+		if err != nil {
+			return fmt.Errorf("dial: %w", err)
+		}
 	}
 	// A server that accepts the connection and then stalls must not
 	// hold the sender indefinitely: reminder claims are leases, and a
@@ -195,12 +244,10 @@ func (s *EmailService) sendOnce(addr, to string, msg []byte) error {
 
 	// STARTTLS upgrade if the server advertises it. (Client.StartTLS
 	// internally re-EHLOs so post-TLS extensions land in c.Extension.)
+	// Already encrypted on an implicit-TLS port, where the server does
+	// not advertise the extension at all.
 	if ok, _ := c.Extension("STARTTLS"); ok {
-		cfg := s.tlsConfig
-		if cfg == nil {
-			cfg = &tls.Config{ServerName: s.host, MinVersion: tls.VersionTLS12}
-		}
-		if err := c.StartTLS(cfg); err != nil {
+		if err := c.StartTLS(tlsCfg); err != nil {
 			return fmt.Errorf("starttls: %w", err)
 		}
 	}
@@ -703,7 +750,7 @@ func (s *EmailService) processQueue(ctx context.Context, db *store.Store) {
 	if !s.enabled {
 		return
 	}
-	for i := 0; i < emailQueueBatch; i++ {
+	for range emailQueueBatch {
 		if ctx.Err() != nil {
 			return
 		}

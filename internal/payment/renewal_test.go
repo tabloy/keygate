@@ -75,7 +75,7 @@ func sameInstant(a, b time.Time) bool { return a.Sub(b).Abs() < 2*time.Second }
 // want rows, then returns the count it saw.
 func auditCountAtLeast(s *store.Store, ctx context.Context, entityID, action string, want int) int {
 	var n int
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		s.DB.NewRaw("SELECT count(*) FROM audit_logs WHERE entity_id = ? AND action = ?", entityID, action).Scan(ctx, &n)
 		if n >= want {
 			return n
@@ -393,7 +393,7 @@ func TestRenewal_RefundKeepsAdminEdit(t *testing.T) {
 	if _, err := s.DB.NewRaw("UPDATE licenses SET updates_until = ? WHERE id = ?", edited, lic.ID).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_adm","payment_intent":"pi_adm_%s","refunded":true}`, plan.Slug))); err != nil {
+	if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_adm","payment_intent":"pi_adm_%s","refunded":true}`, plan.Slug)); err != nil {
 		t.Fatal(err)
 	}
 	if got := updatesUntil(t, s, ctx, lic.ID); !sameInstant(*got, edited.Add(-365*24*time.Hour)) {
@@ -431,7 +431,7 @@ func TestRenewal_LifetimeLicenseIsNotFulfilled(t *testing.T) {
 	}
 	// Retries change nothing and do not pile up audit rows: the
 	// session stays pending and is re-tried every sync round.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if ok, err := h.fulfillCheckout(ctx, lic.Email, "", "", pi, renewalMeta(sess, lic.ID, 365), "sync"); err != nil || ok {
 			t.Fatalf("retry: ok=%v err=%v", ok, err)
 		}
@@ -543,7 +543,7 @@ func TestRenewal_RefundBeforeFulfilment(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"object":"list","has_more":false,"url":"/v1/invoice_payments","data":[]}`)
 	})
-	if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_buy","customer":"cus_early_%s","payment_intent":"pi_buy_%s","refunded":true}`, plan.Slug, plan.Slug))); err != nil {
+	if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_buy","customer":"cus_early_%s","payment_intent":"pi_buy_%s","refunded":true}`, plan.Slug, plan.Slug)); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := s.FindLicenseByID(ctx, lic.ID); got.Status != model.StatusRevoked {
@@ -567,7 +567,7 @@ func TestRenewal_EarlyRefundKeepsLedgerBaseline(t *testing.T) {
 		if meta {
 			m = fmt.Sprintf(`,"metadata":{"kind":"renewal","license_id":"%s"}`, lic.ID)
 		}
-		if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_%s","payment_intent":"pi_%s_%s","refunded":true%s}`, n, n, plan.Slug, m))); err != nil {
+		if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_%s","payment_intent":"pi_%s_%s","refunded":true%s}`, n, n, plan.Slug, m)); err != nil {
 			t.Fatalf("refund %s: %v", n, err)
 		}
 	}
@@ -603,7 +603,7 @@ func TestRenewal_NoEffectRowDoesNotBecomeLifetimeBaseline(t *testing.T) {
 	h := &StripeHandler{Store: s}
 	// A renewal refunded before it was applied is the one kind of
 	// no-effect row the ledger can hold.
-	if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_nbl1","payment_intent":"pi_nbl1_%s","refunded":true,"metadata":{"kind":"renewal","license_id":"%s"}}`, plan.Slug, lic.ID))); err != nil {
+	if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_nbl1","payment_intent":"pi_nbl1_%s","refunded":true,"metadata":{"kind":"renewal","license_id":"%s"}}`, plan.Slug, lic.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if ok, err := h.fulfillCheckout(ctx, lic.Email, "", "", "pi_nbl1_"+plan.Slug, renewalMeta("cs_nbl1_"+plan.Slug, lic.ID, 365), "webhook"); err != nil || !ok {
@@ -616,7 +616,7 @@ func TestRenewal_NoEffectRowDoesNotBecomeLifetimeBaseline(t *testing.T) {
 	if ok, err := h.fulfillCheckout(ctx, lic.Email, "", "", "pi_nbl2_"+plan.Slug, renewalMeta("cs_nbl2_"+plan.Slug, lic.ID, 365), "webhook"); err != nil || !ok {
 		t.Fatalf("renewal: %v %v", ok, err)
 	}
-	if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_nbl2","payment_intent":"pi_nbl2_%s","refunded":true}`, plan.Slug))); err != nil {
+	if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_nbl2","payment_intent":"pi_nbl2_%s","refunded":true}`, plan.Slug)); err != nil {
 		t.Fatal(err)
 	}
 	if got := updatesUntil(t, s, ctx, lic.ID); got == nil || !sameInstant(*got, cutoff) {
@@ -648,7 +648,7 @@ func TestRenewal_RefundOfSupersededRenewalLeavesNewPeriod(t *testing.T) {
 	if err := s.UpdateLicenseAndSupersedeRenewals(ctx, lic, "updates_until"); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_epoch","payment_intent":"pi_epoch_%s","refunded":true}`, plan.Slug))); err != nil {
+	if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_epoch","payment_intent":"pi_epoch_%s","refunded":true}`, plan.Slug)); err != nil {
 		t.Fatal(err)
 	}
 	if got := updatesUntil(t, s, ctx, lic.ID); got == nil || !sameInstant(*got, fresh) {
@@ -665,7 +665,7 @@ func TestRenewal_RefundOfSupersededRenewalLeavesNewPeriod(t *testing.T) {
 	if got := updatesUntil(t, s, ctx, lic.ID); !sameInstant(*got, fresh.Add(100*24*time.Hour)) {
 		t.Fatalf("renewal in new period: %v", got)
 	}
-	if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_epoch2","payment_intent":"pi_epoch2_%s","refunded":true}`, plan.Slug))); err != nil {
+	if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_epoch2","payment_intent":"pi_epoch2_%s","refunded":true}`, plan.Slug)); err != nil {
 		t.Fatal(err)
 	}
 	if got := updatesUntil(t, s, ctx, lic.ID); !sameInstant(*got, fresh) {
@@ -736,7 +736,7 @@ func TestRenewal_RefundAfterEditOnRevivedPeriod(t *testing.T) {
 	if _, err := s.DB.NewRaw("UPDATE licenses SET updates_until = ? WHERE id = ?", shifted, lic.ID).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_revedit","payment_intent":"pi_revedit_%s","refunded":true}`, plan.Slug))); err != nil {
+	if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_revedit","payment_intent":"pi_revedit_%s","refunded":true}`, plan.Slug)); err != nil {
 		t.Fatal(err)
 	}
 	want := lapsed.Add(30 * 24 * time.Hour)

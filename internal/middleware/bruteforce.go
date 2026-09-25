@@ -118,10 +118,7 @@ func (bf *BruteForceProtection) cleanup() {
 // well-behaved client back a moment early, to another 429 and no
 // better advice than the first one.
 func RetryAfterSeconds(retryAfter time.Duration) int {
-	seconds := int(math.Ceil(retryAfter.Seconds()))
-	if seconds < 1 {
-		seconds = 1
-	}
+	seconds := max(int(math.Ceil(retryAfter.Seconds())), 1)
 	return seconds
 }
 
@@ -143,14 +140,9 @@ func LicenseBruteForceGuard(bf *BruteForceProtection) gin.HandlerFunc {
 			// envelope: { success, error: { code, message, details? } }.
 			retrySec := RetryAfterSeconds(retryAfter)
 			c.Header("Retry-After", fmt.Sprintf("%d", retrySec))
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"success": false,
-				"error": gin.H{
-					"code":    "LOCKED_OUT",
-					"message": "too many failed attempts, please try again later",
-					"details": gin.H{"retry_after": retrySec},
-				},
-			})
+			abortWithErrorDetails(c, http.StatusTooManyRequests, "LOCKED_OUT",
+				"too many failed attempts, please try again later",
+				gin.H{"retry_after": retrySec})
 			return
 		}
 

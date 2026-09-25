@@ -35,7 +35,7 @@ func TestClaimNextEmailIsExclusive(t *testing.T) {
 			t.Errorf("clean up: %v", err)
 		}
 	}()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if err := s.EnqueueEmail(ctx, tag, "Reminder", "body"); err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +78,7 @@ func TestClaimNextEmailIsExclusive(t *testing.T) {
 		return []*QueuedEmail{e}
 	}
 	var a, b []string
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		a = append(a, mine(claim())...)
 	}
 	b = mine(claim())
@@ -102,7 +102,7 @@ func TestClaimNextEmailIsExclusive(t *testing.T) {
 		t.Fatal(err)
 	}
 	var again []string
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		again = append(again, mine(claim())...)
 	}
 	if len(again) != 3 {
@@ -127,7 +127,7 @@ func TestClaimNextEmailIsExclusive(t *testing.T) {
 		t.Fatal(err)
 	}
 	var left []string
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		left = append(left, mine(claim())...)
 	}
 	if len(left) != 2 {

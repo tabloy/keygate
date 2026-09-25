@@ -80,7 +80,7 @@ func (p *feedGateProblem) Error() string { return p.message }
 // (500) and reports whether it wrote anything.
 func (h *AdminHandler) writeFeedGateProblem(c *gin.Context, problem *feedGateProblem, err error) bool {
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return true
 	}
 	if problem == nil {
@@ -368,7 +368,7 @@ func (h *AdminHandler) feedDrainCheck(ctx context.Context, db bun.IDB, prod *mod
 func (h *AdminHandler) maintenanceGated(c *gin.Context) bool {
 	on, err := h.Store.MaintenanceFeaturesEnabled(c)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return true
 	}
 	if on {
@@ -388,7 +388,7 @@ func NewAdminHandler(s *store.Store, wh *service.WebhookService, em *service.Ema
 func (h *AdminHandler) Stats(c *gin.Context) {
 	stats, err := h.Store.GetStats(c)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, stats)
@@ -403,7 +403,7 @@ func (h *AdminHandler) ListProducts(c *gin.Context) {
 	// dashboard offer products its own page cannot accept.
 	var types []string
 	if v := strings.TrimSpace(c.Query("type")); v != "" {
-		for _, t := range strings.Split(v, ",") {
+		for t := range strings.SplitSeq(v, ",") {
 			t = strings.TrimSpace(t)
 			if !model.IsValidProductType(t) {
 				response.BadRequest(c, "unknown product type: "+t)
@@ -415,7 +415,7 @@ func (h *AdminHandler) ListProducts(c *gin.Context) {
 	page := listPage(c)
 	products, total, err := h.Store.ListProducts(c, c.Query("search"), types, page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "products", products, total, page)
@@ -534,7 +534,7 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 		if req.Type != p.Type {
 			n, err := h.Store.CountPlansIncompatibleWithType(c, p.ID, req.Type)
 			if err != nil {
-				response.Internal(c)
+				response.Internal(c, err)
 				return
 			}
 			if n > 0 {
@@ -551,12 +551,12 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 			// only live (published) and draft ones block.
 			total, err := h.Store.CountReleases(c, store.ReleaseFilter{ProductID: p.ID})
 			if err != nil {
-				response.Internal(c)
+				response.Internal(c, err)
 				return
 			}
 			yanked, err := h.Store.CountReleases(c, store.ReleaseFilter{ProductID: p.ID, Status: model.ReleaseStatusYanked})
 			if err != nil {
-				response.Internal(c)
+				response.Internal(c, err)
 				return
 			}
 			if n := total - yanked; n > 0 {
@@ -619,7 +619,7 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 	if model.ProductSupports(p.Type, model.CapReleases) && !p.FeedLicenseRequired && (wasGated || !wasReleases) {
 		has, err := h.Store.ProductHasMaintenance(c, p.ID)
 		if err != nil {
-			response.Internal(c)
+			response.Internal(c, err)
 			return
 		}
 		if has && !wasReleases {
@@ -716,7 +716,7 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 		if feedGateConflict(c, err) {
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if waiting != nil {
@@ -736,7 +736,7 @@ func (h *AdminHandler) DeleteProduct(c *gin.Context) {
 	// admin cannot simply delete.
 	plans, licenses, releases, err := h.Store.ProductBlockers(c, id)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	switch {
@@ -753,7 +753,7 @@ func (h *AdminHandler) DeleteProduct(c *gin.Context) {
 		return
 	}
 	if err := h.Store.DeleteProduct(c, id); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	h.Store.Audit(c, &model.AuditLog{
@@ -769,7 +769,7 @@ func (h *AdminHandler) ListPlans(c *gin.Context) {
 	page := listPage(c)
 	plans, total, err := h.Store.ListPlans(c, c.Query("product_id"), c.Query("search"), page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "plans", plans, total, page)
@@ -1069,7 +1069,7 @@ func (h *AdminHandler) UpdatePlan(c *gin.Context) {
 	// product's type. Look up the product once.
 	prod, err := h.Store.FindProductByID(c, p.ProductID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if req.MaxActivations != nil && *req.MaxActivations > 0 && !model.ProductSupports(prod.Type, model.CapActivations) {
@@ -1120,7 +1120,7 @@ func (h *AdminHandler) UpdatePlan(c *gin.Context) {
 		typeChanged = *req.LicenseType != p.LicenseType
 		if typeChanged {
 			if n, err := h.Store.PlanLicenseCount(c, p.ID); err != nil {
-				response.Internal(c)
+				response.Internal(c, err)
 				return
 			} else if n > 0 {
 				response.Err(c, http.StatusConflict, "HAS_LICENSES",
@@ -1337,7 +1337,7 @@ func (h *AdminHandler) UpdatePlan(c *gin.Context) {
 		if feedGateConflict(c, err) {
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, p)
@@ -1432,7 +1432,7 @@ func (h *AdminHandler) DeletePlan(c *gin.Context) {
 		return
 	}
 	if err := h.Store.DeletePlan(c, id); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -1612,7 +1612,7 @@ func (h *AdminHandler) UpdateEntitlement(c *gin.Context) {
 	e.Value, e.QuotaPeriod = value, period
 
 	if err := h.Store.UpdateEntitlement(c, e); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, e)
@@ -1620,7 +1620,7 @@ func (h *AdminHandler) UpdateEntitlement(c *gin.Context) {
 
 func (h *AdminHandler) DeleteEntitlement(c *gin.Context) {
 	if err := h.Store.DeleteEntitlement(c, c.Param("id")); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -1632,7 +1632,7 @@ func (h *AdminHandler) ListAPIKeys(c *gin.Context) {
 	page := listPage(c)
 	keys, total, err := h.Store.ListAPIKeys(c, c.Query("product_id"), c.Query("search"), page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "api_keys", keys, total, page)
@@ -1685,7 +1685,7 @@ func (h *AdminHandler) CreateAPIKey(c *gin.Context) {
 		Scopes:    req.Scopes,
 	}
 	if err := h.Store.CreateAPIKey(c, ak, rawKey); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -1780,7 +1780,7 @@ func (h *AdminHandler) RotateAPIKey(c *gin.Context) {
 	rawKey := store.GenerateRawAPIKey()
 	prefix := rawKey[:12]
 	if err := h.Store.RotateAPIKey(c, ak.ID, rawKey, prefix); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	h.Store.Audit(c, &model.AuditLog{
@@ -1800,7 +1800,7 @@ func (h *AdminHandler) RotateAPIKey(c *gin.Context) {
 func (h *AdminHandler) DeleteAPIKey(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.Store.DeleteAPIKey(c, id); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	h.Store.Audit(c, &model.AuditLog{
@@ -1865,7 +1865,7 @@ func (h *AdminHandler) ListLicenses(c *gin.Context) {
 		Limit:               page.Limit,
 	})
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	// Only the tail of each key travels with the list — enough for an
@@ -2007,7 +2007,7 @@ func (h *AdminHandler) CreateLicense(c *gin.Context) {
 		// public feed until the links in it expire.
 		prod, err := h.Store.FindProductByID(c, l.ProductID)
 		if err != nil {
-			response.Internal(c)
+			response.Internal(c, err)
 			return
 		}
 		if h.feedNotGated(c, prod) {
@@ -2032,7 +2032,7 @@ func (h *AdminHandler) CreateLicense(c *gin.Context) {
 				"the plan's license type changed while this license was being created; reload and try again", nil)
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -2251,7 +2251,7 @@ func (h *AdminHandler) RefundLicense(c *gin.Context) {
 	// Mark the license as revoked
 	lic.Status = model.StatusRevoked
 	if err := h.Store.UpdateLicenseAndSubscription(c, lic, "status"); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -2384,7 +2384,7 @@ func (h *AdminHandler) SetLicenseValidUntil(c *gin.Context) {
 
 	lic.ValidUntil = validUntil
 	if err := h.Store.UpdateLicense(c, lic, "valid_until"); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -2432,7 +2432,7 @@ func (h *AdminHandler) SetLicenseUpdatesUntil(c *gin.Context) {
 	// Only perpetual licenses have a period separate from valid_until.
 	plan, err := h.Store.FindPlanByID(c, lic.PlanID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if plan.LicenseType != "perpetual" {
@@ -2458,7 +2458,7 @@ func (h *AdminHandler) SetLicenseUpdatesUntil(c *gin.Context) {
 		}
 		prod, err := h.Store.FindProductByID(c, lic.ProductID)
 		if err != nil {
-			response.Internal(c)
+			response.Internal(c, err)
 			return
 		}
 		if h.feedNotGated(c, prod) {
@@ -2519,7 +2519,7 @@ func (h *AdminHandler) SetLicenseUpdatesUntil(c *gin.Context) {
 		if feedGateConflict(c, err) {
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if moved {
@@ -2574,7 +2574,13 @@ func (h *AdminHandler) UnlinkStripeSubscription(c *gin.Context) {
 		return
 	}
 	if h.SubscriptionEnded == nil {
-		response.Err(c, http.StatusServiceUnavailable, "STRIPE_UNAVAILABLE",
+		// Its own code, not STRIPE_UNAVAILABLE. Both answers mean
+		// "Stripe cannot tell us", but only one of them is worth
+		// retrying: an install without Stripe keys will answer this
+		// way forever, while a failed call may well succeed next time.
+		// A client that sees one code for both cannot decide.
+		// Same naming as EMAIL_NOT_CONFIGURED / SIGNING_NOT_CONFIGURED.
+		response.Err(c, http.StatusServiceUnavailable, "STRIPE_NOT_CONFIGURED",
 			"Stripe is not configured on this install, so the subscription's state cannot be confirmed")
 		return
 	}
@@ -2604,7 +2610,7 @@ func (h *AdminHandler) UnlinkStripeSubscription(c *gin.Context) {
 	// would cut a subscription that is still billing.
 	cleared, err := h.Store.ClearStripeSubscription(c, id, subscriptionID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if !cleared {
@@ -2631,7 +2637,7 @@ func (h *AdminHandler) DeleteActivation(c *gin.Context) {
 		return
 	}
 	if err := h.Store.DeleteActivationByID(c, id); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -2645,7 +2651,7 @@ func (h *AdminHandler) ListAuditLogs(c *gin.Context) {
 		c.Query("entity"), c.Query("entity_id"), c.Query("product_id"),
 		page.Offset, page.Limit)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "audit_logs", logs, total, page)
@@ -2657,7 +2663,7 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	page := listPage(c)
 	users, total, err := h.Store.ListUsers(c, c.Query("search"), page.Offset, page.Limit)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "users", users, total, page)
@@ -2738,11 +2744,11 @@ func (h *AdminHandler) ListLicenseUsage(c *gin.Context) {
 	page := listPage(c)
 	events, total, err := h.Store.ListUsageEvents(c, id, c.Query("feature"), page.Offset, page.Limit)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	counters, _ := h.Store.GetUsageSummary(c, id)
-	listOK(c, "events", events, total, page, gin.H{"counters": counters})
+	listOK(c, "events", events, total, page, gin.H{"counters": response.Array(counters)})
 }
 
 func (h *AdminHandler) ResetLicenseUsage(c *gin.Context) {
@@ -2768,7 +2774,7 @@ func (h *AdminHandler) ResetLicenseUsage(c *gin.Context) {
 		periodKey = store.CurrentPeriodKey(period)
 	}
 	if err := h.Store.ResetUsageCounter(c, id, req.Feature, period, periodKey); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	h.Store.Audit(c, &model.AuditLog{
@@ -2789,7 +2795,7 @@ func (h *AdminHandler) ListLicenseSeats(c *gin.Context) {
 	page := listPage(c)
 	seats, total, err := h.Store.ListSeats(c, id, page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	count, _ := h.Store.CountActiveSeats(c, id)
@@ -2823,19 +2829,19 @@ func (h *AdminHandler) ListAnalytics(c *gin.Context) {
 	if granularity == "weekly" || granularity == "monthly" {
 		snapshots, err := h.Store.ListAnalyticsSnapshotsAggregated(c, productID, from, to, granularity)
 		if err != nil {
-			response.Internal(c)
+			response.Internal(c, err)
 			return
 		}
-		response.OK(c, gin.H{"snapshots": snapshots, "granularity": granularity})
+		response.OK(c, gin.H{"snapshots": response.Array(snapshots), "granularity": granularity})
 		return
 	}
 
 	snapshots, err := h.Store.ListAnalyticsSnapshots(c, productID, from, to)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
-	response.OK(c, gin.H{"snapshots": snapshots})
+	response.OK(c, gin.H{"snapshots": response.Array(snapshots)})
 }
 
 func analyticsFilter(c *gin.Context) store.AnalyticsFilter {
@@ -2861,7 +2867,7 @@ func analyticsFilter(c *gin.Context) store.AnalyticsFilter {
 func (h *AdminHandler) AnalyticsSummary(c *gin.Context) {
 	summary, err := h.Store.GetAnalyticsSummary(c, analyticsFilter(c))
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, summary)
@@ -2875,10 +2881,10 @@ func (h *AdminHandler) AnalyticsBreakdown(c *gin.Context) {
 	}
 	items, err := h.Store.GetLicenseBreakdown(c, analyticsFilter(c), dimension)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
-	response.OK(c, gin.H{"items": items})
+	response.OK(c, gin.H{"items": response.Array(items)})
 }
 
 func (h *AdminHandler) AnalyticsUsageTop(c *gin.Context) {
@@ -2893,10 +2899,10 @@ func (h *AdminHandler) AnalyticsUsageTop(c *gin.Context) {
 	limit := queryInt(c, "limit", 10)
 	features, err := h.Store.GetTopFeatureUsage(c, productID, from, to, limit)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
-	response.OK(c, gin.H{"features": features})
+	response.OK(c, gin.H{"features": response.Array(features)})
 }
 
 func (h *AdminHandler) AnalyticsActivationTrend(c *gin.Context) {
@@ -2910,17 +2916,17 @@ func (h *AdminHandler) AnalyticsActivationTrend(c *gin.Context) {
 	}
 	trend, err := h.Store.GetActivationTrend(c, productID, from, to)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
-	response.OK(c, gin.H{"trend": trend})
+	response.OK(c, gin.H{"trend": response.Array(trend)})
 }
 
 func (h *AdminHandler) AnalyticsInsights(c *gin.Context) {
 	f := analyticsFilter(c)
 	growth, err := h.Store.GetGrowthMetrics(c, f.ProductID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	ageDist, _ := h.Store.GetLicenseAgeDistribution(c, f.ProductID)
@@ -2930,10 +2936,10 @@ func (h *AdminHandler) AnalyticsInsights(c *gin.Context) {
 
 	response.OK(c, gin.H{
 		"growth":           growth,
-		"age_distribution": ageDist,
-		"top_users":        topUsers,
-		"retention":        retention,
-		"recent_activity":  recentActivity,
+		"age_distribution": response.Array(ageDist),
+		"top_users":        response.Array(topUsers),
+		"retention":        response.Array(retention),
+		"recent_activity":  response.Array(recentActivity),
 	})
 }
 
@@ -2965,7 +2971,7 @@ func (h *AdminHandler) ListAddons(c *gin.Context) {
 	page := listPage(c)
 	addons, total, err := h.Store.ListAddons(c, c.Query("product_id"), c.Query("search"), page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "addons", addons, total, page)
@@ -3126,7 +3132,7 @@ func (h *AdminHandler) UpdateAddon(c *gin.Context) {
 			response.Err(c, 409, "DUPLICATE", "addon slug already exists for this product")
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, a)
@@ -3134,7 +3140,7 @@ func (h *AdminHandler) UpdateAddon(c *gin.Context) {
 
 func (h *AdminHandler) DeleteAddon(c *gin.Context) {
 	if err := h.Store.DeleteAddon(c, c.Param("id")); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -3154,7 +3160,7 @@ func (h *AdminHandler) AddLicenseAddon(c *gin.Context) {
 	}
 	la := &model.LicenseAddon{LicenseID: id, AddonID: req.AddonID, Enabled: true}
 	if err := h.Store.AddLicenseAddon(c, la); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.Created(c, la)
@@ -3166,7 +3172,7 @@ func (h *AdminHandler) RemoveLicenseAddon(c *gin.Context) {
 		return
 	}
 	if err := h.Store.RemoveLicenseAddon(c, id, c.Param("addon_id")); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.NoContent(c)
@@ -3180,7 +3186,7 @@ func (h *AdminHandler) ListLicenseAddons(c *gin.Context) {
 	page := listPage(c)
 	addons, total, err := h.Store.ListLicenseAddons(c, id, page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "addons", addons, total, page)
@@ -3194,7 +3200,7 @@ func (h *AdminHandler) ListFloatingSessions(c *gin.Context) {
 	page := listPage(c)
 	sessions, total, err := h.Store.ListFloatingSessions(c, id, page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	active, _ := h.Store.CountActiveFloating(c, id)
@@ -3235,7 +3241,7 @@ func (h *AdminHandler) ChangeLicensePlan(c *gin.Context) {
 	oldPlanID := l.PlanID
 	oldPlan, err := h.Store.FindPlanByID(c, oldPlanID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	l.PlanID = req.PlanID
@@ -3445,7 +3451,7 @@ func (h *AdminHandler) ChangeLicensePlan(c *gin.Context) {
 		if feedGateConflict(c, err) {
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if moved {
@@ -3543,7 +3549,7 @@ var settingsServerOwned = map[string]bool{
 func (h *AdminHandler) GetSettings(c *gin.Context) {
 	settings, err := h.Store.GetSettings(c)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -3640,7 +3646,7 @@ func (h *AdminHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	if err := h.Store.SetSettings(c, writes); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -3671,7 +3677,7 @@ func (h *AdminHandler) ClearSecretSetting(c *gin.Context) {
 	}
 
 	if err := h.Store.DeleteSetting(c, key); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -3773,7 +3779,7 @@ func (h *AdminHandler) ListTeamMembers(c *gin.Context) {
 	page := listPage(c)
 	admins, total, err := h.Store.ListAdmins(c, page)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "members", admins, total, page)
@@ -3835,7 +3841,7 @@ func (h *AdminHandler) InviteTeamMember(c *gin.Context) {
 	if err != nil {
 		// User doesn't exist yet — create placeholder (will get proper name on first login)
 		if err := h.Store.CreatePlaceholderUser(c, req.Email, role); err != nil {
-			response.Internal(c)
+			response.Internal(c, err)
 			return
 		}
 		user, _ = h.Store.FindUserByEmail(c, req.Email)
@@ -3847,7 +3853,7 @@ func (h *AdminHandler) InviteTeamMember(c *gin.Context) {
 			return
 		}
 		if err := h.Store.SetUserRole(c, user.ID, role); err != nil {
-			response.Internal(c)
+			response.Internal(c, err)
 			return
 		}
 		user.Role = role
@@ -3943,7 +3949,7 @@ func (h *AdminHandler) RemoveTeamMember(c *gin.Context) {
 			response.BadRequest(c, "cannot remove the last owner")
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -3967,7 +3973,7 @@ func (h *AdminHandler) ExportLicenses(c *gin.Context) {
 
 	licenses, err := h.Store.ExportLicenses(c, c.Query("product_id"), c.Query("status"))
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 

@@ -373,7 +373,7 @@ func (h *ReleaseAdminHandler) Update(c *gin.Context) {
 			response.NotFound(c, "release not found")
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if !requireKeyProductScope(c, rel.ProductID) {
@@ -404,7 +404,7 @@ func (h *ReleaseAdminHandler) Update(c *gin.Context) {
 		case store.ErrReleaseNotFound:
 			response.NotFound(c, "release not found")
 		default:
-			response.Internal(c)
+			response.Internal(c, err)
 		}
 		return
 	}
@@ -416,7 +416,7 @@ func (h *ReleaseAdminHandler) Update(c *gin.Context) {
 
 	updated, err := h.store.FindReleaseByID(c.Request.Context(), id)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, updated)
@@ -488,12 +488,12 @@ func (h *ReleaseAdminHandler) List(c *gin.Context) {
 
 	releases, err := h.store.ListReleases(c.Request.Context(), filter)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	total, err := h.store.CountReleases(c.Request.Context(), filter)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	listOK(c, "releases", releases, total, page)
@@ -511,7 +511,7 @@ func (h *ReleaseAdminHandler) Get(c *gin.Context) {
 		case store.ErrReleaseNotFound:
 			response.NotFound(c, "release not found")
 		default:
-			response.Internal(c)
+			response.Internal(c, err)
 		}
 		return
 	}

@@ -237,12 +237,12 @@ func TestConcurrentCheckOutFromOneMachineDoesNotRefuseItself(t *testing.T) {
 	// to serialise proves nothing.
 	const rounds, attempts = 25, 8
 	seen := map[string]bool{}
-	for round := 0; round < rounds; round++ {
+	for round := range rounds {
 		start := make(chan struct{})
 		errs := make(chan error, attempts)
 		ids := make(chan string, attempts)
 		var wg sync.WaitGroup
-		for i := 0; i < attempts; i++ {
+		for range attempts {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -295,7 +295,7 @@ func TestConcurrentCheckOutRespectsTheCap(t *testing.T) {
 	const contenders = 12
 	granted := make(chan bool, contenders)
 	var wg sync.WaitGroup
-	for i := 0; i < contenders; i++ {
+	for i := range contenders {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()

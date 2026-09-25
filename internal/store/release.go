@@ -87,10 +87,7 @@ func FeedDrainLeftIn(ctx context.Context, db bun.IDB, prod *model.Product, ttl t
 	if recorded > ttl {
 		ttl = recorded
 	}
-	drain = model.FeedPublicMaxAge
-	if ttl > drain {
-		drain = ttl
-	}
+	drain = max(ttl, model.FeedPublicMaxAge)
 	// Elapsed time comes from the database clock too, for the same
 	// reason the stamp does: replicas need not agree on the time, and
 	// the one that decides is the one that wrote it.

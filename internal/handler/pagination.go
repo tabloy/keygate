@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"maps"
 	"net/http"
 	"sort"
 	"strconv"
@@ -38,10 +39,7 @@ func listPage(c *gin.Context) store.Page {
 	if limit > maxListLimit {
 		limit = maxListLimit
 	}
-	offset := queryInt(c, "offset", 0)
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max(queryInt(c, "offset", 0), 0)
 	return store.Page{Limit: limit, Offset: offset}
 }
 
@@ -57,9 +55,7 @@ func listOK[T any](c *gin.Context, key string, items []T, total int, p store.Pag
 	}
 	body := gin.H{key: items, "total": total, "limit": p.Limit, "offset": p.Offset}
 	for _, e := range extra {
-		for k, v := range e {
-			body[k] = v
-		}
+		maps.Copy(body, e)
 	}
 	response.OK(c, body)
 }

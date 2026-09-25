@@ -1565,6 +1565,24 @@ func (s *Store) ClaimProcessedEvent(ctx context.Context, provider, eventID strin
 
 // ActivateWithinLimit atomically creates an activation only if the limit hasn't been reached.
 // Locks the license row (not activation rows) to serialize concurrent activations.
+// ErrAlreadyActivated reports that this machine already holds an
+// activation on this license, so nothing was taken from the limit.
+var ErrAlreadyActivated = errors.New("identifier is already activated")
+
+// ActivateWithinLimit takes one activation slot for a machine, or says
+// why it could not.
+//
+// Every decision happens under the license row lock. The service also
+// looks for an existing activation before calling, which handles the
+// ordinary repeat, but that read is not in this transaction: two
+// requests from the SAME machine could both miss it and arrive here
+// together. Whichever way the limit fell, the second one was wrong.
+// At the cap it counted the slot the first had just taken and answered
+// "activation limit reached", telling a machine the license it already
+// holds is full. Below the cap both passed the count and the second
+// insert hit the unique index on (license_id, identifier), which
+// surfaced as a 500. A client retrying a timed-out activation, or an
+// app opened twice, met one or the other.
 func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, maxActivations int) error {
 	if act.ID == "" {
 		act.ID = newID()
@@ -1579,6 +1597,20 @@ func (s *Store) ActivateWithinLimit(ctx context.Context, act *model.Activation, 
 	// Lock the license row to serialize concurrent activations
 	_, err = tx.NewRaw("SELECT id FROM licenses WHERE id = ? FOR UPDATE", act.LicenseID).Exec(ctx)
 	if err != nil {
+		return err
+	}
+
+	// This machine may already hold a slot, in which case it is not
+	// competing for one.
+	var existingID string
+	switch err := tx.NewRaw(
+		"SELECT id FROM activations WHERE license_id = ? AND identifier = ?",
+		act.LicenseID, act.Identifier,
+	).Scan(ctx, &existingID); {
+	case err == nil && existingID != "":
+		act.ID = existingID
+		return ErrAlreadyActivated
+	case err != nil && !errors.Is(err, sql.ErrNoRows):
 		return err
 	}
 

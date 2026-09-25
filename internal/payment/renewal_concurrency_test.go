@@ -28,7 +28,7 @@ func TestConcurrentRenewalAppliesOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make([]bool, workers)
 	errs := make([]error, workers)
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -88,10 +88,10 @@ func TestConcurrentRefundAndFulfilmentNeverLoseTheRefund(t *testing.T) {
 	lic := seedPerpetualLicense(t, s, ctx, plan, &current)
 	h := &StripeHandler{Store: s}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		pi := fmt.Sprintf("pi_rrace_%s_%d", plan.Slug, i)
 		sess := fmt.Sprintf("cs_rrace_%s_%d", plan.Slug, i)
-		refund := []byte(fmt.Sprintf(`{"id":"ch_rrace_%d","payment_intent":"%s","refunded":true,"metadata":{"kind":"renewal","license_id":"%s"}}`, i, pi, lic.ID))
+		refund := fmt.Appendf(nil, `{"id":"ch_rrace_%d","payment_intent":"%s","refunded":true,"metadata":{"kind":"renewal","license_id":"%s"}}`, i, pi, lic.ID)
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
@@ -171,7 +171,7 @@ func TestRenewalLocksDoNotExhaustThePool(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		var wg sync.WaitGroup
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			pi := fmt.Sprintf("pi_pool_%s_%d", plan.Slug, i)
 			sess := fmt.Sprintf("cs_pool_%s_%d", plan.Slug, i)
 			wg.Add(2)
@@ -181,7 +181,7 @@ func TestRenewalLocksDoNotExhaustThePool(t *testing.T) {
 			}()
 			go func() {
 				defer wg.Done()
-				_ = h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_pool_%d","payment_intent":"%s","refunded":true,"metadata":{"kind":"renewal","license_id":"%s"}}`, i, pi, lic.ID)))
+				_ = h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_pool_%d","payment_intent":"%s","refunded":true,"metadata":{"kind":"renewal","license_id":"%s"}}`, i, pi, lic.ID))
 			}()
 		}
 		wg.Wait()
@@ -212,7 +212,7 @@ func TestRefundAndAdminEditDoNotDeadlock(t *testing.T) {
 	defer s.Close()
 	plan := seedMaintenancePlan(t, s, ctx, "dl")
 	h := &StripeHandler{Store: s}
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		current := time.Now().Add(30 * 24 * time.Hour).Truncate(time.Second)
 		lic := &model.License{ProductID: plan.ProductID, PlanID: plan.ID, Email: fmt.Sprintf("dl-%d-%s@example.com", i, plan.Slug),
 			LicenseKey: fmt.Sprintf("KEY-dl-%d-%s", i, plan.Slug), Status: model.StatusActive, PaymentProvider: "stripe", UpdatesUntil: &current}
@@ -228,7 +228,7 @@ func TestRefundAndAdminEditDoNotDeadlock(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			if err := h.onChargeRefunded(ctx, []byte(fmt.Sprintf(`{"id":"ch_dl_%d","payment_intent":"%s","refunded":true}`, i, pi))); err != nil {
+			if err := h.onChargeRefunded(ctx, fmt.Appendf(nil, `{"id":"ch_dl_%d","payment_intent":"%s","refunded":true}`, i, pi)); err != nil {
 				t.Errorf("round %d refund: %v", i, err)
 			}
 		}()
@@ -260,7 +260,7 @@ func TestConcurrentRenewalsRecordAContiguousLedger(t *testing.T) {
 
 	const n = 8
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

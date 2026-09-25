@@ -44,7 +44,9 @@ type portalActivationView struct {
 	Label          string    `json:"label,omitempty"`
 	IPAddress      string    `json:"ip_address,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
-	LastVerified   time.Time `json:"last_verified,omitempty"`
+	// No omitempty: it does nothing on a struct, and this column has a
+	// default of now(), so the field is always present anyway.
+	LastVerified time.Time `json:"last_verified"`
 }
 
 // resolveOwnedLicense loads the license at :license_key and verifies
@@ -96,7 +98,7 @@ func (h *PortalActivationsHandler) List(c *gin.Context) {
 	}
 	rows, err := h.store.ListActivations(c.Request.Context(), lic.ID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	out := make([]portalActivationView, 0, len(rows))
@@ -111,7 +113,7 @@ func (h *PortalActivationsHandler) List(c *gin.Context) {
 			LastVerified:   a.LastVerified,
 		})
 	}
-	response.OK(c, gin.H{"activations": out, "max": maxActivationsForLicense(lic)})
+	response.OK(c, gin.H{"activations": response.Array(out), "max": maxActivationsForLicense(lic)})
 }
 
 // DELETE /api/v1/portal/licenses/:license_key/activations/:activation_id
@@ -131,7 +133,7 @@ func (h *PortalActivationsHandler) Delete(c *gin.Context) {
 	// delete any activation if they knew its UUID.
 	rows, err := h.store.ListActivations(c.Request.Context(), lic.ID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	belongs := false
@@ -152,7 +154,7 @@ func (h *PortalActivationsHandler) Delete(c *gin.Context) {
 			response.OK(c, gin.H{"status": "deleted"})
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 

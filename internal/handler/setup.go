@@ -64,7 +64,7 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 	// Acquire advisory lock — check the boolean result, not just SQL error
 	var locked bool
 	if err := h.Store.DB.NewRaw("SELECT pg_try_advisory_lock(8675309)").Scan(c, &locked); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if !locked {
@@ -117,7 +117,7 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 	ctx := c.Request.Context()
 	tx, err := h.Store.DB.BeginTx(ctx, nil)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	defer tx.Rollback()
@@ -128,13 +128,13 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 		"INSERT INTO users (id, email, name, role, created_at, updated_at) VALUES (?, ?, ?, 'owner', now(), now()) ON CONFLICT (email) DO UPDATE SET role = 'owner', name = EXCLUDED.name, updated_at = now()",
 		userID, req.AdminEmail, req.AdminName,
 	).Exec(ctx); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	// Get actual user ID (may differ if email existed)
 	var actualUserID string
 	if err := tx.NewRaw("SELECT id FROM users WHERE email = ?", req.AdminEmail).Scan(ctx, &actualUserID); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 		"INSERT INTO settings (key, value) VALUES ('site_name', ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
 		req.SiteName,
 	).Exec(ctx); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 		"INSERT INTO products (id, name, slug, type, created_at) VALUES (?, ?, ?, ?, now())",
 		productID, req.ProductName, req.ProductSlug, req.ProductType,
 	).Exec(ctx); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -176,7 +176,7 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 		"INSERT INTO plans (id, product_id, name, slug, license_type, max_activations, max_seats, grace_days, active, checkout_id, created_at) VALUES (?, ?, 'Pro', 'pro', 'subscription', ?, ?, 7, true, ?, now())",
 		planID, productID, maxActivations, maxSeats, store.ShortID(),
 	).Exec(ctx); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -191,12 +191,12 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 	if _, err := tx.NewRaw(
 		"INSERT INTO settings (key, value) VALUES ('setup_complete', 'true') ON CONFLICT (key) DO UPDATE SET value = 'true'",
 	).Exec(ctx); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 

@@ -34,8 +34,8 @@ func APIKeyAuth(s *store.Store) gin.HandlerFunc {
 
 func extractBearer(c *gin.Context) string {
 	h := c.GetHeader("Authorization")
-	if strings.HasPrefix(h, "Bearer ") {
-		return strings.TrimPrefix(h, "Bearer ")
+	if after, ok := strings.CutPrefix(h, "Bearer "); ok {
+		return after
 	}
 	return ""
 }

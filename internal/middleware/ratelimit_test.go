@@ -8,7 +8,7 @@ import (
 func TestMemoryBackendAllow(t *testing.T) {
 	mb := NewMemoryBackend().(*memoryBackend)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !mb.Allow("test-key", 3, time.Minute) {
 			t.Fatalf("request %d should be allowed", i+1)
 		}
@@ -104,7 +104,7 @@ func TestMemoryBackendWindowRollsOverWhileBusy(t *testing.T) {
 	mb := NewMemoryBackend().(*memoryBackend)
 
 	window := 60 * time.Millisecond
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		mb.Allow("busy", 2, window)
 	}
 

@@ -305,7 +305,7 @@ func TestMeteredSync_DeadRowsDoNotStarveTheBatch(t *testing.T) {
 	lic, _ := seedMeteredLicense(t, tt.store, ctx, "api_calls_meter", "cus_TEST_dead")
 
 	// Two dead rows first (attempts at the ceiling), then one live row.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-01", 1); err != nil {
 			t.Fatalf("insert: %v", err)
 		}

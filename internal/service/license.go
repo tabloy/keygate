@@ -132,6 +132,23 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 		IPAddress: in.IPAddress,
 	}
 	if err := s.store.ActivateWithinLimit(ctx, act, max); err != nil {
+		// The machine already held a slot. The read above missed it
+		// because it ran outside the transaction, so this is the same
+		// answer that read would have given: a repeat activation is
+		// the licence working, not a failure.
+		if errors.Is(err, store.ErrAlreadyActivated) {
+			_ = s.store.TouchActivation(ctx, act.ID)
+			middleware.LicenseActivations.WithLabelValues(lic.ProductID, "already_activated").Inc()
+			token, terr := s.signToken(lic, in.Identifier)
+			if terr != nil {
+				return nil, apperr.Internal(terr)
+			}
+			return &ActivateResult{
+				Status: "already_activated", LicenseID: lic.ID,
+				Token: token,
+				Meta:  responseMeta(),
+			}, nil
+		}
 		if err.Error() == "activation limit reached" {
 			middleware.LicenseActivations.WithLabelValues(lic.ProductID, "failed").Inc()
 			count, _ := s.store.CountActivations(ctx, lic.ID)

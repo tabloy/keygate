@@ -58,13 +58,8 @@ func Idempotency(s *store.Store) gin.HandlerFunc {
 			return
 		}
 		if !store.ValidIdempotencyKey(key) {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"error": gin.H{
-					"code":    "INVALID_IDEMPOTENCY_KEY",
-					"message": "Idempotency-Key must be 1–256 chars, no control characters",
-				},
-			})
+			abortWithError(c, http.StatusBadRequest, "INVALID_IDEMPOTENCY_KEY",
+				"Idempotency-Key must be 1–256 chars, no control characters")
 			return
 		}
 
@@ -79,20 +74,13 @@ func Idempotency(s *store.Store) gin.HandlerFunc {
 		const maxBody = 256 * 1024
 		body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxBody+1))
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"success": false,
-				"error":   gin.H{"code": "BAD_REQUEST", "message": "could not read request body"},
-			})
+			abortWithError(c, http.StatusBadRequest, "BAD_REQUEST",
+				"could not read request body")
 			return
 		}
 		if len(body) > maxBody {
-			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{
-				"success": false,
-				"error": gin.H{
-					"code":    "BODY_TOO_LARGE",
-					"message": "request body exceeds idempotency limit (256 KiB)",
-				},
-			})
+			abortWithError(c, http.StatusRequestEntityTooLarge, "BODY_TOO_LARGE",
+				"request body exceeds idempotency limit (256 KiB)")
 			return
 		}
 		c.Request.Body = io.NopCloser(bytes.NewReader(body))
@@ -106,19 +94,14 @@ func Idempotency(s *store.Store) gin.HandlerFunc {
 		existing, err := s.IdempotencyClaim(c.Request.Context(), key, endpoint, bodyHash)
 		if err != nil {
 			if errors.Is(err, store.ErrIdempotencyBodyMismatch) {
-				c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{
-					"success": false,
-					"error": gin.H{
-						"code":    "IDEMPOTENCY_KEY_CONFLICT",
-						"message": "Idempotency-Key reused with a different request body",
-					},
-				})
+				abortWithError(c, http.StatusUnprocessableEntity, "IDEMPOTENCY_KEY_CONFLICT",
+					"Idempotency-Key reused with a different request body")
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"success": false,
-				"error":   gin.H{"code": "INTERNAL", "message": "internal error"},
-			})
+			// INTERNAL_ERROR, via the same helper as everywhere else.
+			// This line used to answer INTERNAL with its own wording,
+			// which is a code no client had any reason to expect.
+			abortInternal(c, err)
 			return
 		}
 
@@ -133,13 +116,8 @@ func Idempotency(s *store.Store) gin.HandlerFunc {
 			}
 			// Concurrent in-flight request still running.
 			c.Header("Retry-After", "1")
-			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-				"success": false,
-				"error": gin.H{
-					"code":    "IDEMPOTENCY_IN_FLIGHT",
-					"message": "an earlier request with this Idempotency-Key is still being processed",
-				},
-			})
+			abortWithError(c, http.StatusConflict, "IDEMPOTENCY_IN_FLIGHT",
+				"an earlier request with this Idempotency-Key is still being processed")
 			return
 		}
 

@@ -191,7 +191,12 @@ func (s *Store) ListAnalyticsSnapshotsAggregated(ctx context.Context, productID 
 
 	q := s.DB.NewSelect().
 		TableExpr("(?) AS daily", inner).
-		ColumnExpr(fmt.Sprintf("%s::text AS period", outerTrunc)).
+		// Same reason as the retention query below: ::text on a
+		// truncated timestamptz renders "2026-09-03 00:00:00+00".
+		// Every granularity here buckets to a day boundary, so the
+		// day is all there is to say, and it is the shape the rest of
+		// the API uses for a bucket.
+		ColumnExpr(fmt.Sprintf("to_char(%s, 'YYYY-MM-DD') AS period", outerTrunc)).
 		ColumnExpr("ROUND(AVG(total_licenses))::int AS total_licenses").
 		ColumnExpr("ROUND(AVG(active_licenses))::int AS active_licenses").
 		ColumnExpr("SUM(new_licenses)::int AS new_licenses").
@@ -642,7 +647,11 @@ func (s *Store) GetRetentionData(ctx context.Context, productID string, months i
 	var out []RetentionData
 	q := s.DB.NewSelect().
 		TableExpr("analytics_snapshots").
-		ColumnExpr("date_trunc('month', date)::text AS period").
+		// to_char, not ::text: Postgres renders a timestamptz as
+		// "2026-09-01 00:00:00+00", which is neither RFC 3339 nor the
+		// shape every other date in this API has. The bucket is a
+		// month, so the month is what it says.
+		ColumnExpr("to_char(date_trunc('month', date), 'YYYY-MM-DD') AS period").
 		ColumnExpr("MAX(total_licenses)::int AS start_count").
 		ColumnExpr("MAX(active_licenses)::int AS end_count").
 		ColumnExpr(`CASE WHEN MAX(total_licenses) > 0

@@ -704,7 +704,13 @@ func (s *ReleaseService) Unyank(ctx context.Context, releaseID string) (*model.R
 		return nil, apperr.Internal(err)
 	}
 	if !model.ProductSupports(prod.Type, model.CapReleases) {
-		return nil, apperr.New(409, "INCOMPATIBLE_PRODUCT_TYPE",
+		// NOT_UNYANKABLE, not INCOMPATIBLE_PRODUCT_TYPE: everywhere else
+		// that code answers a request body asking for something the
+		// product type cannot do, and it answers 400. Here the body is
+		// fine and the product moved underneath the release, which is
+		// the same shape as the other unyank refusals. One code must
+		// mean one status, or a client cannot branch on it.
+		return nil, apperr.New(409, "NOT_UNYANKABLE",
 			"release management is not available for "+prod.Type+" products; change the product type back before unyanking")
 	}
 	if err := s.store.UnyankRelease(ctx, releaseID); err != nil {

@@ -130,9 +130,17 @@ func writeAppErr(c *gin.Context, err error) {
 		} else {
 			response.Err(c, ae.Status, ae.Code, ae.Message)
 		}
+		// A 500 carries a cause the client never sees. It was being
+		// dropped here, which left every SDK-facing failure —
+		// activate, verify, usage, floating — as a bare status code
+		// with nothing in the log to explain it. The 4xx answers are
+		// self-explanatory and stay quiet.
+		if ae.Status >= 500 && ae.Cause != nil {
+			response.LogInternal(c, ae.Cause)
+		}
 		return
 	}
-	response.Internal(c)
+	response.Internal(c, err)
 }
 
 func str(v any) string {

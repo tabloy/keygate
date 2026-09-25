@@ -151,7 +151,7 @@ func Load() (*Config, error) {
 	cfg.QuotaWarningThreshold = envFloatOr("QUOTA_WARNING_THRESHOLD", 0.8)
 
 	if admins := os.Getenv("ADMIN_EMAILS"); admins != "" {
-		for _, e := range strings.Split(admins, ",") {
+		for e := range strings.SplitSeq(admins, ",") {
 			cfg.AdminEmails = append(cfg.AdminEmails, strings.TrimSpace(e))
 		}
 	}

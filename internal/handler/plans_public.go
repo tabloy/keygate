@@ -111,7 +111,7 @@ func (h *PublicPlansHandler) ListPlans(c *gin.Context) {
 
 	plans, _, err := h.Store.ListPlans(c, prod.ID, "", store.All)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *PublicPlansHandler) ListPlans(c *gin.Context) {
 		active = append(active, out)
 	}
 
-	response.OK(c, gin.H{"plans": active})
+	response.OK(c, gin.H{"plans": response.Array(active)})
 }
 
 // price returns the Stripe unit amount for priceID, refreshing once the

@@ -274,6 +274,11 @@ type mockSMTPConfig struct {
 	advertiseAuth string // space-separated mechanisms
 	wantUsername  string
 	wantPassword  string
+	// implicitTLS makes the listener speak TLS from the first byte,
+	// the way port 465 does. The session is already encrypted at the
+	// banner, so STARTTLS is never advertised and AUTH is offered
+	// straight away.
+	implicitTLS bool
 }
 
 type mockSMTP struct {
@@ -296,6 +301,9 @@ func newMockSMTP(t *testing.T, cfg mockSMTPConfig) *mockSMTP {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
+	}
+	if cfg.implicitTLS {
+		ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{cert}})
 	}
 	srv := &mockSMTP{t: t, ln: ln, tlsCert: cert}
 	srv.wg.Add(1)
@@ -335,7 +343,9 @@ func (s *mockSMTP) acceptLoop(cfg mockSMTPConfig) {
 func (s *mockSMTP) handle(c net.Conn, cfg mockSMTPConfig) {
 	fmt.Fprint(c, "220 mockSMTP ready\r\n")
 	r := bufio.NewReader(c)
-	var inTLS bool
+	// On an implicit-TLS port the connection arrived encrypted, so the
+	// session starts where a STARTTLS one only gets to after upgrading.
+	inTLS := cfg.implicitTLS
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil {
@@ -494,4 +504,142 @@ func genSelfSignedCert(t *testing.T) tls.Certificate {
 		t.Fatalf("create cert: %v", err)
 	}
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv}
+}
+
+// TestImplicitTLS_PortMapping pins which port means "TLS from the
+// first byte". Getting this wrong is not a subtle failure: greeting a
+// 465 server in the clear reads its handshake as if it were text, and
+// the session dies at EHLO with an error that says nothing about TLS.
+func TestImplicitTLS_PortMapping(t *testing.T) {
+	for _, tc := range []struct {
+		port string
+		want bool
+	}{
+		{"465", true},
+		{" 465 ", true}, // an operator's stray whitespace still means 465
+		{"587", false},
+		{"25", false},
+		{"2525", false},
+		{"", false},
+		{"4650", false}, // not a prefix match
+	} {
+		// Through the constructor, not a bare struct: trimming is
+		// part of how a port is read, and a test that skips the
+		// constructor cannot see whether it happens.
+		s := NewEmailService("smtp.example.com", tc.port, "", "",
+			"from@example.com", slog.Default(), nil)
+		if got := s.implicitTLS(); got != tc.want {
+			t.Errorf("port %q: implicitTLS() = %v, want %v", tc.port, got, tc.want)
+		}
+	}
+}
+
+// TestSendOnce_ImplicitTLS drives the whole send against a server that
+// speaks TLS from the first byte, the way Cloudflare and Fastmail do
+// on 465.
+//
+// It also pins something easy to break by accident: net/smtp decides a
+// session is encrypted by type-asserting the connection to *tls.Conn.
+// Handing it an already-encrypted connection is what lets AUTH happen
+// at all, because both PlainAuth and loginAuth refuse to send
+// credentials over what they believe is plaintext. Wrapping the
+// connection in anything else here would turn a working install into
+// "smtp: refusing LOGIN auth on unencrypted connection".
+//
+// sendOnce takes the address to dial separately from the configured
+// port, so the port can say 465 while the mock listens wherever the
+// kernel gave it.
+func TestSendOnce_ImplicitTLS(t *testing.T) {
+	for _, mech := range []string{"PLAIN", "LOGIN"} {
+		t.Run(mech, func(t *testing.T) {
+			srv := newMockSMTP(t, mockSMTPConfig{
+				advertiseAuth: mech,
+				wantUsername:  "alice",
+				wantPassword:  "s3cret",
+				implicitTLS:   true,
+			})
+			defer srv.Close()
+
+			svc := &EmailService{
+				host:     "127.0.0.1",
+				port:     "465", // selects the implicit-TLS path
+				username: "alice",
+				password: "s3cret",
+				from:     "noreply@keygate.test",
+				enabled:  true,
+				logger:   slog.Default(),
+				//nolint:gosec // the mock's certificate is self-signed
+				tlsConfig: &tls.Config{ServerName: "127.0.0.1", InsecureSkipVerify: true},
+			}
+
+			addr := fmt.Sprintf("127.0.0.1:%d", srv.Port())
+			if err := svc.sendOnce(addr, "to@example.com",
+				[]byte("Subject: ok\r\n\r\nhi\r\n")); err != nil {
+				t.Fatalf("send over implicit TLS: %v", err)
+			}
+			if !srv.AuthSucceeded() {
+				t.Error("the server never saw a successful AUTH")
+			}
+			if got := srv.SelectedMech(); got != mech {
+				t.Errorf("mechanism = %q, want %q", got, mech)
+			}
+		})
+	}
+}
+
+// A 587 server must still be greeted in the clear and upgraded, which
+// is the path every other provider uses. Breaking it while adding 465
+// would be the obvious regression.
+func TestSendOnce_StartTLSStillUsedOn587(t *testing.T) {
+	srv := newMockSMTP(t, mockSMTPConfig{
+		advertiseAuth: "PLAIN",
+		wantUsername:  "alice",
+		wantPassword:  "s3cret",
+		// implicitTLS stays off: the mock advertises STARTTLS and
+		// waits to be upgraded.
+	})
+	defer srv.Close()
+
+	svc := &EmailService{
+		host:     "127.0.0.1",
+		port:     "587",
+		username: "alice",
+		password: "s3cret",
+		from:     "noreply@keygate.test",
+		enabled:  true,
+		logger:   slog.Default(),
+		//nolint:gosec // the mock's certificate is self-signed
+		tlsConfig: &tls.Config{ServerName: "127.0.0.1", InsecureSkipVerify: true},
+	}
+
+	addr := fmt.Sprintf("127.0.0.1:%d", srv.Port())
+	if err := svc.sendOnce(addr, "to@example.com",
+		[]byte("Subject: ok\r\n\r\nhi\r\n")); err != nil {
+		t.Fatalf("send over STARTTLS: %v", err)
+	}
+	if !srv.AuthSucceeded() {
+		t.Error("the server never saw a successful AUTH")
+	}
+}
+
+// SMTP_PORT arrives from the environment, where a stray space is an
+// ordinary typo. The port decides two things — whether to open with
+// TLS, and what the dialer is handed — and for a while they disagreed
+// about what " 465 " meant: the TLS decision trimmed it and said yes,
+// the dial address did not and asked for a port literally named
+// " 465 ", which no resolver accepts. The result was a setup that
+// looked configured and failed at connect.
+func TestSMTPPortAndHostAreTrimmedAtTheBoundary(t *testing.T) {
+	s := NewEmailService(" smtp.example.com ", " 465 ", "u", "p",
+		"from@example.com", slog.Default(), nil)
+
+	if got, want := s.addr(), "smtp.example.com:465"; got != want {
+		t.Errorf("addr() = %q, want %q", got, want)
+	}
+	if !s.implicitTLS() {
+		t.Error("implicitTLS() = false for port \" 465 \", want true")
+	}
+	if _, _, err := net.SplitHostPort(s.addr()); err != nil {
+		t.Errorf("addr() is not dialable: %v", err)
+	}
 }

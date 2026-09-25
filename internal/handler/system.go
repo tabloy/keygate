@@ -182,7 +182,7 @@ func parseSemver(v string) [3]int {
 	var result [3]int
 	for i := 0; i < 3 && i < len(parts); i++ {
 		// Strip pre-release suffix (e.g. "1-beta" → "1")
-		num := strings.SplitN(parts[i], "-", 2)[0]
+		num, _, _ := strings.Cut(parts[i], "-")
 		result[i], _ = strconv.Atoi(num)
 	}
 	return result
@@ -198,8 +198,8 @@ func stripV(v string) string {
 func (h *SystemHandler) GetMigrationStatus(c *gin.Context) {
 	migrations, err := h.Store.ListAppliedMigrations(c)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
-	response.OK(c, gin.H{"migrations": migrations})
+	response.OK(c, gin.H{"migrations": response.Array(migrations)})
 }

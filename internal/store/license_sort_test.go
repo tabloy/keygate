@@ -119,7 +119,7 @@ func TestListLicensesPagingIsRepeatable(t *testing.T) {
 
 	sort := store.Sort{Expr: "license.status"}
 	var first []string
-	for round := 0; round < 3; round++ {
+	for round := range 3 {
 		var got []string
 		for offset := 0; offset < len(ids); offset += 2 {
 			for _, l := range listSorted(t, s, ctx, productID, sort, 2, offset) {
@@ -229,7 +229,7 @@ func TestListLicensesCountsActivations(t *testing.T) {
 	// on the rest.
 	want := map[string]int{ids[0]: 2, ids[1]: 1}
 	for id, n := range want {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			act := &model.Activation{
 				LicenseID: id, Identifier: id + "-dev-" + string(rune('a'+i)), IdentifierType: "device",
 			}

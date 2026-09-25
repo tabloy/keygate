@@ -382,7 +382,7 @@ func (h *ReleasePublicHandler) FeedSparkle(c *gin.Context) {
 	body, err := service.RenderSparkle(h.feedInput(req, feedReleases))
 	if err != nil {
 		h.logger.Error("feed: sparkle render failed", "error", err)
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	h.writeFeedCacheHeaders(c, req)
@@ -402,7 +402,7 @@ func (h *ReleasePublicHandler) FeedVelopack(c *gin.Context) {
 	body, err := json.Marshal(service.BuildVelopack(h.feedInput(req, feedReleases)))
 	if err != nil {
 		h.logger.Error("feed: velopack marshal failed", "error", err)
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	h.writeFeedCacheHeaders(c, req)

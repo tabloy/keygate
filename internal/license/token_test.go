@@ -3,6 +3,7 @@ package license
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"slices"
 	"testing"
 )
 
@@ -190,8 +191,8 @@ func TestVerifyTamperedSignature(t *testing.T) {
 	// has 4 "don't-care" bits, so 'A'→'B' can leave the real
 	// signature bytes unchanged → verify still passes → test flaky.
 	dot := -1
-	for i := len(mutated) - 1; i >= 0; i-- {
-		if mutated[i] == '.' {
+	for i, m := range slices.Backward(mutated) {
+		if m == '.' {
 			dot = i
 			break
 		}

@@ -94,10 +94,20 @@ type WebhookDeliveryFilter struct {
 	Limit     int
 }
 
+// webhookDeliveryOrder is how a delivery listing is ordered.
+//
+// The trailing id is the tiebreaker, as on every other paginated list.
+// Retries of one event land in the same millisecond often enough, and
+// with only created_at to go on Postgres may order equal rows
+// differently between two queries, so a row can repeat on one page and
+// be missing from the next. It is a named constant so the tiebreaker
+// can be asserted without a database.
+const webhookDeliveryOrder = "created_at DESC, id DESC"
+
 func (s *Store) ListWebhookDeliveries(ctx context.Context, f WebhookDeliveryFilter) ([]*model.WebhookDelivery, int, error) {
 	q := s.DB.NewSelect().Model((*model.WebhookDelivery)(nil)).
 		Where("webhook_id = ?", f.WebhookID).
-		OrderExpr("created_at DESC")
+		OrderExpr(webhookDeliveryOrder)
 	if f.Status != "" {
 		q = q.Where("status = ?", f.Status)
 	}

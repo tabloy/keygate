@@ -155,7 +155,7 @@ func TestClaimNotification_LeaseSemantics(t *testing.T) {
 	tag := "updates_14d_2027-01-01"
 	var first string
 	wins := 0
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		token, err := s.ClaimNotification(ctx, lic.ID, tag)
 		if err != nil {
 			t.Fatal(err)

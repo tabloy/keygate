@@ -58,3 +58,20 @@ func TestApplySortDirectionAndNulls(t *testing.T) {
 		}
 	}
 }
+
+// Webhook deliveries do not go through applySort, because the endpoint
+// takes no ?sort=; the order is fixed. That put it outside the guard
+// above, and it shipped ordered by created_at alone while the contract
+// page promised every paginated list a unique tiebreaker.
+func TestWebhookDeliveryOrderHasATiebreaker(t *testing.T) {
+	parts := strings.Split(webhookDeliveryOrder, ",")
+	last := strings.TrimSpace(parts[len(parts)-1])
+	if !strings.HasPrefix(last, "id ") && last != "id" {
+		t.Errorf("webhookDeliveryOrder = %q; the last key is %q, which is not the unique id",
+			webhookDeliveryOrder, last)
+	}
+	if len(parts) < 2 {
+		t.Errorf("webhookDeliveryOrder = %q has only one key, so tied rows have no defined order",
+			webhookDeliveryOrder)
+	}
+}

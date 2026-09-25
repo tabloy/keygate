@@ -30,7 +30,7 @@ func TestGenerateKeyCustomPrefix(t *testing.T) {
 
 func TestGenerateKeyUniqueness(t *testing.T) {
 	keys := make(map[string]bool)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		k := GenerateKey("")
 		if keys[k] {
 			t.Fatalf("duplicate key generated: %s", k)

@@ -208,12 +208,12 @@ func (h *AuthHandler) DevLogin(c *gin.Context) {
 
 	user := &model.User{Email: req.Email, Name: req.Name}
 	if err := h.Store.UpsertUser(c, user); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	user, err := h.Store.FindUserByEmail(c, req.Email)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 

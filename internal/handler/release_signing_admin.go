@@ -47,7 +47,7 @@ func (h *ReleaseSigningAdminHandler) Generate(c *gin.Context) {
 			response.Err(c, http.StatusConflict, "KEY_ALREADY_ACTIVE",
 				"this product already has an active signing key — rotate instead")
 		default:
-			response.Internal(c)
+			response.Internal(c, err)
 		}
 		return
 	}
@@ -89,7 +89,7 @@ func (h *ReleaseSigningAdminHandler) Rotate(c *gin.Context) {
 			response.Err(c, http.StatusServiceUnavailable, "SIGNING_DISABLED",
 				"release signing is not configured")
 		default:
-			response.Internal(c)
+			response.Internal(c, err)
 		}
 		return
 	}
@@ -120,10 +120,10 @@ func (h *ReleaseSigningAdminHandler) List(c *gin.Context) {
 	}
 	keys, err := h.store.ListSigningKeys(c.Request.Context(), productID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
-	response.OK(c, gin.H{"keys": keys})
+	response.OK(c, gin.H{"keys": response.Array(keys)})
 }
 
 // GET /api/v1/admin/products/:id/signing-key/public.pem
@@ -143,7 +143,7 @@ func (h *ReleaseSigningAdminHandler) DownloadPublicKey(c *gin.Context) {
 		case errors.Is(err, service.ErrSigningKeyMissing):
 			response.NotFound(c, "no active signing key for this product — generate one first")
 		default:
-			response.Internal(c)
+			response.Internal(c, err)
 		}
 		return
 	}
@@ -169,7 +169,7 @@ func (h *ReleaseSigningAdminHandler) DownloadPublicKeyTauri(c *gin.Context) {
 		case errors.Is(err, service.ErrSigningKeyMissing):
 			response.NotFound(c, "no active signing key for this product — generate one first")
 		default:
-			response.Internal(c)
+			response.Internal(c, err)
 		}
 		return
 	}
@@ -195,7 +195,7 @@ func (h *ReleaseSigningAdminHandler) Deactivate(c *gin.Context) {
 			response.NotFound(c, "no active signing key for this product")
 			return
 		}
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -209,7 +209,7 @@ func (h *ReleaseSigningAdminHandler) Deactivate(c *gin.Context) {
 	}
 
 	if err := h.store.DeactivateSigningKey(c.Request.Context(), key.ID, req.Note); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 

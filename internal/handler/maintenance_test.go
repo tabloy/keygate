@@ -860,7 +860,7 @@ func TestGateAndRowLocksDoNotDeadlock(t *testing.T) {
 	}
 	h := &AdminHandler{Store: s, FeedURLTTL: time.Hour}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {

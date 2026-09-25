@@ -142,7 +142,7 @@ func TestIncrementUsageCounterWithLimit_Atomic(t *testing.T) {
 	acceptedCount := int64(0)
 	var mu sync.Mutex
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -382,7 +382,7 @@ func TestFloatingCheckOutWithLimit_Atomic(t *testing.T) {
 	successCount := 0
 	var mu sync.Mutex
 
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()

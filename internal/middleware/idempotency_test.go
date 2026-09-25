@@ -68,9 +68,9 @@ func TestIdempotency_5xxNotCached(t *testing.T) {
 	s := requireStore(t)
 	defer s.Close()
 
-	var attempts int32
+	var attempts atomic.Int32
 	handler := func(c *gin.Context) {
-		atomic.AddInt32(&attempts, 1)
+		attempts.Add(1)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "transient"})
 	}
 	r := makeApp(s, handler)
@@ -102,7 +102,7 @@ func TestIdempotency_5xxNotCached(t *testing.T) {
 	if w2.Code != 500 {
 		t.Fatalf("retry: expected 500, got %d", w2.Code)
 	}
-	if a := atomic.LoadInt32(&attempts); a != 2 {
+	if a := attempts.Load(); a != 2 {
 		t.Fatalf("handler attempt count: want 2 (no caching), got %d", a)
 	}
 
@@ -117,9 +117,9 @@ func TestIdempotency_4xxIsCached(t *testing.T) {
 	s := requireStore(t)
 	defer s.Close()
 
-	var attempts int32
+	var attempts atomic.Int32
 	handler := func(c *gin.Context) {
-		atomic.AddInt32(&attempts, 1)
+		attempts.Add(1)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "validation"})
 	}
 	r := makeApp(s, handler)
@@ -133,7 +133,7 @@ func TestIdempotency_4xxIsCached(t *testing.T) {
 	if w2 := postJSON(r, key, body); w2.Code != 400 {
 		t.Fatalf("replay: expected 400, got %d", w2.Code)
 	}
-	if a := atomic.LoadInt32(&attempts); a != 1 {
+	if a := attempts.Load(); a != 1 {
 		t.Fatalf("handler attempts: want 1 (cached on replay), got %d", a)
 	}
 
@@ -191,13 +191,13 @@ func TestIdempotency_InFlight409(t *testing.T) {
 	var handlerRunning sync.WaitGroup
 	handlerRunning.Add(1)
 	release := make(chan struct{})
-	var handlerEntries int32
+	var handlerEntries atomic.Int32
 
 	handler := func(c *gin.Context) {
 		// First entry: signal that we're running, then wait for the
 		// second goroutine to have hit the middleware. After that we
 		// finish normally.
-		if atomic.AddInt32(&handlerEntries, 1) == 1 {
+		if handlerEntries.Add(1) == 1 {
 			handlerRunning.Done()
 			<-release
 		}
@@ -257,7 +257,7 @@ func TestIdempotency_InFlight409(t *testing.T) {
 	}
 
 	// Handler executed exactly once.
-	if a := atomic.LoadInt32(&handlerEntries); a != 1 {
+	if a := handlerEntries.Load(); a != 1 {
 		t.Errorf("expected exactly 1 handler invocation, got %d", a)
 	}
 

@@ -77,7 +77,7 @@ func (h *SeatHandler) ListSeats(c *gin.Context) {
 		writeAppErr(c, err)
 		return
 	}
-	response.OK(c, gin.H{"seats": seats})
+	response.OK(c, gin.H{"seats": response.Array(seats)})
 }
 
 // AcceptInvite consumes the plain token shipped in the seat-invite

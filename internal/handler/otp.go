@@ -33,7 +33,7 @@ func (h *AuthHandler) OTPSend(c *gin.Context) {
 	// Rate limit: max 3 OTP requests per email per 10 minutes
 	count, err := h.Store.CountRecentOTPCodes(c, email)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if count >= 3 {
@@ -63,7 +63,7 @@ func (h *AuthHandler) OTPSend(c *gin.Context) {
 		ExpiresAt: time.Now().Add(10 * time.Minute),
 	}
 	if err := h.Store.CreateOTPCode(c, otp); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -144,12 +144,12 @@ func (h *AuthHandler) OTPVerify(c *gin.Context) {
 	// Upsert user (create on first login)
 	user := &model.User{Email: email}
 	if err := h.Store.UpsertUser(c, user); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	user, err = h.Store.FindUserByEmail(c, email)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 

@@ -99,7 +99,7 @@ func TestWithAdvisoryLock_Serialises(t *testing.T) {
 	ctx := context.Background()
 	var inside, maxInside int32
 	var wg sync.WaitGroup
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

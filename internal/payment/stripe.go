@@ -163,7 +163,7 @@ func (h *StripeHandler) CreateCheckoutSession(c *gin.Context) {
 
 	s, err := session.New(params)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, gin.H{"url": s.URL, "session_id": s.ID})
@@ -585,11 +585,11 @@ func supportedAPIVersion(v string) bool {
 	if v == "" {
 		return false
 	}
-	i := strings.Index(v, ".")
-	if i < 0 {
+	_, after, ok := strings.Cut(v, ".")
+	if !ok {
 		return true // yyyy-MM-dd: legacy layout
 	}
-	switch v[i+1:] {
+	switch after {
 	case "acacia":
 		return true // last pre-Basil train, legacy layout
 	}
@@ -1876,7 +1876,7 @@ func (h *StripeHandler) RenewUpdates(c *gin.Context) {
 	}
 	plan, err := h.Store.FindPlanByID(c, lic.PlanID)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	// Nothing to sell: the plan offers no renewal, or the license
@@ -1896,7 +1896,7 @@ func (h *StripeHandler) RenewUpdates(c *gin.Context) {
 	// give nothing back.
 	on, err := h.Store.MaintenanceFeaturesEnabled(c)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	if !on {
@@ -1958,7 +1958,7 @@ func (h *StripeHandler) RenewUpdates(c *gin.Context) {
 	sess, err := session.New(params)
 	if err != nil {
 		slog.Error("stripe renewal: failed to create checkout session", "license_id", lic.ID, "error", err)
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 	response.OK(c, gin.H{"url": sess.URL})
@@ -1994,7 +1994,7 @@ func (h *StripeHandler) CancelSubscription(c *gin.Context) {
 	if req.Immediate {
 		_, err = subscription.Cancel(lic.StripeSubscriptionID, nil)
 		if err != nil {
-			response.Internal(c)
+			response.Internal(c, err)
 			return
 		}
 		now := time.Now()
@@ -2007,7 +2007,7 @@ func (h *StripeHandler) CancelSubscription(c *gin.Context) {
 			CancelAtPeriodEnd: stripe.Bool(true),
 		})
 		if updateErr != nil {
-			response.Internal(c)
+			response.Internal(c, updateErr)
 			return
 		}
 		// Set ValidUntil to when Stripe will cancel the subscription
@@ -2103,8 +2103,15 @@ func (h *StripeHandler) ChangePlan(c *gin.Context) {
 	}
 
 	sub, err := subscription.Get(lic.StripeSubscriptionID, nil)
-	if err != nil || len(sub.Items.Data) == 0 {
-		response.Internal(c)
+	if err != nil {
+		response.Internal(c, err)
+		return
+	}
+	// A subscription Stripe knows about but with nothing on it. The
+	// lookup succeeded, so err is nil here; passing it would answer
+	// 500 and log no reason at all.
+	if len(sub.Items.Data) == 0 {
+		response.Internal(c, fmt.Errorf("stripe subscription %s has no items", lic.StripeSubscriptionID))
 		return
 	}
 
@@ -2125,7 +2132,7 @@ func (h *StripeHandler) ChangePlan(c *gin.Context) {
 
 	updatedSub, err := subscription.Update(lic.StripeSubscriptionID, params)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -2328,7 +2335,7 @@ func (h *StripeHandler) CreatePortalSession(c *gin.Context) {
 	}
 	s, err := portalsession.New(params)
 	if err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
@@ -2399,11 +2406,11 @@ func (h *StripeHandler) ListInvoices(c *gin.Context) {
 		})
 	}
 	if err := iter.Err(); err != nil {
-		response.Internal(c)
+		response.Internal(c, err)
 		return
 	}
 
-	response.OK(c, gin.H{"invoices": invoices})
+	response.OK(c, gin.H{"invoices": response.Array(invoices)})
 }
 
 func (h *StripeHandler) onPaymentActionRequired(ctx context.Context, raw json.RawMessage) {

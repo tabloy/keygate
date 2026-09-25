@@ -92,7 +92,7 @@ func (mb *memoryBackend) cleanup() {
 // RedisClient is a minimal interface for Redis operations needed by rate limiting.
 // Compatible with github.com/redis/go-redis/v9.
 type RedisClient interface {
-	Eval(ctx context.Context, script string, keys []string, args ...interface{}) RedisResult
+	Eval(ctx context.Context, script string, keys []string, args ...any) RedisResult
 }
 
 // RedisResult is the minimal result interface.
