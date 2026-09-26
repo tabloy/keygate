@@ -1,5 +1,8 @@
 # ── Build frontend ──
-FROM oven/bun:1 AS frontend
+# Pinned to the build host's platform: the output is static, arch-neutral
+# assets, so building it once natively (never under emulation) is both
+# correct and much faster for the arm64 image.
+FROM --platform=$BUILDPLATFORM oven/bun:1 AS frontend
 WORKDIR /app/web
 COPY web/package.json web/bun.lock* ./
 RUN bun install --frozen-lockfile
@@ -7,7 +10,12 @@ COPY web/ .
 RUN bun run build
 
 # ── Build backend ──
-FROM golang:1.25-alpine AS backend
+# Runs on the build host's platform and cross-compiles to the target arch
+# below (CGO disabled, so it's a pure Go cross-build). This keeps the
+# expensive compile off QEMU. The small runtime stage still runs its apk
+# install under the target arch, so the arm64 image is faster to build but
+# not fully emulation-free.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend
 RUN apk add --no-cache git
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -17,7 +25,10 @@ COPY --from=frontend /app/web/dist ./web/dist
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
-RUN CGO_ENABLED=0 go build -trimpath \
+# TARGETOS/TARGETARCH are provided by buildx per requested --platform.
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath \
     -ldflags "-s -w \
       -X github.com/tabloy/keygate/internal/version.Version=${VERSION} \
       -X github.com/tabloy/keygate/internal/version.Commit=${COMMIT} \

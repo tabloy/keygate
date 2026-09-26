@@ -20,39 +20,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Full history so the previous tag is reachable.
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # The release body is the commits since the previous tag, plus a
-      # compare link. No file to maintain and no commit convention
-      # required: it always reflects exactly what landed. This is the
-      # single source of the body — generate_release_notes is off so the
-      # notes are fully deterministic and don't add a second, PR-based
-      # "What's Changed" section on top of this one.
-      - name: Build release notes from git log
-        run: |
-          PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
-          {
-            echo "## What's changed"
-            echo
-            if [ -n "$PREV" ]; then
-              git log --no-merges --pretty='- %s' "${PREV}..${GITHUB_REF_NAME}"
-              echo
-              echo "**Full changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${GITHUB_REF_NAME}"
-            else
-              git log --no-merges --pretty='- %s' "${GITHUB_REF_NAME}"
-            fi
-          } > release-notes.md
-
-      # append_body is left at its default (false) so re-running the
-      # release for an existing tag OVERWRITES the body with this
-      # deterministic content instead of appending the commit list again.
-      - name: Create Release
+      # Release notes are maintained by hand on the GitHub Release page.
+      # This step only opens a DRAFT with GitHub's auto-generated notes
+      # (the PRs/commits since the previous tag) as a starting point — you
+      # edit that draft into user-facing notes and publish it yourself.
+      # Because publishing is manual, re-running this workflow for a tag
+      # never overwrites notes you have already written. generate_release_notes
+      # talks to the GitHub API, so no local git history (fetch-depth) is
+      # needed here.
+      - name: Open draft release
         uses: softprops/action-gh-release@v3
         with:
-          body_path: release-notes.md
+          draft: true
+          generate_release_notes: true
 
   docker:
     name: Docker Image
