@@ -284,9 +284,10 @@ type mockSMTPConfig struct {
 	wantPassword  string
 	// implicitTLS makes the listener speak TLS from the first byte,
 	// the way port 465 does. The session is already encrypted at the
-	// banner, so STARTTLS is never advertised and AUTH is offered
-	// straight away.
+	// banner, so AUTH is offered straight away.
 	implicitTLS bool
+	// Some servers advertise STARTTLS even on an already encrypted session.
+	advertiseStartTLS bool
 }
 
 type mockSMTP struct {
@@ -365,7 +366,7 @@ func (s *mockSMTP) handle(c net.Conn, cfg mockSMTPConfig) {
 		case strings.HasPrefix(upper, "EHLO"), strings.HasPrefix(upper, "HELO"):
 			// Multi-line 250 reply.
 			fmt.Fprint(c, "250-mockSMTP\r\n")
-			if !inTLS {
+			if !inTLS || cfg.advertiseStartTLS {
 				fmt.Fprint(c, "250-STARTTLS\r\n")
 			}
 			// Only advertise AUTH post-TLS to mimic Office 365.
@@ -375,6 +376,10 @@ func (s *mockSMTP) handle(c net.Conn, cfg mockSMTPConfig) {
 			fmt.Fprint(c, "250 HELP\r\n")
 
 		case upper == "STARTTLS":
+			if inTLS {
+				fmt.Fprint(c, "503 TLS already active\r\n")
+				continue
+			}
 			fmt.Fprint(c, "220 Ready to start TLS\r\n")
 			tlsConn := tls.Server(c, &tls.Config{
 				Certificates:       []tls.Certificate{s.tlsCert},
@@ -561,10 +566,11 @@ func TestSendOnce_ImplicitTLS(t *testing.T) {
 	for _, mech := range []string{"PLAIN", "LOGIN"} {
 		t.Run(mech, func(t *testing.T) {
 			srv := newMockSMTP(t, mockSMTPConfig{
-				advertiseAuth: mech,
-				wantUsername:  "alice",
-				wantPassword:  "s3cret",
-				implicitTLS:   true,
+				advertiseAuth:     mech,
+				wantUsername:      "alice",
+				wantPassword:      "s3cret",
+				implicitTLS:       true,
+				advertiseStartTLS: true,
 			})
 			defer srv.Close()
 

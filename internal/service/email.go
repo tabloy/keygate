@@ -402,11 +402,13 @@ func (s *EmailService) sendSMTP(cfg resolvedConfig, addr, to string, msg []byte)
 
 	// STARTTLS upgrade if the server advertises it. (Client.StartTLS
 	// internally re-EHLOs so post-TLS extensions land in c.Extension.)
-	// Already encrypted on an implicit-TLS port, where the server does
-	// not advertise the extension at all.
-	if ok, _ := c.Extension("STARTTLS"); ok {
-		if err := c.StartTLS(tlsCfg); err != nil {
-			return smtpErr("starttls", err, false)
+	// Implicit-TLS connections are already encrypted, even if the server
+	// still advertises STARTTLS.
+	if !cfg.implicitTLS() {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			if err := c.StartTLS(tlsCfg); err != nil {
+				return smtpErr("starttls", err, false)
+			}
 		}
 	}
 
