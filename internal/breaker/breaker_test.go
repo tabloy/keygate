@@ -24,8 +24,12 @@ func TestOpensAfterTripAndRecovers(t *testing.T) {
 		t.Fatal("one probe should be allowed after the cooldown")
 	}
 	b.Success()
-	if !b.Allow() || !b.Allow() {
-		t.Fatal("a successful probe should close the breaker")
+	// Closed again: every call is allowed, not only the one probe a
+	// half-open breaker lets through, so the second call matters too.
+	for i := range 2 {
+		if !b.Allow() {
+			t.Fatalf("call %d refused: a successful probe should close the breaker", i+1)
+		}
 	}
 }
 

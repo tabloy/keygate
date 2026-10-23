@@ -45,6 +45,8 @@ func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
 		return
 	}
 	if count >= 3 {
+		// The window is ten minutes; waiting that long always clears it.
+		c.Header("Retry-After", "600")
 		response.Err(c, 429, "RATE_LIMITED", "too many code requests, try again later")
 		return
 	}

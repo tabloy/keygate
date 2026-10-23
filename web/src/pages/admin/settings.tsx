@@ -110,11 +110,6 @@ const FORM_KEYS = [
   "signup_mode",
   "brand_color",
   "logo_url",
-  "rate_limit_api",
-  "rate_limit_admin",
-  "webhook_max_attempts",
-  "webhook_timeout",
-  "quota_warning_threshold",
   "maintenance_features_enabled",
   "email_provider",
   "smtp_from",
@@ -646,75 +641,6 @@ export default function SettingsPage() {
                 <Label htmlFor="maintenance-features">{t("settings.maintenanceEnabled")}</Label>
               </div>
               <p className="text-xs text-muted-foreground">{t("settings.maintenanceDesc")}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("settings.rateLimit")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>{t("settings.rateLimitApi")}</Label>
-                  <Input
-                    type="number"
-                    value={form.rate_limit_api || ""}
-                    onChange={(e) => set("rate_limit_api", e.target.value)}
-                    placeholder="60"
-                  />
-                  <p className="text-xs text-muted-foreground">{t("settings.rateLimitApiDesc")}</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.rateLimitAdmin")}</Label>
-                  <Input
-                    type="number"
-                    value={form.rate_limit_admin || ""}
-                    onChange={(e) => set("rate_limit_admin", e.target.value)}
-                    placeholder="120"
-                  />
-                  <p className="text-xs text-muted-foreground">{t("settings.rateLimitAdminDesc")}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("settings.webhookConfig")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>{t("settings.webhookMaxAttempts")}</Label>
-                  <Input
-                    type="number"
-                    value={form.webhook_max_attempts || ""}
-                    onChange={(e) => set("webhook_max_attempts", e.target.value)}
-                    placeholder="5"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.webhookTimeout")}</Label>
-                  <Input
-                    value={form.webhook_timeout || ""}
-                    onChange={(e) => set("webhook_timeout", e.target.value)}
-                    placeholder="10s"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.quotaThreshold")}</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="1"
-                    value={form.quota_warning_threshold || ""}
-                    onChange={(e) => set("quota_warning_threshold", e.target.value)}
-                    placeholder="0.8"
-                  />
-                  <p className="text-xs text-muted-foreground">{t("settings.quotaThresholdDesc")}</p>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>

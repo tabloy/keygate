@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,18 +26,9 @@ func NewWebhookAdminHandler(s *store.Store, wh *service.WebhookService) *Webhook
 }
 
 func (h *WebhookAdminHandler) ListWebhooks(c *gin.Context) {
-	productID := c.Query("product_id")
-	// Auto-narrow for product-scoped api keys (same pattern as
-	// ListLicenses / Release.List).
-	if v, ok := c.Get("api_key"); ok {
-		if ak, ok := v.(*model.APIKey); ok && ak != nil && ak.ProductID != "" {
-			if productID != "" && productID != ak.ProductID {
-				response.Err(c, 403, "PRODUCT_SCOPE_MISMATCH",
-					"api_key is bound to a different product")
-				return
-			}
-			productID = ak.ProductID
-		}
+	productID, ok := keyProductFilter(c, c.Query("product_id"))
+	if !ok {
+		return
 	}
 	page := listPage(c)
 	webhooks, total, err := h.Store.ListWebhooks(c, productID, c.Query("search"), page)
@@ -64,14 +58,21 @@ func (h *WebhookAdminHandler) CreateWebhook(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	if len(req.Events) == 0 {
-		response.BadRequest(c, "at least one event type is required")
+	if !validWebhookEvents(c, req.Events) {
 		return
 	}
 	if req.Secret == "" {
 		req.Secret = service.GenerateWebhookSecret()
 	}
 	if !requireKeyProductScope(c, req.ProductID) {
+		return
+	}
+	if _, err := h.Store.FindProductByID(c, req.ProductID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "product not found")
+			return
+		}
+		response.Internal(c, err)
 		return
 	}
 
@@ -125,11 +126,7 @@ func (h *WebhookAdminHandler) UpdateWebhook(c *gin.Context) {
 		w.URL = *req.URL
 	}
 	if req.Events != nil {
-		// Same rule as creation: a webhook subscribed to nothing is a
-		// row that will never fire, and an empty array reads on the
-		// dashboard exactly like a working endpoint.
-		if len(req.Events) == 0 {
-			response.BadRequest(c, "at least one event type is required")
+		if !validWebhookEvents(c, req.Events) {
 			return
 		}
 		w.Events = req.Events
@@ -290,4 +287,22 @@ func (h *WebhookAdminHandler) TestWebhook(c *gin.Context) {
 		"response_code": d.ResponseCode,
 		"response_body": d.ResponseBody,
 	})
+}
+
+// validWebhookEvents checks a subscription list, writing a 400 and
+// returning false when it is unusable. A webhook subscribed to nothing,
+// or only to names nothing sends, is a row that never fires and reads
+// on the dashboard exactly like a working endpoint.
+func validWebhookEvents(c *gin.Context, events []string) bool {
+	if len(events) == 0 {
+		response.BadRequest(c, "at least one event type is required")
+		return false
+	}
+	for _, e := range events {
+		if !model.IsValidWebhookEvent(e) {
+			response.BadRequest(c, fmt.Sprintf("unknown event %q (valid: %s)", e, strings.Join(model.WebhookEvents, ", ")))
+			return false
+		}
+	}
+	return true
 }

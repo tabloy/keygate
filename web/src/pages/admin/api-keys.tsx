@@ -315,7 +315,8 @@ function CreateAPIKeyDialog({
   // key want the wildcard. Granular scopes are an opt-in for CI/CD
   // or merchant backends where blast-radius matters.
   const [scopes, setScopes] = useState<string[]>(["admin"])
-  const [productId, setProductId] = useState(products[0]?.id || "")
+  // Unbound by default: a binding is a restriction the admin opts into.
+  const [productId, setProductId] = useState("")
   const [name, setName] = useState("")
   const [error, setError] = useState("")
 
@@ -343,12 +344,12 @@ function CreateAPIKeyDialog({
               setError(t("apiKeys.atLeastOneScope"))
               return
             }
-            // product_id is informational/scoping for now — the
-            // server only treats it as a free-text foreign key.
-            // Leave it unset for system-wide keys (the common case
-            // for admin / *:write scopes).
+            // A binding limits a licenses:write or releases:write key
+            // to one product. An admin key always spans every product
+            // and the server refuses a bound one, so the (hidden)
+            // selection is never sent with it.
             onSubmit({
-              product_id: productId || undefined,
+              product_id: (!scopes.includes("admin") && productId) || undefined,
               name: name.trim(),
               scopes,
             })
@@ -380,9 +381,8 @@ function CreateAPIKeyDialog({
               {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
 
-            {/* Product binding is optional and mostly informational —
-              shown only when no admin scope is granted, since admin
-              keys span products anyway. */}
+            {/* Product binding is optional, and offered only without the
+              admin scope: admin keys span every product. */}
             {!scopes.includes("admin") && products.length > 0 && (
               <div className="space-y-2">
                 <Label>

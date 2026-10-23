@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -27,6 +29,15 @@ func (h *FloatingHandler) CheckOut(c *gin.Context) {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
+	var ok bool
+	if req.Identifier, ok = cleanIdentifier(c, req.Identifier); !ok {
+		return
+	}
+	req.Label = strings.TrimSpace(req.Label)
+	if utf8.RuneCountInString(req.Label) > maxLabelLen {
+		response.BadRequest(c, "label too long (max 256 characters)")
+		return
+	}
 	productID, _ := c.Get("product_id")
 	result, err := h.svc.CheckOut(c.Request.Context(), service.CheckOutInput{
 		LicenseKey: req.LicenseKey, Identifier: req.Identifier,
@@ -48,6 +59,10 @@ func (h *FloatingHandler) CheckIn(c *gin.Context) {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
+	var ok bool
+	if req.Identifier, ok = cleanIdentifier(c, req.Identifier); !ok {
+		return
+	}
 	productID, _ := c.Get("product_id")
 	err := h.svc.CheckIn(c.Request.Context(), req.LicenseKey, req.Identifier, str(productID))
 	if err != nil {
@@ -64,6 +79,10 @@ func (h *FloatingHandler) Heartbeat(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "license_key and identifier are required")
+		return
+	}
+	var ok bool
+	if req.Identifier, ok = cleanIdentifier(c, req.Identifier); !ok {
 		return
 	}
 	productID, _ := c.Get("product_id")

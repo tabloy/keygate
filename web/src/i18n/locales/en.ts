@@ -177,7 +177,7 @@ const en = {
     "This will suspend the license. The customer will not be able to activate or use the software until reinstated.",
   "licenses.reinstate": "Reinstate",
   "licenses.refundConfirm":
-    "This will cancel the subscription at the payment provider and revoke the license. The customer will lose access immediately.",
+    "This cancels the subscription in Stripe and revokes the license; the customer loses access immediately. A license upgraded from a free plan goes back to that plan instead. No money is refunded: make the refund in Stripe.",
   "licenses.selectPlan": "Select a plan",
   "licenses.subscription": "Stripe subscription",
   "licenses.unlink": "Unlink",
@@ -414,16 +414,6 @@ const en = {
   "settings.signupLicensedOnly": "Only emails that hold a license",
   "settings.signupModeDesc":
     "Restricting sign-ups also stops the login-code endpoint from mailing strangers. People who already have an account can always sign in.",
-  "settings.rateLimit": "Rate Limiting",
-  "settings.rateLimitApi": "API Rate Limit",
-  "settings.rateLimitApiDesc": "Maximum requests per minute for API endpoints.",
-  "settings.rateLimitAdmin": "Admin Rate Limit",
-  "settings.rateLimitAdminDesc": "Maximum requests per minute for admin endpoints.",
-  "settings.webhookConfig": "Webhook Configuration",
-  "settings.webhookMaxAttempts": "Max Retry Attempts",
-  "settings.webhookTimeout": "HTTP Timeout",
-  "settings.quotaThreshold": "Quota Warning Threshold",
-  "settings.quotaThresholdDesc": "Send warning when usage reaches this percentage (0-1).",
   "settings.emailTemplates": "Email Templates",
   "settings.reminderDayOne": "{n} day",
   "settings.reminderDayMany": "{n} days",
@@ -743,7 +733,7 @@ const en = {
   "customers.cancelAtEnd": "Cancel at End",
 
   // Licenses refund
-  "licenses.refund": "Refund",
+  "licenses.refund": "Cancel and revoke",
   "licenses.updatesUntil": "Updates Until",
   "licenses.updatesUntilEdit": "Edit update period",
   "licenses.updatesUntilClear": "Leave empty for lifetime updates.",

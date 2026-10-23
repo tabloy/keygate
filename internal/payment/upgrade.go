@@ -663,6 +663,7 @@ const (
 	upgradeEndPastDue     = "past_due_timeout"
 	upgradeEndGrace       = "grace_period_ended"
 	upgradeEndRefundEarly = "refunded_before_applied"
+	upgradeEndAdmin       = "admin_canceled"
 )
 
 // revertUpgrade undoes an applied upgrade: the licence goes back to the
@@ -780,6 +781,21 @@ func (h *StripeHandler) endSubscriptionUpgrade(ctx context.Context, lic *model.L
 		return true, err
 	}
 	return !res.FreePlanGone, nil
+}
+
+// CancelForAdmin ends a licence's Stripe subscription for the admin
+// "cancel and revoke" action. A licence an upgrade moved onto that
+// subscription goes back to its free plan instead (reverted true), as a
+// full refund in Stripe would have it; any other is left for the caller
+// to revoke. The subscription is cancelled first either way, and one
+// Stripe has already ended is fine. An error means it may still be
+// billing, so the caller must change nothing.
+func (h *StripeHandler) CancelForAdmin(ctx context.Context, lic *model.License) (reverted bool, err error) {
+	handled, err := h.endSubscriptionUpgrade(ctx, lic, lic.StripeSubscriptionID, upgradeEndAdmin, "admin", true)
+	if handled || err != nil {
+		return handled, err
+	}
+	return false, cancelSubscription(lic.StripeSubscriptionID)
 }
 
 // EndPastDueUpgrade is the dunning sweep's hook, for a licence past due

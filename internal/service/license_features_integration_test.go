@@ -70,7 +70,7 @@ func TestAddonsReachVerifyTokenAndUsage(t *testing.T) {
 		if err := s.CreateAddon(ctx, a); err != nil {
 			t.Fatalf("addon %d: %v", i, err)
 		}
-		if err := s.AddLicenseAddon(ctx, &model.LicenseAddon{LicenseID: lic.ID, AddonID: a.ID, Enabled: true}); err != nil {
+		if _, err := s.AddLicenseAddon(ctx, &model.LicenseAddon{LicenseID: lic.ID, AddonID: a.ID, Enabled: true}); err != nil {
 			t.Fatal(err)
 		}
 		addonIDs = append(addonIDs, a.ID)

@@ -860,20 +860,45 @@ type MeteredBilling struct {
 
 // Webhook event constants
 const (
-	EventLicenseCreated    = "license.created"
-	EventLicenseCanceled   = "license.canceled"
-	EventLicenseSuspended  = "license.suspended"
-	EventLicenseReinstated = "license.reinstated"
-	EventLicenseRevoked    = "license.revoked"
-	EventQuotaWarning      = "quota.warning"
-	EventQuotaExceeded     = "quota.exceeded"
-	EventSeatAdded         = "seat.added"
-	EventSeatRemoved       = "seat.removed"
-	EventPlanChanged       = "plan.changed"
-	EventReleasePublished  = "release.published"
-	EventReleaseYanked     = "release.yanked"
-	EventReleaseUnyanked   = "release.unyanked"
+	EventLicenseCreated          = "license.created"
+	EventLicenseActivated        = "license.activated"
+	EventLicenseDeactivated      = "license.deactivated"
+	EventLicenseExpiryChanged    = "license.expiry_changed"
+	EventLicenseUpdatesChanged   = "license.updates_changed"
+	EventLicenseExpired          = "license.expired"
+	EventLicenseCanceled         = "license.canceled"
+	EventLicenseSuspended        = "license.suspended"
+	EventLicenseReinstated       = "license.reinstated"
+	EventLicenseRevoked          = "license.revoked"
+	EventLicensePaymentFailed    = "license.payment_failed"
+	EventLicensePaymentRecovered = "license.payment_recovered"
+	EventQuotaWarning            = "quota.warning"
+	EventQuotaExceeded           = "quota.exceeded"
+	EventSeatAdded               = "seat.added"
+	EventSeatRemoved             = "seat.removed"
+	EventPlanChanged             = "plan.changed"
+	EventReleasePublished        = "release.published"
+	EventReleaseYanked           = "release.yanked"
+	EventReleaseUnyanked         = "release.unyanked"
 )
+
+// WebhookEvents is every event a webhook can subscribe to. Delivery
+// matches the name exactly, so a subscription to anything else would
+// never fire; it is refused instead. webhook.test is sent to an
+// endpoint on request whatever it subscribes to, so it is not here.
+var WebhookEvents = []string{
+	EventLicenseCreated, EventLicenseActivated, EventLicenseDeactivated,
+	EventLicenseExpiryChanged, EventLicenseUpdatesChanged, EventLicenseExpired,
+	EventLicenseCanceled, EventLicenseSuspended, EventLicenseReinstated,
+	EventLicenseRevoked, EventLicensePaymentFailed, EventLicensePaymentRecovered,
+	EventQuotaWarning, EventQuotaExceeded, EventSeatAdded, EventSeatRemoved,
+	EventPlanChanged, EventReleasePublished, EventReleaseYanked, EventReleaseUnyanked,
+}
+
+// IsValidWebhookEvent reports whether e is in WebhookEvents.
+func IsValidWebhookEvent(e string) bool {
+	return slices.Contains(WebhookEvents, e)
+}
 
 // ─── Release (logical release event) ───
 //

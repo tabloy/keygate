@@ -129,8 +129,7 @@ func (s *Store) DeleteProduct(ctx context.Context, id string) error {
 				return err
 			}
 		}
-		_, err := tx.NewDelete().Model((*model.Product)(nil)).Where("id = ?", id).Exec(ctx)
-		return err
+		return deletedOne(tx.NewDelete().Model((*model.Product)(nil)).Where("id = ?", id).Exec(ctx))
 	})
 }
 
@@ -242,8 +241,7 @@ func (s *Store) PlanTermsAt(ctx context.Context, planID string, t time.Time) (da
 }
 
 func (s *Store) DeletePlan(ctx context.Context, id string) error {
-	_, err := s.DB.NewDelete().Model((*model.Plan)(nil)).Where("id = ?", id).Exec(ctx)
-	return err
+	return deletedOne(s.DB.NewDelete().Model((*model.Plan)(nil)).Where("id = ?", id).Exec(ctx))
 }
 
 // CountPlansIncompatibleWithType counts plans under the given product
@@ -295,8 +293,7 @@ func (s *Store) UpdateEntitlement(ctx context.Context, e *model.Entitlement) err
 }
 
 func (s *Store) DeleteEntitlement(ctx context.Context, id string) error {
-	_, err := s.DB.NewDelete().Model((*model.Entitlement)(nil)).Where("id = ?", id).Exec(ctx)
-	return err
+	return deletedOne(s.DB.NewDelete().Model((*model.Entitlement)(nil)).Where("id = ?", id).Exec(ctx))
 }
 
 // ─── API Key ───
@@ -331,8 +328,7 @@ func (s *Store) CreateAPIKey(ctx context.Context, ak *model.APIKey, rawKey strin
 }
 
 func (s *Store) DeleteAPIKey(ctx context.Context, id string) error {
-	_, err := s.DB.NewDelete().Model((*model.APIKey)(nil)).Where("id = ?", id).Exec(ctx)
-	return err
+	return deletedOne(s.DB.NewDelete().Model((*model.APIKey)(nil)).Where("id = ?", id).Exec(ctx))
 }
 
 // GetLicenseProductID is a one-column lookup used by handlers that

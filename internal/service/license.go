@@ -110,6 +110,9 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 	if err := s.assertUsable(lic); err != nil {
 		return nil, err
 	}
+	if err := refuseFloating(lic); err != nil {
+		return nil, err
+	}
 
 	if existing, err := s.store.FindActivation(ctx, lic.ID, in.Identifier); err == nil {
 		_ = s.store.TouchActivation(ctx, existing.ID)
@@ -296,6 +299,10 @@ func (s *LicenseService) Verify(ctx context.Context, in VerifyInput) (*VerifyRes
 		return nil, licenseNotFound()
 	}
 
+	if err := refuseFloating(lic); err != nil {
+		return nil, err
+	}
+
 	act, err := s.store.FindActivation(ctx, lic.ID, in.Identifier)
 	if err != nil {
 		middleware.LicenseVerifications.WithLabelValues(lic.ProductID, "not_activated").Inc()
@@ -335,6 +342,20 @@ func (s *LicenseService) Verify(ctx context.Context, in VerifyInput) (*VerifyRes
 		ExternalCustomerID:  lic.ExternalCustomerID,
 		ExternalWorkspaceID: lic.ExternalWorkspaceID,
 	}, nil
+}
+
+// refuseFloating stops activate and verify on a floating plan. Its
+// limit counts checked-out sessions; device activations used to be
+// counted separately against the same number, so a one-seat floating
+// licence ran on two machines at once. That includes activations made
+// before the plan was floating, or before this check: they no longer
+// get a token. Deactivate still works, so a client can clean up.
+func refuseFloating(lic *model.License) error {
+	if lic.Plan != nil && lic.Plan.LicenseModel == "floating" {
+		return apperr.Conflict("FLOATING_LICENSE",
+			"this license is floating: check out a seat with /license/floating/checkout instead")
+	}
+	return nil
 }
 
 // ─── Deactivate ───

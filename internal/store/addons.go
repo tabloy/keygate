@@ -51,26 +51,30 @@ func (s *Store) UpdateAddon(ctx context.Context, a *model.Addon) error {
 }
 
 func (s *Store) DeleteAddon(ctx context.Context, id string) error {
-	_, err := s.DB.NewDelete().Model((*model.Addon)(nil)).Where("id = ?", id).Exec(ctx)
-	return err
+	return deletedOne(s.DB.NewDelete().Model((*model.Addon)(nil)).Where("id = ?", id).Exec(ctx))
 }
 
 // ─── License Addons ───
 
-func (s *Store) AddLicenseAddon(ctx context.Context, la *model.LicenseAddon) error {
+// AddLicenseAddon attaches an addon to a licence, or enables it again
+// when it is already attached. la is filled from the stored row, so an
+// existing attachment comes back with its own id; created reports
+// whether the row is new.
+func (s *Store) AddLicenseAddon(ctx context.Context, la *model.LicenseAddon) (created bool, err error) {
 	if la.ID == "" {
 		la.ID = newID()
 	}
-	_, err := s.DB.NewInsert().Model(la).
+	id := la.ID
+	err = s.DB.NewInsert().Model(la).
 		On("CONFLICT (license_id, addon_id) DO UPDATE").
-		Set("enabled = EXCLUDED.enabled").Exec(ctx)
-	return err
+		Set("enabled = EXCLUDED.enabled").
+		Returning("*").Scan(ctx)
+	return la.ID == id, err
 }
 
 func (s *Store) RemoveLicenseAddon(ctx context.Context, licenseID, addonID string) error {
-	_, err := s.DB.NewDelete().Model((*model.LicenseAddon)(nil)).
-		Where("license_id = ? AND addon_id = ?", licenseID, addonID).Exec(ctx)
-	return err
+	return deletedOne(s.DB.NewDelete().Model((*model.LicenseAddon)(nil)).
+		Where("license_id = ? AND addon_id = ?", licenseID, addonID).Exec(ctx))
 }
 
 func (s *Store) ListLicenseAddons(ctx context.Context, licenseID string, p Page) ([]*model.LicenseAddon, int, error) {

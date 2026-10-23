@@ -57,15 +57,16 @@ import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin, type WebhookConfig } from "@/lib/api"
 import { boolColor, formatDate } from "@/lib/utils"
 
-// Must stay in sync with the events the backend actually dispatches —
-// Dispatch only delivers to webhooks subscribed to the event, so an
-// event missing from this list can never be subscribed to and is
-// effectively undeliverable for anyone configuring from the dashboard.
+// Must stay in sync with model.WebhookEvents on the server, which
+// refuses any other name. Dispatch only delivers to webhooks subscribed
+// to the event, so an event missing from this list can never be
+// subscribed to from the dashboard.
 const WEBHOOK_EVENTS = [
   "license.created",
   "license.activated",
   "license.deactivated",
   "license.expiry_changed",
+  "license.updates_changed",
   "license.expired",
   "license.canceled",
   "license.suspended",
@@ -78,6 +79,9 @@ const WEBHOOK_EVENTS = [
   "seat.added",
   "seat.removed",
   "plan.changed",
+  "release.published",
+  "release.yanked",
+  "release.unyanked",
 ]
 
 export default function WebhooksPage() {

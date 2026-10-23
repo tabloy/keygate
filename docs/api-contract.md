@@ -40,10 +40,11 @@ whatever that consumer requires. They are the only exceptions above.
 | `GET /releases/:slug/velopack/[:platform/]:file` | the same feed at the URL Velopack builds, or a `302` to a package |
 | `GET /releases/:slug/upgrade.json` | a bare Tauri manifest, or `204` when there is no update |
 | `GET /admin/products/:id/signing-key/public.pem` | the PEM itself |
+| `GET /admin/licenses/export` | a CSV file, or a bare JSON array with `format=json`, as an attachment |
 | `POST /webhook/stripe` | `{"received": …}`, for Stripe; **errors are not the envelope either** |
 | `GET /pay/:checkout_id` | a 302 to Stripe, plain text on error; outside `/api/` |
 
-The four read routes still answer *errors* with the envelope: ask
+The read routes still answer *errors* with the envelope: ask
 `feed.xml` for a product that does not exist and you get `404
 NOT_FOUND` as JSON. So check the status first and decode the route's
 own format only on success. The two write routes do not.
@@ -51,7 +52,9 @@ own format only on success. The two write routes do not.
 ## Naming and types
 
 - `snake_case` throughout.
-- A field ending in `_at` is an RFC3339 timestamp, always UTC.
+- A field ending in `_at` is an RFC3339 timestamp. It carries its UTC
+  offset, which is not always `Z`: parse the offset rather than assume
+  UTC.
 - A chart bucket (`date`, `period`) is a plain `YYYY-MM-DD` date, not a
   timestamp. Do not hand both to the same parser.
 - An empty collection is `[]`, never `null`.
@@ -106,8 +109,13 @@ silently**. Do not write one sorting helper and point it at every list.
 - `/license/*` and the public feeds need no API key: the `license_key`
   in the body is the credential.
 - `/admin/*` takes `Authorization: Bearer kg_live_…` or a session
-  cookie. An API key bound to one product gets `403
-  PRODUCT_SCOPE_MISMATCH` reaching for another's resources.
+  cookie. A key's scopes decide which routes it reaches: `admin` all
+  of `/admin/*`, `licenses:write` the license routes, `releases:write`
+  the release routes; a route outside them is `403
+  INSUFFICIENT_SCOPE`. A `licenses:write` or `releases:write` key may be
+  bound to one product: it gets `403 PRODUCT_SCOPE_MISMATCH` reaching
+  for another product's resources, and its lists and the license export
+  narrow to its product. An `admin` key cannot be bound.
 - `/portal/*` is a customer session.
   `/portal/licenses/:license_key/activations` carries the key in the
   path; the server redacts that segment before logging and an SDK's own
@@ -133,6 +141,10 @@ before the handler runs:
 | `BODY_TOO_LARGE` | 413 (over 256 KiB) |
 | `IDEMPOTENCY_KEY_CONFLICT` | 422 (same key, different body) |
 | `IDEMPOTENCY_IN_FLIGHT` | 409 (`Retry-After: 1`) |
+
+Keys are stored per endpoint, not per caller: use random keys. 4xx
+answers are replayed too, including a `429 LOCKED_OUT` on the request
+that tripped the lockout; retry that with a new key once it has passed.
 
 The other `POST /license/*` routes are idempotent by nature and ignore
 the header.

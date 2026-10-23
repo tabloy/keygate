@@ -306,7 +306,10 @@ func (h *StripeHandler) Webhook(c *gin.Context) {
 		}
 	}
 	if err != nil {
-		slog.Error("stripe webhook verification failed", "error", err.Error())
+		// A warning, not an error: anyone can post here, and a request
+		// without Stripe's signature is not a fault of this install. A
+		// wrong STRIPE_WEBHOOK_SECRET shows up as a run of these.
+		slog.Warn("stripe webhook verification failed", "error", err.Error())
 		response.BadRequest(c, "invalid signature")
 		return
 	}
@@ -1763,6 +1766,7 @@ func (h *StripeHandler) applySubscriptionState(ctx context.Context, lic *model.L
 	// (clearing past_due_at, firing the recovered email) only run when
 	// the transition is actually past_due → active.
 	wasPastDue := lic.Status == model.StatusPastDue
+	wasCanceled := lic.Status == model.StatusCanceled
 	// Anchor for the episode-scoped recovered notification tag.
 	// Captured here because the write below nulls past_due_at.
 	var episode int64
@@ -1839,6 +1843,20 @@ func (h *StripeHandler) applySubscriptionState(ctx context.Context, lic *model.L
 	// in parallel) collapse into one email + one webhook dispatch.
 	if wasPastDue && lic.Status == model.StatusActive {
 		h.notifyPaymentRecovered(ctx, lic, episode)
+	}
+	// A canceled subscription is deleted next, and the deletion sends
+	// license.canceled. An unpaid one is never deleted, so this is the
+	// only moment its licence ends: say so here, once.
+	if data.Status == "unpaid" && !wasCanceled {
+		h.Store.Audit(ctx, &model.AuditLog{
+			Entity: "license", EntityID: lic.ID, Action: "canceled",
+			ActorType: "webhook", Changes: map[string]any{"provider": "stripe", "reason": "subscription_unpaid"},
+		})
+		if h.WebhookSvc != nil {
+			h.WebhookSvc.Dispatch(ctx, lic.ProductID, model.EventLicenseCanceled, map[string]any{
+				"license_id": lic.ID, "email": lic.Email, "reason": "subscription_unpaid",
+			})
+		}
 	}
 	return nil
 }
@@ -2061,6 +2079,7 @@ func (h *StripeHandler) onChargeRefunded(ctx context.Context, raw json.RawMessag
 				ActorType: "webhook",
 				Changes:   map[string]any{"days": reverted.Days, "provider": "stripe", "charge_id": data.ID, "renewal_id": reverted.ID},
 			})
+			h.notifyUpdatesChanged(ctx, reverted.LicenseID, "renewal_refunded")
 		}
 		if earlyRefund {
 			slog.Info("stripe refund: renewal refunded before it was applied", "payment_intent", data.PaymentIntent, "license_id", data.Metadata[metaLicenseID])
@@ -2107,8 +2126,8 @@ func (h *StripeHandler) onChargeRefunded(ctx context.Context, raw json.RawMessag
 			Changes:   map[string]any{"reason": "full_refund", "provider": "stripe", "charge_id": data.ID},
 		})
 		if h.WebhookSvc != nil {
-			h.WebhookSvc.Dispatch(ctx, lic.ProductID, "license.revoked", map[string]any{
-				"license_id": lic.ID, "email": lic.Email,
+			h.WebhookSvc.Dispatch(ctx, lic.ProductID, model.EventLicenseRevoked, map[string]any{
+				"license_id": lic.ID, "email": lic.Email, "reason": "refund",
 			})
 		}
 	} else if data.AmountRefunded > 0 {
@@ -2319,8 +2338,30 @@ func (h *StripeHandler) fulfillRenewal(ctx context.Context, metadata map[string]
 			"session_id": sessionID, "provider": "stripe", "source": source,
 		},
 	})
+	if !refundedFirst {
+		h.notifyUpdatesChanged(ctx, lic.ID, "renewal")
+	}
 	slog.Info("stripe renewal: applied", "license_id", lic.ID, "days", days, "action", action, "source", source)
 	return true, nil
+}
+
+// notifyUpdatesChanged sends license.updates_changed with the licence's
+// update period as it now stands, read back after the write. null means
+// no cutoff, as on the admin route that sends the same event.
+func (h *StripeHandler) notifyUpdatesChanged(ctx context.Context, licenseID, reason string) {
+	if h.WebhookSvc == nil {
+		return
+	}
+	lic, err := h.Store.FindLicenseByID(ctx, licenseID)
+	if err != nil {
+		slog.Error("stripe renewal: license.updates_changed not sent", "license_id", licenseID, "error", err)
+		return
+	}
+	payload := map[string]any{"license_id": lic.ID, "email": lic.Email, "updates_until": nil, "reason": reason}
+	if until := lic.EffectiveUpdatesUntil(); until != nil {
+		payload["updates_until"] = until.Format(time.RFC3339)
+	}
+	h.WebhookSvc.Dispatch(ctx, lic.ProductID, model.EventLicenseUpdatesChanged, payload)
 }
 
 // RenewUpdates starts a one-time checkout that extends the
@@ -2832,9 +2873,12 @@ func (h *StripeHandler) CreatePortalSession(c *gin.Context) {
 		return
 	}
 
+	// Stripe sends the customer back to return_url, so only a page of
+	// this site is accepted; anything else falls back to the portal.
 	returnURL := req.ReturnURL
-	if returnURL == "" {
-		returnURL = h.BaseURL + "/portal"
+	base := strings.TrimRight(h.BaseURL, "/")
+	if returnURL != base && !strings.HasPrefix(returnURL, base+"/") {
+		returnURL = base + "/portal"
 	}
 
 	params := &stripe.BillingPortalSessionParams{
@@ -2897,7 +2941,9 @@ func (h *StripeHandler) ListInvoices(c *gin.Context) {
 
 	var invoices []invoiceItem
 	iter := stripeinvoice.List(params)
-	for iter.Next() {
+	// The iterator pages on by itself; checking the count first keeps
+	// this to the 20 newest, one request to Stripe.
+	for len(invoices) < 20 && iter.Next() {
 		inv := iter.Invoice()
 		invoices = append(invoices, invoiceItem{
 			ID:          inv.ID,

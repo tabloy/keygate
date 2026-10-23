@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -12,7 +13,26 @@ import (
 	"github.com/tabloy/keygate/pkg/response"
 )
 
-const maxIdentifierLen = 256
+const (
+	maxIdentifierLen = 256
+	maxLabelLen      = 256 // characters
+)
+
+// cleanIdentifier trims the identifier and checks it, writing a 400 and
+// returning false when it is unusable. One made only of spaces passed
+// the required check and then took an activation slot as "".
+func cleanIdentifier(c *gin.Context, raw string) (string, bool) {
+	id := strings.TrimSpace(raw)
+	if id == "" {
+		response.BadRequest(c, "identifier is required")
+		return "", false
+	}
+	if len(id) > maxIdentifierLen {
+		response.BadRequest(c, "identifier too long")
+		return "", false
+	}
+	return id, true
+}
 
 type LicenseHandler struct {
 	svc *service.LicenseService
@@ -33,9 +53,21 @@ func (h *LicenseHandler) Activate(c *gin.Context) {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
-	req.Identifier = strings.TrimSpace(req.Identifier)
-	if len(req.Identifier) > maxIdentifierLen {
-		response.BadRequest(c, "identifier too long")
+	var ok bool
+	if req.Identifier, ok = cleanIdentifier(c, req.Identifier); !ok {
+		return
+	}
+	// The column takes only these two; anything else used to reach the
+	// database and come back as a 500.
+	switch req.IdentifierType {
+	case "", "device", "user":
+	default:
+		response.BadRequest(c, "identifier_type must be device or user")
+		return
+	}
+	req.Label = strings.TrimSpace(req.Label)
+	if utf8.RuneCountInString(req.Label) > maxLabelLen {
+		response.BadRequest(c, "label too long (max 256 characters)")
 		return
 	}
 
@@ -64,9 +96,8 @@ func (h *LicenseHandler) Verify(c *gin.Context) {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
-	req.Identifier = strings.TrimSpace(req.Identifier)
-	if len(req.Identifier) > maxIdentifierLen {
-		response.BadRequest(c, "identifier too long")
+	var ok bool
+	if req.Identifier, ok = cleanIdentifier(c, req.Identifier); !ok {
 		return
 	}
 
@@ -93,9 +124,8 @@ func (h *LicenseHandler) Deactivate(c *gin.Context) {
 		response.BadRequest(c, "license_key and identifier are required")
 		return
 	}
-	req.Identifier = strings.TrimSpace(req.Identifier)
-	if len(req.Identifier) > maxIdentifierLen {
-		response.BadRequest(c, "identifier too long")
+	var ok bool
+	if req.Identifier, ok = cleanIdentifier(c, req.Identifier); !ok {
 		return
 	}
 

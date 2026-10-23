@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,6 +127,11 @@ func signupEmail(c *gin.Context, raw string) (string, bool) {
 }
 
 func signupFull(c *gin.Context) {
+	// The cap counts sign-ups since midnight UTC, so that is when it
+	// opens again.
+	now := time.Now().UTC()
+	midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	c.Header("Retry-After", strconv.Itoa(int(midnight.Sub(now).Seconds())+1))
 	response.Err(c, http.StatusTooManyRequests, "SIGNUP_LIMIT_REACHED",
 		"this plan has taken all the sign-ups it accepts today; try again tomorrow, or sign in if you already have a license")
 }

@@ -187,6 +187,9 @@ func (c *ExpiryChecker) MarkPastDueAsExpired(ctx context.Context) {
 			ActorType: "system",
 			Changes:   map[string]any{"reason": "past_due_timeout"},
 		})
+		c.webhook.Dispatch(ctx, lic.ProductID, model.EventLicenseExpired, map[string]any{
+			"license_id": lic.ID, "email": lic.Email, "reason": "past_due_timeout",
+		})
 		c.logger.Info("past_due expired", "id", lic.ID)
 	}
 }

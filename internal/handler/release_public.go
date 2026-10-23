@@ -140,10 +140,11 @@ type feedRequest struct {
 	licensed bool
 }
 
-// parseFeedRequest validates path + query params. All channels (stable
-// / beta / alpha / dev) are public — trust is established by the
-// artifact's ed25519 signature, not by URL secrecy. On any error the
-// response is already written and ok=false.
+// parseFeedRequest validates path + query params. Every channel is
+// public unless the product has feed_license_required, in which case a
+// license key or token is required. Trust in an artifact comes from its
+// ed25519 signature, not from URL secrecy. On any error the response is
+// already written and ok=false.
 func (h *ReleasePublicHandler) parseFeedRequest(c *gin.Context) (req feedRequest, ok bool) {
 	// Every feed response varies on the key header, and a response
 	// built for a key — including a 404 for a bad key and Tauri's

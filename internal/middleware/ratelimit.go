@@ -6,6 +6,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -186,6 +187,14 @@ func SetRateLimitBackend(b RateLimitBackend) {
 
 // ─── Middleware ───
 
+// rateLimited answers 429. Retry-After is the whole window: the backend
+// does not say when this caller's count falls back under the limit, and
+// a full window always clears it.
+func rateLimited(c *gin.Context, window time.Duration) {
+	c.Header("Retry-After", strconv.Itoa(max(1, int(window.Seconds()))))
+	abortWithError(c, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests, please try again later")
+}
+
 // RateLimit creates a rate limiting middleware using the configured backend.
 func RateLimit(rate int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -197,7 +206,7 @@ func RateLimit(rate int, window time.Duration) gin.HandlerFunc {
 		}
 
 		if !defaultBackend.Allow(key, rate, window) {
-			abortWithError(c, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests, please try again later")
+			rateLimited(c, window)
 			return
 		}
 		c.Next()
@@ -214,7 +223,7 @@ func RateLimit(rate int, window time.Duration) gin.HandlerFunc {
 func RateLimitByIPScoped(scope string, rate int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !defaultBackend.Allow("ip:"+scope+":"+c.ClientIP(), rate, window) {
-			abortWithError(c, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests, please try again later")
+			rateLimited(c, window)
 			return
 		}
 		c.Next()
@@ -225,7 +234,7 @@ func RateLimitByIPScoped(scope string, rate int, window time.Duration) gin.Handl
 func RateLimitByIP(rate int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !defaultBackend.Allow("ip:"+c.ClientIP(), rate, window) {
-			abortWithError(c, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests, please try again later")
+			rateLimited(c, window)
 			return
 		}
 		c.Next()

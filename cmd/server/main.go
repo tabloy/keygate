@@ -18,6 +18,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -435,6 +436,7 @@ func main() {
 	// cannot be put at all.
 	if cfg.StripeSecretKey != "" {
 		adminH.SubscriptionEnded = stripeH.SubscriptionEnded
+		adminH.CancelSubscription = stripeH.CancelForAdmin
 	}
 	// Recorded across replicas and across restarts: links signed
 	// before this start keep the lifetime they were signed with, so
@@ -647,8 +649,11 @@ func main() {
 
 		// DB check
 		if err := db.DB.PingContext(c.Request.Context()); err != nil {
+			// The cause goes to the log, not to a public endpoint: a
+			// driver error can carry host names and user names.
 			status = "degraded"
-			checks["database"] = "error: " + err.Error()
+			checks["database"] = "error"
+			logger.Error("health check: database unreachable", "error", err)
 		} else {
 			checks["database"] = "ok"
 		}
@@ -783,12 +788,12 @@ func main() {
 
 	// Release feed endpoints.
 	//
-	// Auth model: all channels (stable / beta / alpha / dev) are public.
-	// Trust comes from the artifact's ed25519 signature, verified by
-	// Sparkle/Velopack/Tauri on the client — not from URL secrecy.
-	// License enforcement happens at app start (POST /license/verify),
-	// not at update-feed time. To keep a pre-release channel private,
-	// don't publish to it; once published, treat the feed URL as public.
+	// Auth model: every channel (stable / beta / alpha / dev) is public,
+	// unless the product sets feed_license_required: its feeds then need
+	// a license key or token, and only serve releases inside the
+	// license's update period. Trust comes from the artifact's ed25519
+	// signature, verified by Sparkle/Velopack/Tauri on the client, not
+	// from URL secrecy.
 	//
 	// Feed clients poll on a timer — sometimes once a minute. We give
 	// the per-IP bucket 4× the regular API limit so a single host
@@ -939,7 +944,7 @@ func main() {
 			name := strings.TrimSpace(req.Name)
 			// Strip HTML tags to prevent XSS
 			name = stripHTMLTags(name)
-			if len(name) > 100 {
+			if utf8.RuneCountInString(name) > 100 {
 				response.BadRequest(c, "name too long (max 100 characters)")
 				return
 			}
@@ -1043,14 +1048,14 @@ func main() {
 			}
 			if !strings.EqualFold(lic.Email, emailStr) {
 				// Check if user has a seat on this license. Return
-				// the same 404 the handler returns when the license
-				// doesn't exist — otherwise the differential between
+				// the same 404, code included, the handler returns
+				// when the license doesn't exist — otherwise the differential between
 				// 403 (exists but yours) and 404 (doesn't exist) is
 				// a license-existence oracle. License keys are 32-
 				// byte random so the keyspace defeats enumeration in
 				// practice, but the oracle is gratuitous.
 				if _, err := db.FindSeatByEmail(c, lic.ID, emailStr); err != nil {
-					response.NotFound(c, "license not found")
+					response.Err(c, http.StatusNotFound, "LICENSE_NOT_FOUND", "license not found")
 					c.Abort()
 					return
 				}
@@ -1107,7 +1112,7 @@ func main() {
 			// as a "this license exists but isn't yours" oracle.
 			seat, err := db.FindSeatByEmail(c, lic.ID, emailStr)
 			if err != nil || seat.AcceptedAt == nil || seat.Role != "admin" {
-				response.NotFound(c, "license not found")
+				response.Err(c, http.StatusNotFound, "LICENSE_NOT_FOUND", "license not found")
 				c.Abort()
 				return
 			}

@@ -941,8 +941,8 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                       </AlertDialogContent>
                     </AlertDialog>
                   )}
-                  {/* Refund cancels the subscription and revokes: only a
-                    licence a subscription bills has one to cancel. */}
+                  {/* Cancel and revoke (the /refund route): only a licence
+                    a subscription bills has one to cancel. */}
                   {lic.stripe_subscription_id && lic.status !== "revoked" && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>

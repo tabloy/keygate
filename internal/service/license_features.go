@@ -30,7 +30,9 @@ func licenseFeatures(ctx context.Context, st *store.Store, lic *model.License) (
 		return nil, err
 	}
 	for _, la := range addons {
-		if la.Addon == nil {
+		// An addon of another product grants nothing here. Attaching
+		// one is refused now, but it once went through.
+		if la.Addon == nil || la.Addon.ProductID != lic.ProductID {
 			continue
 		}
 		a := la.Addon

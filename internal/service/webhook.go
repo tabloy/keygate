@@ -401,7 +401,35 @@ func (s *WebhookService) ValidateTarget(rawURL string) error {
 	if ip := net.ParseIP(host); ip != nil && isNonPublicIP(ip) {
 		return ErrPrivateTarget
 	}
+	// 2130706433, 0x7f000001 and 127.1 are 127.0.0.1 to most resolvers,
+	// but not to net.ParseIP. No public host name is all digits (a TLD
+	// never is), so a numeric host ParseIP cannot read is refused here
+	// rather than left to the check at delivery.
+	if net.ParseIP(host) == nil && numericHost(host) {
+		return ErrPrivateTarget
+	}
 	return nil
+}
+
+// numericHost reports whether every dot-separated part of host is a
+// number, decimal or 0x hex: an IPv4 address in one of the shorthand
+// forms inet_aton accepts. 0xbeef.cafe is a host name, since cafe is
+// not a number.
+func numericHost(host string) bool {
+	parts := strings.Split(strings.ToLower(strings.TrimSuffix(host, ".")), ".")
+	if len(parts) > 4 {
+		return false
+	}
+	for _, p := range parts {
+		digits := "0123456789"
+		if strings.HasPrefix(p, "0x") {
+			p, digits = p[2:], "0123456789abcdef"
+		}
+		if p == "" || strings.Trim(p, digits) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *WebhookService) Dispatch(ctx context.Context, productID, event string, data map[string]any) {

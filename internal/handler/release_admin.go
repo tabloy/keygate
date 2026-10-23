@@ -75,6 +75,11 @@ func (h *ReleaseAdminHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// Scope before the lookup, so a bound key cannot learn whether
+	// another product exists.
+	if !requireKeyProductScope(c, req.ProductID) {
+		return
+	}
 	prod, err := h.store.FindProductByID(c.Request.Context(), req.ProductID)
 	if err != nil {
 		response.NotFound(c, "product not found")
@@ -83,9 +88,6 @@ func (h *ReleaseAdminHandler) Create(c *gin.Context) {
 	if !model.ProductSupports(prod.Type, model.CapReleases) {
 		response.Err(c, 400, "INCOMPATIBLE_PRODUCT_TYPE",
 			"release management is not available for "+prod.Type+" products")
-		return
-	}
-	if !requireKeyProductScope(c, req.ProductID) {
 		return
 	}
 
@@ -463,19 +465,11 @@ func (h *ReleaseAdminHandler) List(c *gin.Context) {
 		}
 	}
 
-	productID := c.Query("product_id")
-	// Same auto-narrowing pattern as AdminHandler.ListLicenses: a
-	// product-scoped key never sees other products' releases, even
+	// A product-scoped key never sees other products' releases, even
 	// if it forgets the product_id filter.
-	if v, ok := c.Get("api_key"); ok {
-		if ak, ok := v.(*model.APIKey); ok && ak != nil && ak.ProductID != "" {
-			if productID != "" && productID != ak.ProductID {
-				response.Err(c, 403, "PRODUCT_SCOPE_MISMATCH",
-					"api_key is bound to a different product")
-				return
-			}
-			productID = ak.ProductID
-		}
+	productID, ok := keyProductFilter(c, c.Query("product_id"))
+	if !ok {
+		return
 	}
 
 	filter := store.ReleaseFilter{
