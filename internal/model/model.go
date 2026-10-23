@@ -117,10 +117,11 @@ func ProductSupports(t, capability string) bool {
 type Product struct {
 	bun.BaseModel `bun:"table:products"`
 
-	ID   string `bun:",pk" json:"id"`
-	Name string `bun:",notnull" json:"name"`
-	Slug string `bun:",notnull,unique" json:"slug"`
-	Type string `bun:",notnull" json:"type"`
+	ID            string `bun:",pk" json:"id"`
+	Name          string `bun:",notnull" json:"name"`
+	LicensePrefix string `bun:",notnull,default:'KG'" json:"license_prefix"`
+	Slug          string `bun:",notnull,unique" json:"slug"`
+	Type          string `bun:",notnull" json:"type"`
 
 	// MinimumSupportedVersion: optional semver floor. When non-empty,
 	// auto-update feeds embed this so clients can refuse to keep

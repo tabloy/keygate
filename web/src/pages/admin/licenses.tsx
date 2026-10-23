@@ -86,7 +86,10 @@ function localDateValue(iso: string): string {
 // Rows show only the tail of a key. The full value never rides in a
 // list or detail payload — it is fetched per reveal and audited.
 function maskKey(hint?: string) {
-  return hint ? `KG-••••-${hint}` : "••••"
+  if (!hint) return "••••"
+  const delimIndex = hint.indexOf('|')
+  if (delimIndex === -1) return `••••-${hint}`
+  return `${hint.slice(0, delimIndex)}-••••${hint.slice(delimIndex+1)}`
 }
 
 export default function LicensesPage() {

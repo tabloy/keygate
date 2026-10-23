@@ -142,6 +142,7 @@ export const setup = {
     site_name: string
     product_name: string
     product_slug: string
+    product_license_prefix: string
     product_type: "desktop" | "saas" | "hybrid"
   }) => post<{ user: unknown; product: unknown; plan: unknown }>("/setup/initialize", body),
 }
@@ -279,6 +280,7 @@ export const admin = {
     name: string
     slug: string
     type: string
+    license_prefix: string
     feed_license_required?: boolean
     download_url?: string
   }) => post<Product>("/admin/products", data),
@@ -641,6 +643,7 @@ export interface Product {
   name: string
   slug: string
   type: string
+  license_prefix: string
   minimum_supported_version?: string
   minimum_supported_message?: string
   require_signing: boolean

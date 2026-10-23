@@ -438,9 +438,10 @@ func (h *AdminHandler) GetProduct(c *gin.Context) {
 
 func (h *AdminHandler) CreateProduct(c *gin.Context) {
 	var req struct {
-		Name string `json:"name" binding:"required"`
-		Slug string `json:"slug" binding:"required"`
-		Type string `json:"type" binding:"required"`
+		Name          string `json:"name" binding:"required"`
+		Slug          string `json:"slug" binding:"required"`
+		Type          string `json:"type" binding:"required"`
+		LicensePrefix string `json:"license_prefix"`
 		// FeedLicenseRequired at creation is the easy moment to gate:
 		// a product that has published nothing handed out no feed, so
 		// the gate takes effect at once and no drain has to be waited
@@ -481,7 +482,7 @@ func (h *AdminHandler) CreateProduct(c *gin.Context) {
 	}
 
 	p := &model.Product{Name: req.Name, Slug: req.Slug, Type: req.Type, FeedLicenseRequired: req.FeedLicenseRequired,
-		DownloadURL: req.DownloadURL}
+		DownloadURL: req.DownloadURL, LicensePrefix: req.LicensePrefix}
 	if err := h.Store.CreateProduct(c, p); err != nil {
 		if store.IsUniqueViolation(err) {
 			response.Err(c, http.StatusConflict, "DUPLICATE", "product slug already exists")
@@ -2169,7 +2170,7 @@ func (h *AdminHandler) CreateLicense(c *gin.Context) {
 		ProductID:           req.ProductID,
 		PlanID:              req.PlanID,
 		Email:               req.Email,
-		LicenseKey:          license.GenerateKey(""),
+		LicenseKey:          license.GenerateKey(plan.Product.LicensePrefix),
 		Status:              status,
 		Notes:               req.Notes,
 		ExternalCustomerID:  req.ExternalCustomerID,
@@ -2294,9 +2295,9 @@ func (h *AdminHandler) licenseKeyHint(l *model.License) string {
 	key := h.Store.DecryptLicenseKey(l)
 	r := []rune(key)
 	if len(r) <= 4 {
-		return string(r)
+		return fmt.Sprintf("%s|%s", l.Product.LicensePrefix, string(r))
 	}
-	return string(r[len(r)-4:])
+	return fmt.Sprintf("%s|%s", l.Product.LicensePrefix, string(r[len(r)-4:]))
 }
 
 // RevealLicenseKey returns one plaintext license key.

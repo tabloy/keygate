@@ -123,6 +123,7 @@ export default function ProductsPage() {
                   <DataTableRow>
                     <DataTableHead>{t("common.name")}</DataTableHead>
                     <DataTableHead>{t("products.slug")}</DataTableHead>
+                    <DataTableHead>{t("products.licensePrefix")}</DataTableHead>
                     <DataTableHead>{t("common.type")}</DataTableHead>
                     <DataTableHead>{t("common.created")}</DataTableHead>
                     <DataTableHead className="w-32 text-right">{t("common.actions")}</DataTableHead>
@@ -135,6 +136,9 @@ export default function ProductsPage() {
                       <DataTableCell className="font-medium">{p.name}</DataTableCell>
                       <DataTableCell>
                         <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.slug}</code>
+                      </DataTableCell>
+                      <DataTableCell>
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.license_prefix}</code>
                       </DataTableCell>
                       <DataTableCell>
                         <Badge variant="secondary">{p.type}</Badge>
@@ -214,6 +218,7 @@ export default function ProductsPage() {
           onSubmit={(d) => createMut.mutate(d)}
           loading={createMut.isPending}
           title={t("products.createTitle")}
+          isEditing={false}
         />
       )}
 
@@ -226,6 +231,7 @@ export default function ProductsPage() {
           onSubmit={(d) => updateMut.mutate({ id: editing.id, ...d })}
           loading={updateMut.isPending}
           title={t("products.editTitle")}
+          isEditing={true}
         />
       )}
 
@@ -260,6 +266,7 @@ function ProductDialog({
   onSubmit,
   loading,
   title,
+  isEditing,
 }: {
   open: boolean
   onClose: () => void
@@ -267,16 +274,19 @@ function ProductDialog({
   onSubmit: (data: {
     name: string
     slug: string
+    license_prefix: string
     type: string
     feed_license_required?: boolean
     download_url?: string
   }) => void
   loading: boolean
   title: string
+  isEditing: boolean
 }) {
   const { t } = useI18n()
   const [name, setName] = useState(product?.name || "")
   const [slug, setSlug] = useState(product?.slug || "")
+  const [licensePrefix, setLicensePrefix] = useState(product?.license_prefix || "KG")
   const [type, setType] = useState(product?.type || "desktop")
   const [downloadURL, setDownloadURL] = useState(product?.download_url ?? "")
 
@@ -298,6 +308,7 @@ function ProductDialog({
     onSubmit({
       name,
       slug,
+      license_prefix: licensePrefix,
       type,
       download_url: downloadURL.trim(),
       ...(needsGate && { feed_license_required: true }),
@@ -335,6 +346,16 @@ function ProductDialog({
               <Label>{t("products.slug")}</Label>
               <Input value={slug} onChange={(e) => setSlug(e.target.value)} required />
             </div>
+            {!isEditing && (
+                <div className="space-y-2">
+                  <Label>{t("products.licensePrefix")}</Label>
+                  <Input
+                      value={licensePrefix}
+                      onChange={(e) => setLicensePrefix(e.target.value)}
+                      required
+                  />
+                </div>
+            )}
             <div className="space-y-2">
               <Label>{t("common.type")}</Label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

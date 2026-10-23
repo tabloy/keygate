@@ -1249,7 +1249,7 @@ func (s *Store) FindPlanByID(ctx context.Context, id string) (*model.Plan, error
 // that must see the plan a locked license points at right now.
 func FindPlanByIDIn(ctx context.Context, db bun.IDB, id string) (*model.Plan, error) {
 	p := new(model.Plan)
-	return p, db.NewSelect().Model(p).Relation("Entitlements").Where("plan.id = ?", id).Scan(ctx)
+	return p, db.NewSelect().Model(p).Relation("Entitlements").Relation("Product").Where("plan.id = ?", id).Scan(ctx)
 }
 
 // ─── Activation ───
