@@ -89,7 +89,7 @@ function maskKey(hint?: string) {
   if (!hint) return "••••"
   const delimIndex = hint.indexOf('|')
   if (delimIndex === -1) return `••••-${hint}`
-  return `${hint.slice(0, delimIndex)}-••••${hint.slice(delimIndex+1)}`
+  return `${hint.slice(0, delimIndex)}-••••-:${hint.slice(delimIndex+1)}`
 }
 
 export default function LicensesPage() {
