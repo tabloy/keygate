@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/tabloy/keygate/internal/model"
+	"github.com/tabloy/keygate/internal/store"
 	"github.com/tabloy/keygate/pkg/response"
 )
 
@@ -160,24 +161,28 @@ func (h *AuthHandler) checkCode(c *gin.Context, email, code string) bool {
 	// Always perform hash comparison to prevent timing-based email enumeration
 	expectedHash := hashOTPCode("") // dummy
 	otpID := ""
-	otpAttempts := 0
+	attempts := 0
 	if err == nil && otp != nil {
-		expectedHash = otp.CodeHash
-		otpID = otp.ID
-		otpAttempts = otp.Attempts
+		// The guess spends one of the code's attempts before it is
+		// compared, so the limit holds under parallel guesses.
+		n, claimed, cerr := h.Store.ClaimOTPAttempt(c, otp.ID)
+		if cerr != nil {
+			response.Internal(c, cerr)
+			return false
+		}
+		if claimed {
+			expectedHash = otp.CodeHash
+			otpID = otp.ID
+			attempts = n
+		} else {
+			attempts = store.MaxOTPAttempts
+		}
 	}
 
 	codeMatch := hmac.Equal([]byte(hashOTPCode(code)), []byte(expectedHash))
 
-	if otpID != "" {
-		if err := h.Store.IncrementOTPAttempts(c, otpID); err != nil {
-			slog.Warn("failed to increment OTP attempts", "id", otpID, "error", err)
-		}
-	}
-
-	if !codeMatch || otp == nil {
-		remaining := 5 - (otpAttempts + 1)
-		if remaining <= 0 {
+	if !codeMatch || otpID == "" {
+		if store.MaxOTPAttempts-attempts <= 0 {
 			response.Unauthorized(c, "too many attempts, request a new code")
 		} else {
 			response.Unauthorized(c, "invalid or expired code")

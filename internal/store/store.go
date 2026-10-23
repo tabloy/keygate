@@ -1888,19 +1888,34 @@ func (s *Store) FindLatestValidOTPCode(ctx context.Context, email string) (*mode
 		Where("email = ?", email).
 		Where("used = false").
 		Where("expires_at > now()").
-		Where("attempts < 5").
+		Where("attempts < ?", MaxOTPAttempts).
 		OrderExpr("created_at DESC").
 		Limit(1).
 		Scan(ctx)
 	return otp, err
 }
 
-func (s *Store) IncrementOTPAttempts(ctx context.Context, id string) error {
-	_, err := s.DB.NewUpdate().Model((*model.OTPCode)(nil)).
-		Set("attempts = attempts + 1").
-		Where("id = ?", id).
-		Exec(ctx)
-	return err
+// MaxOTPAttempts is how many guesses one login code allows.
+const MaxOTPAttempts = 5
+
+// ClaimOTPAttempt takes one of the code's attempts and returns how many
+// it has used now. ok is false when none was left, or the code was used
+// or expired meanwhile: the guess must then not be compared at all.
+//
+// The attempt is taken before the compare, in one statement. Read
+// first and counted after, a burst of parallel guesses all saw a count
+// under the limit and were all compared.
+func (s *Store) ClaimOTPAttempt(ctx context.Context, id string) (attempts int, ok bool, err error) {
+	err = s.DB.NewRaw(`UPDATE otp_codes SET attempts = attempts + 1
+		WHERE id = ? AND attempts < ? AND used = false AND expires_at > now()
+		RETURNING attempts`, id, MaxOTPAttempts).Scan(ctx, &attempts)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return attempts, true, nil
 }
 
 // ConsumeOTPCode marks an unused code used and reports whether this

@@ -2465,10 +2465,12 @@ func (h *StripeHandler) CancelSubscription(c *gin.Context) {
 }
 
 func (h *StripeHandler) ChangePlan(c *gin.Context) {
+	// There is no proration switch. It was the customer's to set, and
+	// "none" let one move to a dearer plan for the rest of a period
+	// without paying the difference, then move back before renewal.
 	var req struct {
 		LicenseID  string `json:"license_id" binding:"required"`
 		NewPriceID string `json:"new_price_id" binding:"required"`
-		Prorate    *bool  `json:"prorate"` // default true
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "license_id and new_price_id are required")
@@ -2541,10 +2543,8 @@ func (h *StripeHandler) ChangePlan(c *gin.Context) {
 		return
 	}
 
+	// Always prorated: the customer pays for the time spent on each plan.
 	prorationBehavior := "create_prorations"
-	if req.Prorate != nil && !*req.Prorate {
-		prorationBehavior = "none"
-	}
 
 	params := &stripe.SubscriptionParams{
 		ProrationBehavior: stripe.String(prorationBehavior),

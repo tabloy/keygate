@@ -235,7 +235,7 @@ export const portal = {
   addSeat: (data: { license_key: string; email: string; role?: string }) => post<Seat>("/portal/seats/add", data),
   removeSeat: (data: { license_key: string; seat_id: string }) =>
     post<{ status: string }>("/portal/seats/remove", data),
-  changePlan: (data: { license_id: string; new_price_id: string; prorate?: boolean }) =>
+  changePlan: (data: { license_id: string; new_price_id: string }) =>
     post<{ status: string; new_plan_id: string; new_plan_name: string; proration: string }>(
       "/portal/subscription/change-plan",
       data,
