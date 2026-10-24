@@ -218,7 +218,6 @@ export default function ProductsPage() {
           onSubmit={(d) => createMut.mutate(d)}
           loading={createMut.isPending}
           title={t("products.createTitle")}
-          isEditing={false}
         />
       )}
 
@@ -231,7 +230,6 @@ export default function ProductsPage() {
           onSubmit={(d) => updateMut.mutate({ id: editing.id, ...d })}
           loading={updateMut.isPending}
           title={t("products.editTitle")}
-          isEditing={true}
         />
       )}
 
@@ -266,7 +264,6 @@ function ProductDialog({
   onSubmit,
   loading,
   title,
-  isEditing,
 }: {
   open: boolean
   onClose: () => void
@@ -281,7 +278,6 @@ function ProductDialog({
   }) => void
   loading: boolean
   title: string
-  isEditing: boolean
 }) {
   const { t } = useI18n()
   const [name, setName] = useState(product?.name || "")
@@ -346,16 +342,26 @@ function ProductDialog({
               <Label>{t("products.slug")}</Label>
               <Input value={slug} onChange={(e) => setSlug(e.target.value)} required />
             </div>
-            {!isEditing && (
-                <div className="space-y-2">
-                  <Label>{t("products.licensePrefix")}</Label>
-                  <Input
-                      value={licensePrefix}
-                      onChange={(e) => setLicensePrefix(e.target.value)}
-                      required
-                  />
-                </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="product-license-prefix">{t("products.licensePrefix")}</Label>
+              <Input
+                id="product-license-prefix"
+                className="font-mono"
+                value={licensePrefix}
+                onChange={(e) => setLicensePrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+                minLength={2}
+                maxLength={8}
+                pattern="[A-Z0-9]{2,8}"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("products.licensePrefixHint")}{" "}
+                <code className="break-all">{`${licensePrefix || "KG"}-XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX`}</code>
+              </p>
+              {product && licensePrefix !== product.license_prefix && (
+                <p className="text-xs text-muted-foreground">{t("products.licensePrefixChange")}</p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label>{t("common.type")}</Label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

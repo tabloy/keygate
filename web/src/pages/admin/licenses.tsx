@@ -63,7 +63,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin, type Plan } from "@/lib/api"
-import { formatDate, statusColor } from "@/lib/utils"
+import { formatDate, maskKey, statusColor } from "@/lib/utils"
 
 // A date picked in the expiry field means "valid through that whole
 // day" in the admin's local timezone, so the license dies at local
@@ -81,15 +81,6 @@ function localDateValue(iso: string): string {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, "0")
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-// Rows show only the tail of a key. The full value never rides in a
-// list or detail payload — it is fetched per reveal and audited.
-function maskKey(hint?: string) {
-  if (!hint) return "••••"
-  const delimIndex = hint.indexOf('|')
-  if (delimIndex === -1) return `••••-${hint}`
-  return `${hint.slice(0, delimIndex)}-••••-:${hint.slice(delimIndex+1)}`
 }
 
 export default function LicensesPage() {
@@ -252,8 +243,8 @@ export default function LicensesPage() {
                     <DataTableRow key={lic.id}>
                       <DataTableCell className="font-medium">{lic.email}</DataTableCell>
                       <DataTableCell>
-                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                          {maskKey(data?.license_key_hints?.[lic.id])}
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+                          {maskKey(data?.license_key_hints?.[lic.id], data?.license_key_prefixes?.[lic.id])}
                         </code>
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground">{lic.product?.name || "-"}</DataTableCell>
@@ -630,7 +621,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     <p className="text-muted-foreground">{t("licenses.licenseKey")}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <code className="bg-muted px-2 py-1 rounded text-xs">
-                        {revealedKey ?? maskKey(lic.license_key_hint)}
+                        {revealedKey ?? maskKey(lic.license_key_hint, lic.license_key_prefix)}
                       </code>
                       {!revealedKey && (
                         <Button

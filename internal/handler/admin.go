@@ -438,9 +438,10 @@ func (h *AdminHandler) GetProduct(c *gin.Context) {
 
 func (h *AdminHandler) CreateProduct(c *gin.Context) {
 	var req struct {
-		Name          string `json:"name" binding:"required"`
-		Slug          string `json:"slug" binding:"required"`
-		Type          string `json:"type" binding:"required"`
+		Name string `json:"name" binding:"required"`
+		Slug string `json:"slug" binding:"required"`
+		Type string `json:"type" binding:"required"`
+		// LicensePrefix starts the product's keys; KG when left out.
 		LicensePrefix string `json:"license_prefix"`
 		// FeedLicenseRequired at creation is the easy moment to gate:
 		// a product that has published nothing handed out no feed, so
@@ -473,6 +474,14 @@ func (h *AdminHandler) CreateProduct(c *gin.Context) {
 		response.BadRequest(c, err.Message)
 		return
 	}
+	req.LicensePrefix = strings.ToUpper(strings.TrimSpace(req.LicensePrefix))
+	if req.LicensePrefix == "" {
+		req.LicensePrefix = "KG"
+	}
+	if err := apperr.ValidateLicensePrefix(req.LicensePrefix); err != nil {
+		response.BadRequest(c, err.Message)
+		return
+	}
 
 	// Same fence as switching the gate on later: while the maintenance
 	// features are off, a replica that predates them may still be
@@ -496,7 +505,7 @@ func (h *AdminHandler) CreateProduct(c *gin.Context) {
 		Entity: "product", EntityID: p.ID, Action: "created",
 		ActorType: "admin", ActorID: adminID(c),
 		Changes: map[string]any{"name": req.Name, "slug": req.Slug, "type": req.Type,
-			"feed_license_required": req.FeedLicenseRequired},
+			"license_prefix": req.LicensePrefix, "feed_license_required": req.FeedLicenseRequired},
 	})
 
 	response.Created(c, p)
@@ -518,6 +527,7 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 		RequireSigning          *bool   `json:"require_signing"`
 		FeedLicenseRequired     *bool   `json:"feed_license_required"`
 		DownloadURL             *string `json:"download_url"`
+		LicensePrefix           *string `json:"license_prefix"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request body")
@@ -544,6 +554,17 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 		}
 		p.Slug = req.Slug
 		cols = append(cols, "slug")
+	}
+	// A new prefix applies to keys issued from now on. Keys are found by
+	// their whole value, so the ones already issued keep working.
+	if req.LicensePrefix != nil {
+		v := strings.ToUpper(strings.TrimSpace(*req.LicensePrefix))
+		if err := apperr.ValidateLicensePrefix(v); err != nil {
+			response.BadRequest(c, err.Message)
+			return
+		}
+		p.LicensePrefix = v
+		cols = append(cols, "license_prefix")
 	}
 	prevType := p.Type
 	if req.Type != "" {
@@ -2058,13 +2079,8 @@ func (h *AdminHandler) ListLicenses(c *gin.Context) {
 	// Only the tail of each key travels with the list — enough for an
 	// admin to tell two rows apart, useless to anyone who intercepts
 	// the payload. The key itself comes from RevealLicenseKey.
-	hints := make(map[string]string, len(licenses))
-	for _, l := range licenses {
-		if hint := h.licenseKeyHint(l); hint != "" {
-			hints[l.ID] = hint
-		}
-	}
-	listOK(c, "licenses", licenses, total, page, gin.H{"license_key_hints": hints})
+	hints, prefixes := h.licenseKeyHints(licenses)
+	listOK(c, "licenses", licenses, total, page, gin.H{"license_key_hints": hints, "license_key_prefixes": prefixes})
 }
 
 func (h *AdminHandler) GetLicense(c *gin.Context) {
@@ -2082,7 +2098,8 @@ func (h *AdminHandler) GetLicense(c *gin.Context) {
 	// deliberate break here is that license_key is gone. The hint
 	// rides alongside them; the key itself is one explicit request
 	// away via RevealLicenseKey.
-	out := licenseWithHint{License: l, LicenseKeyHint: h.licenseKeyHint(l), KeyUsable: true}
+	out := licenseWithHint{License: l, KeyUsable: true}
+	out.LicenseKeyPrefix, out.LicenseKeyHint = h.licenseKeyHint(l)
 	if err := service.LicenseUsable(l); err != nil {
 		out.KeyUsable, out.KeyUnusableReason = false, apperrCode(err)
 	}
@@ -2165,12 +2182,17 @@ func (h *AdminHandler) CreateLicense(c *gin.Context) {
 	if plan.LicenseType == "trial" {
 		status = model.StatusTrialing
 	}
+	key, err := h.Store.NewLicenseKey(c, req.ProductID)
+	if err != nil {
+		response.Internal(c, err)
+		return
+	}
 
 	l := &model.License{
 		ProductID:           req.ProductID,
 		PlanID:              req.PlanID,
 		Email:               req.Email,
-		LicenseKey:          license.GenerateKey(plan.Product.LicensePrefix),
+		LicenseKey:          key,
 		Status:              status,
 		Notes:               req.Notes,
 		ExternalCustomerID:  req.ExternalCustomerID,
@@ -2272,6 +2294,9 @@ type licenseWithKey struct {
 type licenseWithHint struct {
 	*model.License
 	LicenseKeyHint string `json:"license_key_hint"`
+	// LicenseKeyPrefix is the key's first segment, the prefix of the
+	// product when it was issued; empty for an imported key.
+	LicenseKeyPrefix string `json:"license_key_prefix"`
 	// KeyUsable says whether the key works right now (the activation
 	// rule); KeyUnusableReason is its error code when not. The admin UI
 	// offers to resend the key only when it works.
@@ -2290,14 +2315,31 @@ func apperrCode(err error) string {
 }
 
 // licenseKeyHint is the last four characters of a key — a row label,
-// not a credential.
-func (h *AdminHandler) licenseKeyHint(l *model.License) string {
+// not a credential — and the prefix of the product that issued it.
+func (h *AdminHandler) licenseKeyHint(l *model.License) (prefix, hint string) {
 	key := h.Store.DecryptLicenseKey(l)
 	r := []rune(key)
 	if len(r) <= 4 {
-		return fmt.Sprintf("%s|%s", l.Product.LicensePrefix, string(r))
+		return "", string(r)
 	}
-	return fmt.Sprintf("%s|%s", l.Product.LicensePrefix, string(r[len(r)-4:]))
+	return license.KeyPrefix(key), string(r[len(r)-4:])
+}
+
+// licenseKeyHints maps license ids to the last four characters of their
+// keys, and to the keys' prefixes where they have one.
+func (h *AdminHandler) licenseKeyHints(licenses []*model.License) (hints, prefixes map[string]string) {
+	hints = make(map[string]string, len(licenses))
+	prefixes = make(map[string]string, len(licenses))
+	for _, l := range licenses {
+		prefix, hint := h.licenseKeyHint(l)
+		if hint != "" {
+			hints[l.ID] = hint
+		}
+		if prefix != "" {
+			prefixes[l.ID] = prefix
+		}
+	}
+	return hints, prefixes
 }
 
 // RevealLicenseKey returns one plaintext license key.
@@ -3292,16 +3334,12 @@ func (h *AdminHandler) GetUserDetail(c *gin.Context) {
 	// Same rule as the licenses list: the customer view shows which
 	// license is which, not the credential itself. The detail keeps
 	// its existing shape and the hints ride alongside it.
-	hints := make(map[string]string, len(detail.Licenses))
-	for _, l := range detail.Licenses {
-		if hint := h.licenseKeyHint(l); hint != "" {
-			hints[l.ID] = hint
-		}
-	}
+	hints, prefixes := h.licenseKeyHints(detail.Licenses)
 	response.OK(c, struct {
 		*store.UserDetail
-		LicenseKeyHints map[string]string `json:"license_key_hints"`
-	}{UserDetail: detail, LicenseKeyHints: hints})
+		LicenseKeyHints    map[string]string `json:"license_key_hints"`
+		LicenseKeyPrefixes map[string]string `json:"license_key_prefixes"`
+	}{UserDetail: detail, LicenseKeyHints: hints, LicenseKeyPrefixes: prefixes})
 }
 
 // ─── Addons ───

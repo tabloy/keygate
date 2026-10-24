@@ -117,11 +117,16 @@ func ProductSupports(t, capability string) bool {
 type Product struct {
 	bun.BaseModel `bun:"table:products"`
 
-	ID            string `bun:",pk" json:"id"`
-	Name          string `bun:",notnull" json:"name"`
+	ID   string `bun:",pk" json:"id"`
+	Name string `bun:",notnull" json:"name"`
+	Slug string `bun:",notnull,unique" json:"slug"`
+	Type string `bun:",notnull" json:"type"`
+
+	// LicensePrefix is the first segment of the keys this product
+	// issues, 2 to 8 uppercase letters or digits. Changing it applies
+	// to new keys only: keys are found by their whole value, so the
+	// ones already issued keep their prefix and keep working.
 	LicensePrefix string `bun:",notnull,default:'KG'" json:"license_prefix"`
-	Slug          string `bun:",notnull,unique" json:"slug"`
-	Type          string `bun:",notnull" json:"type"`
 
 	// MinimumSupportedVersion: optional semver floor. When non-empty,
 	// auto-update feeds embed this so clients can refuse to keep

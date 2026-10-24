@@ -32,7 +32,6 @@ export default function SetupPage() {
   const [siteName, setSiteName] = useState("")
   const [productName, setProductName] = useState("")
   const [productSlug, setProductSlug] = useState("")
-  const [productLicencePrefix, setproductLicencePrefix] = useState("KG")
   const [slugTouched, setSlugTouched] = useState(false)
   const [productType, setProductType] = useState<ProductType>("desktop")
   const [saving, setSaving] = useState(false)
@@ -53,7 +52,6 @@ export default function SetupPage() {
         product_name: productName,
         product_slug: productSlug,
         product_type: productType,
-        product_license_prefix: productLicencePrefix
       })
       // A full load rather than a client side route change, so the site
       // configuration (name, branding) is fetched again with the new values.
@@ -117,69 +115,58 @@ export default function SetupPage() {
                 </div>
               </fieldset>
 
-            <fieldset className="space-y-3">
-              <legend className="text-sm font-medium">{t("setup.firstProduct")}</legend>
-              <div className="space-y-1.5">
-                <Label htmlFor="product-name">{t("common.name")}</Label>
-                <Input
-                  id="product-name"
-                  value={productName}
-                  onChange={(e) => {
-                    setProductName(e.target.value)
-                    if (!slugTouched) setProductSlug(slugify(e.target.value))
-                  }}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="product-slug">{t("setup.productSlug")}</Label>
-                <Input
-                  id="product-slug"
-                  value={productSlug}
-                  onChange={(e) => {
-                    setSlugTouched(true)
-                    setProductSlug(e.target.value)
-                  }}
-                  required
-                />
-                <p className="text-xs text-muted-foreground">{t("setup.slugHint")}</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="product-license-prefix">{t("setup.productLicensePrefix")}</Label>
-                <Input
-                    id="product-license-prefix"
-                    value={productLicencePrefix}
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-medium">{t("setup.firstProduct")}</legend>
+                <div className="space-y-1.5">
+                  <Label htmlFor="product-name">{t("common.name")}</Label>
+                  <Input
+                    id="product-name"
+                    value={productName}
                     onChange={(e) => {
-                      setproductLicencePrefix(e.target.value)
+                      setProductName(e.target.value)
+                      if (!slugTouched) setProductSlug(slugify(e.target.value))
                     }}
                     required
-                />
-              </div>
-              <div className="space-y-2" role="radiogroup" aria-label={t("setup.productType")}>
-                <Label>{t("setup.productType")}</Label>
-                {types.map((type) => (
-                  <label
-                    key={type}
-                    className={`flex cursor-pointer gap-3 rounded-md border p-3 text-sm ${
-                      productType === type ? "border-primary bg-primary/5" : ""
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="product-type"
-                      value={type}
-                      checked={productType === type}
-                      onChange={() => setProductType(type)}
-                      className="mt-0.5"
-                    />
-                    <span>
-                      <span className="font-medium">{t(`products.${type}`)}</span>
-                      <span className="block text-xs text-muted-foreground">{t(`products.${type}Desc`)}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="product-slug">{t("setup.productSlug")}</Label>
+                  <Input
+                    id="product-slug"
+                    value={productSlug}
+                    onChange={(e) => {
+                      setSlugTouched(true)
+                      setProductSlug(e.target.value)
+                    }}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">{t("setup.slugHint")}</p>
+                </div>
+                <div className="space-y-2" role="radiogroup" aria-label={t("setup.productType")}>
+                  <Label>{t("setup.productType")}</Label>
+                  {types.map((type) => (
+                    <label
+                      key={type}
+                      className={`flex cursor-pointer gap-3 rounded-md border p-3 text-sm ${
+                        productType === type ? "border-primary bg-primary/5" : ""
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="product-type"
+                        value={type}
+                        checked={productType === type}
+                        onChange={() => setProductType(type)}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        <span className="font-medium">{t(`products.${type}`)}</span>
+                        <span className="block text-xs text-muted-foreground">{t(`products.${type}Desc`)}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" className="w-full" disabled={saving}>

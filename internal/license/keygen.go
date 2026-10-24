@@ -23,6 +23,37 @@ func GenerateKey(prefix string) string {
 	return prefix + "-" + strings.Join(segments, "-")
 }
 
+// KeyPrefix is the first segment of a key this package generated: the
+// prefix of the product that issued it, whatever that product's prefix
+// is now. Empty for any other key, such as one imported from another
+// system, where the first segment may be part of the secret.
+func KeyPrefix(key string) string {
+	segments := strings.Split(key, "-")
+	if len(segments) != 5 || !isPrefix(segments[0]) {
+		return ""
+	}
+	for _, seg := range segments[1:] {
+		if len(seg) != 8 || strings.Trim(seg, alphabet) != "" {
+			return ""
+		}
+	}
+	return segments[0]
+}
+
+// isPrefix reports whether s has the shape of a product's prefix: 2 to
+// 8 uppercase letters or digits.
+func isPrefix(s string) bool {
+	if len(s) < 2 || len(s) > 8 {
+		return false
+	}
+	for _, c := range s {
+		if (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
+}
+
 // HashKey returns a SHA-256 hash of the license key for secure storage.
 func HashKey(key string) string {
 	h := sha256.Sum256([]byte(normalizeKey(key)))

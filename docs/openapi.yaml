@@ -2631,8 +2631,9 @@ paths:
         (default, newest first), `valid_until` (soonest first),
         `email`, `status`, `product` and `plan`. Items carry no license
         key; `license_key_hints` maps each license id to the last four
-        characters of its key. `GET /admin/licenses/{id}/key` reveals one
-        key.
+        characters of its key, and `license_key_prefixes` to the key's
+        prefix (left out for a key imported from another system).
+        `GET /admin/licenses/{id}/key` reveals one key.
       x-required-scopes: [admin, "licenses:write"]
       security:
         - BearerAuth: []
@@ -2673,6 +2674,10 @@ paths:
                             type: object
                             additionalProperties: { type: string }
                             description: License id to the last four characters of its key
+                          license_key_prefixes:
+                            type: object
+                            additionalProperties: { type: string }
+                            description: License id to the prefix its key was issued with, which stays when the product's prefix changes later
         "400":
           description: "`INVALID_SORT` or `INVALID_ORDER`"
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -2859,6 +2864,9 @@ paths:
                       - type: object
                         properties:
                           license_key_hint: { type: string, description: Last four characters of the key }
+                          license_key_prefix:
+                            type: string
+                            description: The prefix the key was issued with, such as `KG`; empty for a key imported from another system
                           key_usable:
                             type: boolean
                             description: Whether the key works right now, by the activation rule

@@ -28,7 +28,6 @@ import (
 	"github.com/stripe/stripe-go/v82/subscription"
 	"github.com/stripe/stripe-go/v82/webhook"
 
-	"github.com/tabloy/keygate/internal/license"
 	"github.com/tabloy/keygate/internal/model"
 	"github.com/tabloy/keygate/internal/service"
 	"github.com/tabloy/keygate/internal/store"
@@ -731,6 +730,13 @@ func (h *StripeHandler) fulfillCheckout(ctx context.Context, email, customerID, 
 		return false, nil
 	}
 
+	// The key is made before the claim, like the lookups above: a
+	// failure here leaves the session unclaimed for the next attempt.
+	key, err := h.Store.NewLicenseKey(ctx, plan.ProductID)
+	if err != nil {
+		return false, fmt.Errorf("license key: %w", err)
+	}
+
 	// Claim the session only now, after every Stripe lookup succeeded:
 	// a transient API error above must leave the session unclaimed so
 	// the success page or the periodic sync can pick it up. The insert
@@ -755,12 +761,11 @@ func (h *StripeHandler) fulfillCheckout(ctx context.Context, email, customerID, 
 	if plan.LicenseType == "trial" {
 		status = model.StatusTrialing
 	}
-
 	lic := &model.License{
 		ProductID:        plan.ProductID,
 		PlanID:           plan.ID,
 		Email:            email,
-		LicenseKey:       license.GenerateKey(""),
+		LicenseKey:       key,
 		PaymentProvider:  "stripe",
 		StripeCustomerID: customerID,
 		Status:           status,

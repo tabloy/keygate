@@ -59,13 +59,12 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 	}
 
 	var req struct {
-		AdminEmail           string `json:"admin_email" binding:"required,email"`
-		AdminName            string `json:"admin_name" binding:"required"`
-		SiteName             string `json:"site_name" binding:"required"`
-		ProductLicensePrefix string `json:"product_license_prefix" binding:"required"`
-		ProductName          string `json:"product_name" binding:"required"`
-		ProductSlug          string `json:"product_slug" binding:"required"`
-		ProductType          string `json:"product_type" binding:"required"`
+		AdminEmail  string `json:"admin_email" binding:"required,email"`
+		AdminName   string `json:"admin_name" binding:"required"`
+		SiteName    string `json:"site_name" binding:"required"`
+		ProductName string `json:"product_name" binding:"required"`
+		ProductSlug string `json:"product_slug" binding:"required"`
+		ProductType string `json:"product_type" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request: "+err.Error())
@@ -78,13 +77,6 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 	req.ProductName = strings.TrimSpace(req.ProductName)
 	req.ProductSlug = strings.TrimSpace(strings.ToLower(req.ProductSlug))
 	req.ProductType = strings.TrimSpace(strings.ToLower(req.ProductType))
-	req.ProductLicensePrefix = strings.TrimSpace(req.ProductLicensePrefix)
-
-	if req.ProductLicensePrefix == "" {
-		req.ProductLicensePrefix = "KG"
-	} else if len(req.ProductLicensePrefix) > 16 {
-		req.ProductLicensePrefix = req.ProductLicensePrefix[:16]
-	}
 
 	if req.ProductType != "saas" && req.ProductType != "desktop" && req.ProductType != "hybrid" {
 		response.BadRequest(c, "product_type must be one of: saas, desktop, hybrid")
@@ -165,8 +157,8 @@ func (h *SetupHandler) Initialize(c *gin.Context) {
 	// Create product
 	productID := store.NewID()
 	if _, err := tx.NewRaw(
-		"INSERT INTO products (id, name, slug, license_prefix, type, created_at) VALUES (?, ?, ?, ?, ?, now())",
-		productID, req.ProductName, req.ProductSlug, req.ProductLicensePrefix, req.ProductType,
+		"INSERT INTO products (id, name, slug, type, created_at) VALUES (?, ?, ?, ?, now())",
+		productID, req.ProductName, req.ProductSlug, req.ProductType,
 	).Exec(ctx); err != nil {
 		response.Internal(c, err)
 		return

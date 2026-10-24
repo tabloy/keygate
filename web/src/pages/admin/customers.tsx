@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
-import { formatDate, statusColor } from "@/lib/utils"
+import { formatDate, maskKey, statusColor } from "@/lib/utils"
 
 export default function CustomersPage() {
   const { t } = useI18n()
@@ -261,8 +261,8 @@ function CustomerDetailDialog({
                             {/* Only the tail — the key itself is revealed
                               one at a time from the licenses page, and
                               each reveal is audited. */}
-                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                              {data?.license_key_hints?.[l.id] ? `KG-••••-${data.license_key_hints[l.id]}` : "••••"}
+                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
+                              {maskKey(data?.license_key_hints?.[l.id], data?.license_key_prefixes?.[l.id])}
                             </code>
                           </DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">

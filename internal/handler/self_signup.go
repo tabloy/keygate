@@ -11,7 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/tabloy/keygate/internal/license"
 	"github.com/tabloy/keygate/internal/model"
 	"github.com/tabloy/keygate/internal/service"
 	"github.com/tabloy/keygate/internal/store"
@@ -182,11 +181,16 @@ func (h *AuthHandler) SignupVerify(c *gin.Context) {
 	if plan.LicenseType == "trial" {
 		status = model.StatusTrialing
 	}
+	key, err := h.Store.NewLicenseKey(c, plan.ProductID)
+	if err != nil {
+		response.Internal(c, err)
+		return
+	}
 	l := &model.License{
 		ProductID:       plan.ProductID,
 		PlanID:          plan.ID,
 		Email:           email,
-		LicenseKey:      license.GenerateKey(""),
+		LicenseKey:      key,
 		Status:          status,
 		UpdatesTermsSet: true,
 	}

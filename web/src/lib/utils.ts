@@ -54,3 +54,11 @@ export function statusColor(status: string): string {
       return "bg-gray-100 text-gray-800"
   }
 }
+
+// Rows show only the tail of a key, after the prefix of the product
+// that issued it. The full value never rides in a list or detail
+// payload: it is fetched per reveal and audited.
+export function maskKey(hint?: string, prefix?: string): string {
+  if (!hint) return "••••"
+  return prefix ? `${prefix}-••••-${hint}` : `••••-${hint}`
+}

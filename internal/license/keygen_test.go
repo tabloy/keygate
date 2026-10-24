@@ -85,3 +85,26 @@ func TestRandomSegmentUnbiased(t *testing.T) {
 		}
 	}
 }
+
+// KeyPrefix reads the prefix off keys this package made, and nothing
+// off any other key: there the first segment may be part of the secret.
+func TestKeyPrefix(t *testing.T) {
+	for _, tc := range []struct{ key, want string }{
+		{GenerateKey(""), "KG"},
+		{GenerateKey("ACME2"), "ACME2"},
+		{"KG-ABCD2345-EFGH6789-JKLM2345-NPQR6789", "KG"},
+		{"ABCD-EFGH-JKLM-NPQR", ""},                              // imported, four segments
+		{"XY-abcd2345-EFGH6789-JKLM2345-NPQR6789", ""},           // lowercase is not ours
+		{"XY-ABCD2345-EFGH6789-JKLM2345-NPQR678", ""},            // short segment
+		{"XY-ABCD2345-EFGH6789-JKLM2345-NPQR6780", ""},           // 0 is not in the alphabet
+		{"SECRETSECRET-ABCDEFGH-JKLMNPQR-STUVWXYZ-23456789", ""}, // first segment too long to be a prefix
+		{"ab-ABCDEFGH-JKLMNPQR-STUVWXYZ-23456789", ""},           // nor lowercase
+		{"K-ABCDEFGH-JKLMNPQR-STUVWXYZ-23456789", ""},            // nor one character
+		{"NOHYPHENKEY", ""},
+		{"", ""},
+	} {
+		if got := KeyPrefix(tc.key); got != tc.want {
+			t.Errorf("KeyPrefix(%q) = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}

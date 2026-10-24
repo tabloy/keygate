@@ -65,6 +65,21 @@ func ValidateName(field, value string) *AppError {
 	return nil
 }
 
+// ValidateLicensePrefix checks the first segment of a product's license
+// keys: 2 to 8 uppercase letters or digits. No hyphen, so the prefix is
+// always exactly the part of a key before its first hyphen.
+func ValidateLicensePrefix(value string) *AppError {
+	if len(value) < 2 || len(value) > 8 {
+		return &AppError{Status: 400, Code: "INVALID_INPUT", Message: "license_prefix must be 2 to 8 characters"}
+	}
+	for _, c := range value {
+		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			return &AppError{Status: 400, Code: "INVALID_INPUT", Message: "license_prefix must contain only uppercase letters and numbers (A-Z, 0-9)"}
+		}
+	}
+	return nil
+}
+
 func ValidateSlug(value string) *AppError {
 	if value == "" {
 		return &AppError{Status: 400, Code: "INVALID_INPUT", Message: "slug is required"}

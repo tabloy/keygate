@@ -93,7 +93,11 @@ const en = {
     "Your page where customers download the product. Shown as a Download button in license emails ({{.DownloadURL}}). Link to a page, not directly to a file.",
   "products.updateSettings": "Update settings",
   "products.slug": "Slug",
-  "products.licensePrefix": "License Prefix",
+  "products.licensePrefix": "License key prefix",
+  "products.licensePrefixHint":
+    "Every license key this product issues starts with it. 2 to 8 letters or numbers. For example:",
+  "products.licensePrefixChange":
+    "Applies to licenses issued from now on. Keys already issued keep their prefix and keep working.",
   "products.empty": "No products yet",
   "products.deleteConfirm": "This action cannot be undone. Products with existing licenses cannot be deleted.",
   "products.createTitle": "Create Product",
@@ -497,7 +501,6 @@ const en = {
   "setup.siteNamePlaceholder": "Shown on the dashboard, portal and emails",
   "setup.firstProduct": "Your first product",
   "setup.productSlug": "Slug",
-  "setup.productLicensePrefix": "License Prefix",
   "setup.slugHint": "Lowercase letters, numbers and hyphens. Used in update feed URLs.",
   "setup.productType": "Product type",
   "setup.create": "Create account and product",

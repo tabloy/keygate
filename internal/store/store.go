@@ -651,6 +651,17 @@ func (s *Store) prepareLicenseForInsert(l *model.License) error {
 	return nil
 }
 
+// NewLicenseKey generates a key for a license of the product, with the
+// prefix that product has now.
+func (s *Store) NewLicenseKey(ctx context.Context, productID string) (string, error) {
+	var prefix string
+	if err := s.DB.NewSelect().Table("products").Column("license_prefix").
+		Where("id = ?", productID).Scan(ctx, &prefix); err != nil {
+		return "", fmt.Errorf("license prefix of product %s: %w", productID, err)
+	}
+	return license.GenerateKey(prefix), nil
+}
+
 func (s *Store) CreateLicense(ctx context.Context, l *model.License) error {
 	if err := s.prepareLicenseForInsert(l); err != nil {
 		return err
@@ -1249,7 +1260,7 @@ func (s *Store) FindPlanByID(ctx context.Context, id string) (*model.Plan, error
 // that must see the plan a locked license points at right now.
 func FindPlanByIDIn(ctx context.Context, db bun.IDB, id string) (*model.Plan, error) {
 	p := new(model.Plan)
-	return p, db.NewSelect().Model(p).Relation("Entitlements").Relation("Product").Where("plan.id = ?", id).Scan(ctx)
+	return p, db.NewSelect().Model(p).Relation("Entitlements").Where("plan.id = ?", id).Scan(ctx)
 }
 
 // ─── Activation ───

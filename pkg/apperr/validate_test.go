@@ -105,3 +105,29 @@ func TestValidateURL(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateLicensePrefix(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		ok    bool
+	}{
+		{"KG", true},
+		{"ACME", true},
+		{"AB12CD34", true},
+		{"A", false},
+		{"ABCDEFGHI", false},
+		{"", false},
+		{"acme", false}, // callers uppercase first
+		{"AC-ME", false},
+		{"AC ME", false},
+		{"ÄB", false},
+	} {
+		err := ValidateLicensePrefix(tc.input)
+		if tc.ok && err != nil {
+			t.Errorf("ValidateLicensePrefix(%q) = %q, want nil", tc.input, err.Message)
+		}
+		if !tc.ok && err == nil {
+			t.Errorf("ValidateLicensePrefix(%q) = nil, want an error", tc.input)
+		}
+	}
+}
