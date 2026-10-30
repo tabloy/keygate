@@ -110,6 +110,42 @@ func TestTrialFallbackLocks_Serialize(t *testing.T) {
 	}
 }
 
+func TestMoveEndedTrial_ExpiryDeletesFloatingSessions(t *testing.T) {
+	s := setupTestDB(t)
+	defer s.Close()
+	ctx := context.Background()
+	prod, _, _ := perSeatLicense(t, s, ctx, 1, false)
+	suffix := strings.ReplaceAll(time.Now().Format("150405.000000"), ".", "")
+	trial := &model.Plan{ProductID: prod.ID, Name: "Trial", Slug: "mve-trial-" + suffix,
+		LicenseType: "trial", LicenseModel: "standard", TrialDays: 7, Active: true}
+	if err := s.CreatePlan(ctx, trial); err != nil {
+		t.Fatal(err)
+	}
+	ended := time.Now().Add(-time.Hour)
+	lic := &model.License{ProductID: prod.ID, PlanID: trial.ID, Email: "mve-" + suffix + "@example.com",
+		LicenseKey: "KEY-MVE-" + suffix, Status: model.StatusTrialing, ValidUntil: &ended}
+	if err := s.CreateLicense(ctx, lic); err != nil {
+		t.Fatal(err)
+	}
+	sess := &model.FloatingSession{
+		LicenseID:  lic.ID,
+		Identifier: "machine-1",
+		ExpiresAt:  time.Now().Add(time.Hour),
+	}
+	if err := s.CheckOutFloating(ctx, sess); err != nil {
+		t.Fatalf("checkout floating: %v", err)
+	}
+
+	move, err := s.MoveEndedTrialToFallback(ctx, lic.ID, time.Now())
+	if err != nil || !move.Expire || move.Moved {
+		t.Fatalf("MoveEndedTrialToFallback = (%+v, %v), want expiry", move, err)
+	}
+	count, err := s.DB.NewSelect().Model((*model.FloatingSession)(nil)).Where("license_id = ?", lic.ID).Count(ctx)
+	if err != nil || count != 0 {
+		t.Errorf("floating sessions after trial expiry = %d (err: %v), want 0", count, err)
+	}
+}
+
 // The sweep holds the fallback plan while it moves a trial onto it: a
 // price written meanwhile (by an older version, or by hand) either waits
 // for the move or is seen by it, and then the trial expires instead.
