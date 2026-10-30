@@ -482,6 +482,9 @@ func (s *Store) SuspendLicense(ctx context.Context, id string) error {
 			}
 			return ErrLicenseNotFound
 		}
+		if _, err := tx.NewDelete().Model((*model.FloatingSession)(nil)).Where("license_id = ?", id).Exec(ctx); err != nil {
+			return err
+		}
 		return syncSubscriptionStatus(ctx, tx, id, model.StatusSuspended)
 	})
 }
@@ -821,6 +824,9 @@ func (s *Store) expireLicenseWhere(ctx context.Context, id string, cond func(*bu
 			return nil
 		}
 		ok = true
+		if _, err := tx.NewDelete().Model((*model.FloatingSession)(nil)).Where("license_id = ?", id).Exec(ctx); err != nil {
+			return err
+		}
 		return syncSubscriptionStatus(ctx, tx, id, model.StatusExpired)
 	})
 	return ok, err
