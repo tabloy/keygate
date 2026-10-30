@@ -765,6 +765,9 @@ func (s *Store) MoveEndedTrialToFallback(ctx context.Context, id string, before 
 				model.StatusExpired, lic.ID).Exec(ctx); err != nil {
 				return err
 			}
+			if _, err := tx.NewDelete().Model((*model.FloatingSession)(nil)).Where("license_id = ?", lic.ID).Exec(ctx); err != nil {
+				return err
+			}
 			return syncSubscriptionStatus(ctx, tx, lic.ID, model.StatusExpired)
 		}
 		if from.TrialFallbackPlanID == "" || lic.StripeSubscriptionID != "" {
