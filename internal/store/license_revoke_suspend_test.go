@@ -104,6 +104,60 @@ func TestSuspendLicense_SyncsSubscription(t *testing.T) {
 	}
 }
 
+func TestSuspendLicense_DeletesFloatingSessions(t *testing.T) {
+	s := setupTestDB(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	lic := newLicenseOn(t, s, ctx, "subscription", model.StatusActive, nil)
+	sess := &model.FloatingSession{
+		LicenseID:  lic.ID,
+		Identifier: "machine-1",
+		ExpiresAt:  time.Now().Add(time.Hour),
+	}
+	if err := s.CheckOutFloating(ctx, sess); err != nil {
+		t.Fatalf("checkout floating: %v", err)
+	}
+
+	if err := s.SuspendLicense(ctx, lic.ID); err != nil {
+		t.Fatalf("SuspendLicense: %v", err)
+	}
+
+	count, err := s.DB.NewSelect().Model((*model.FloatingSession)(nil)).Where("license_id = ?", lic.ID).Count(ctx)
+	if err != nil || count != 0 {
+		t.Errorf("floating sessions after suspend = %d (err: %v), want 0", count, err)
+	}
+}
+
+func TestExpireLicense_DeletesFloatingSessions(t *testing.T) {
+	s := setupTestDB(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	lic := newLicenseOn(t, s, ctx, "subscription", model.StatusPastDue, nil)
+	sess := &model.FloatingSession{
+		LicenseID:  lic.ID,
+		Identifier: "machine-1",
+		ExpiresAt:  time.Now().Add(time.Hour),
+	}
+	if err := s.CheckOutFloating(ctx, sess); err != nil {
+		t.Fatalf("checkout floating: %v", err)
+	}
+
+	ok, err := s.ExpireLicenseIf(ctx, lic.ID, []string{model.StatusPastDue}, nil)
+	if err != nil || !ok {
+		t.Fatalf("ExpireLicenseIf = (%t, %v), want (true, nil)", ok, err)
+	}
+	if st, _ := licenseState(t, s, ctx, lic.ID); st != model.StatusExpired {
+		t.Errorf("license status = %s, want %s", st, model.StatusExpired)
+	}
+
+	count, err := s.DB.NewSelect().Model((*model.FloatingSession)(nil)).Where("license_id = ?", lic.ID).Count(ctx)
+	if err != nil || count != 0 {
+		t.Errorf("floating sessions after expire = %d (err: %v), want 0", count, err)
+	}
+}
+
 func TestSuspendLicense_NotFound(t *testing.T) {
 	s := setupTestDB(t)
 	defer s.Close()
