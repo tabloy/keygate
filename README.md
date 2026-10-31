@@ -54,6 +54,14 @@ Every model in one platform — **subscriptions**, **perpetual**, **perpetual wi
 
 Public SDK endpoints (activate / verify / deactivate / usage / download) take `license_key` directly — no embedded API keys to leak from your binaries. Customers can self-serve activation slots from the portal (free up a lost laptop without a support ticket).
 
+#### Standard activations or floating sessions?
+
+Use standard activations when a device may stay offline for an unknown amount of time. A device keeps its activation slot until the customer removes it in the portal. If a device is lost, the customer can sign in, open the license's **Devices** section, remove the old activation, and then activate the replacement device. The portal API lists activations at `GET /portal/licenses/{license_key}/activations` and removes one at `DELETE /portal/licenses/{license_key}/activations/{activation_id}`.
+
+Use floating sessions when a seat should be available to whichever device is using the software now. The client checks out a session, sends heartbeats before the plan's `floating_timeout`, and checks in when it exits. If a device disappears without checking in, its seat stays occupied until the timeout expires; another device cannot take over a live session. That timeout-based recovery makes floating sessions a poor fit when an app must remain usable offline for an unknown amount of time.
+
+The request and response details for these routes are in the [API spec](docs/openapi.yaml).
+
 ### 🚀 Software Distribution
 
 Ship signed updates to your installed clients. **Sparkle** (macOS), **Velopack** (Windows), and **Tauri** (cross-platform) updaters all consume the same release feed — one publish, every updater compatible. Per-platform binaries grouped under a single release, **atomic publish gate** (no half-uploaded releases ever leak), **yank** for instant rollback. Per-product **Ed25519 signing keys** with private keys encrypted at rest under AES-256-GCM + HKDF-derived subkeys. Server-side SHA-256 for integrity (never trust the client's hash). Stable feeds are public — your customers' auto-updater never breaks when a license rotates. Products sold with a maintenance period turn on `feed_license_required` — the updater then sends the license and only sees releases published inside the customer's update period, while the app itself keeps running either way. Per-product `minimum_supported_version` floor for forced upgrades.
