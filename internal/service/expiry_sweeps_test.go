@@ -225,6 +225,28 @@ func TestPastDueSweep_ExpiresAfter30Days(t *testing.T) {
 	}
 }
 
+// As the grace sweep: the customer whose licence the past-due sweep
+// expired gets the email once, with the product named, and one still
+// inside its 30 days gets none.
+func TestPastDueSweep_EmailsTheCustomerOnce(t *testing.T) {
+	f := newFallbackFixture(t)
+	setNotify(t, f.s, "license_expired", "")
+	now := time.Now()
+	stale := f.pastDue(ago(31*day), &now)
+	fresh := f.pastDue(ago(29*day), &now)
+
+	f.c.MarkPastDueAsExpired(f.ctx)
+	f.c.MarkPastDueAsExpired(f.ctx)
+
+	// Waits for a second email, which must not come.
+	if subjects := f.mail.to(stale.Email, 2); len(subjects) != 1 || subjects[0] != "Fallback App license expired" {
+		t.Fatalf("mail sent: %q; want the license expired email once", subjects)
+	}
+	if subjects := f.mail.to(fresh.Email, 0); len(subjects) != 0 {
+		t.Fatalf("mail sent inside the 30 days: %q", subjects)
+	}
+}
+
 // As the grace sweep: EndPastDueUpgrade is asked first, with the 30-day
 // threshold, and a licence it takes or fails on stays past due.
 func TestPastDueSweep_UpgradeHook(t *testing.T) {

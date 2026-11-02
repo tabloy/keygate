@@ -1703,8 +1703,9 @@ func (s *Store) FindExpiredTrials(ctx context.Context) ([]*model.License, error)
 func (s *Store) FindStalePastDueLicenses(ctx context.Context, before time.Time) ([]*model.License, error) {
 	var out []*model.License
 	err := s.DB.NewSelect().Model(&out).
-		Where("status = 'past_due'").
-		Where("COALESCE(past_due_at, updated_at) < ?", before).
+		Relation("Product").
+		Where("license.status = 'past_due'").
+		Where("COALESCE(license.past_due_at, license.updated_at) < ?", before).
 		Scan(ctx)
 	return out, err
 }
