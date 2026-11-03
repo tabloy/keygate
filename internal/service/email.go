@@ -850,53 +850,41 @@ func (s *EmailService) SendSubscriptionCanceled(to, productName string, immediat
 	}()
 }
 
-func (s *EmailService) SendPaymentFailed(to, productName string) {
-	if s.skipDisabled("payment_failed", to) {
-		return
-	}
-	body := s.renderEmail("payment_failed", tmplPaymentFailed, s.templateData(map[string]any{
+// RenderPaymentFailed builds the first step of the dunning ladder, a
+// day into a past-due episode. Like the other dunning steps, the
+// reminder job queues it rather than sending it: a mail sent from the
+// loop and lost to an SMTP outage would leave the customer untold
+// until the license expires, and the queue retries it.
+func (s *EmailService) RenderPaymentFailed(productName string) (subject, body string) {
+	body = s.renderEmail("payment_failed", tmplPaymentFailed, s.templateData(map[string]any{
 		"Product": productName,
 	}))
-	go func() {
-		if err := s.Send(to, productName+" payment failed", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", productName+" payment failed", "error", err)
-		}
-	}()
+	return productName + " payment failed", body
 }
 
-func (s *EmailService) SendDunningSecond(to, productName string) {
-	if s.skipDisabled("payment_failed", to) {
-		return
-	}
-	body := `<!DOCTYPE html>
+// RenderDunningSecond builds the dunning step sent a week into a
+// past-due episode. The reminder job queues it.
+func (s *EmailService) RenderDunningSecond(productName string) (subject, body string) {
+	body = `<!DOCTYPE html>
 <html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
 <h2 style="color: #d97706;">Payment Still Outstanding</h2>
 <p>We've been unable to process your payment for <strong>` + html.EscapeString(productName) + `</strong> for over a week.</p>
 <p>Please update your payment method to avoid losing access.</p>
 </body></html>`
-	go func() {
-		if err := s.Send(to, productName+" — payment still outstanding", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
-		}
-	}()
+	return productName + " — payment still outstanding", body
 }
 
-func (s *EmailService) SendDunningFinal(to, productName string) {
-	if s.skipDisabled("payment_failed", to) {
-		return
-	}
-	body := `<!DOCTYPE html>
+// RenderDunningFinal builds the last dunning step, two weeks into a
+// past-due episode. The reminder job queues it.
+func (s *EmailService) RenderDunningFinal(productName string) (subject, body string) {
+	body = `<!DOCTYPE html>
 <html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
 <h2 style="color: #dc2626;">Final Notice — Access Will Be Suspended</h2>
 <p>Your <strong>` + html.EscapeString(productName) + `</strong> payment has been overdue for 14 days.</p>
 <p>Your access will be suspended soon if payment is not received.</p>
 <p>Please update your payment method immediately.</p>
 </body></html>`
-	go func() {
-		if err := s.Send(to, productName+" — final payment notice", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
-		}
-	}()
+	return productName + " — final payment notice", body
 }
 
 // RenderAdminInvite builds the admin invite. The login link comes from
