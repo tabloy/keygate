@@ -304,9 +304,18 @@ func (s *Store) GetAnalyticsSummary(ctx context.Context, f AnalyticsFilter) (*An
 		return nil, err
 	}
 
+	// The average is over the licences whose devices were counted. With
+	// a status picked those are the licences in that status, not the
+	// total above, which leaves the status filter out.
+	licenses := result.Total
+	if f.Status != "" {
+		if licenses, err = licenseSubquery(s, f).Count(ctx); err != nil {
+			return nil, err
+		}
+	}
 	var avgActivations float64
-	if result.Total > 0 {
-		avgActivations = float64(activations) / float64(result.Total)
+	if licenses > 0 {
+		avgActivations = float64(activations) / float64(licenses)
 	}
 
 	return &AnalyticsSummary{
