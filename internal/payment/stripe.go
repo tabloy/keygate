@@ -3074,11 +3074,25 @@ func (h *StripeHandler) CancelSubscription(c *gin.Context) {
 		}
 		// Set ValidUntil to when Stripe will cancel the subscription;
 		// without that date in the answer, the webhook that follows
-		// sets it rather than the epoch.
+		// sets it rather than the epoch. Stamped like other subscription
+		// writes: an unguarded UpdateLicense could land after an
+		// immediate cancel and push valid_until back out, restoring
+		// access on a canceled licence.
 		if sub.CancelAt > 0 {
 			periodEnd := time.Unix(sub.CancelAt, 0)
 			lic.ValidUntil = &periodEnd
-			_ = h.Store.UpdateLicense(ctx, lic, "valid_until")
+			if stampErr != nil {
+				slog.Warn("stripe: cancel-at-period-end valid_until not stamped", "license_id", lic.ID, "error", stampErr)
+			} else if err := h.Store.UpdateLicenseFromSubscriptionRead(ctx, lic, cancelAsOf, "valid_until"); err != nil {
+				// Stale or restricted (immediate cancel already ended it):
+				// the subscription.updated webhook that follows records
+				// the period end if it still should.
+				if !errors.Is(err, store.ErrStaleSubscriptionRead) &&
+					!errors.Is(err, store.ErrLicenseRestricted) &&
+					!errors.Is(err, store.ErrSubscriptionUnlinked) {
+					slog.Warn("stripe: cancel-at-period-end valid_until not written", "license_id", lic.ID, "error", err)
+				}
+			}
 		}
 		// It now runs out rather than renews: the expiry reminder applies,
 		// not "renews tomorrow". The subscription.updated webhook that

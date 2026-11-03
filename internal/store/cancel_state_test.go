@@ -271,6 +271,70 @@ func TestStripeWritesRespectLicenceState(t *testing.T) {
 	}
 }
 
+// Cancel-at-period-end must not push valid_until out after an immediate
+// cancel already ended the licence: that would restore access until the
+// period end on a canceled row.
+func TestDateOnlyValidUntil_RefusedAfterImmediateCancel(t *testing.T) {
+	s := setupTestDB(t)
+	t.Cleanup(func() { s.Close() })
+	ctx := context.Background()
+
+	until := time.Now().Add(30 * 24 * time.Hour).Truncate(time.Second)
+	lic := newLicenseOn(t, s, ctx, "subscription", model.StatusActive, &until)
+	sub := "sub_capend_" + lic.ID
+	linkSubscription(t, s, ctx, lic.ID, sub)
+
+	endedAt := time.Now().Truncate(time.Second)
+	stamp, err := s.StripeReadStamp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateLicenseFromSubscriptionEnded(ctx, &model.License{
+		ID: lic.ID, StripeSubscriptionID: sub, Status: model.StatusCanceled,
+		CanceledAt: &endedAt, ValidUntil: &endedAt,
+	}, stamp, "status", "canceled_at", "valid_until"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A later period-end stamp must still not extend the paid-through date.
+	later, err := s.StripeReadStamp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	periodEnd := time.Now().Add(20 * 24 * time.Hour).Truncate(time.Second)
+	err = s.UpdateLicenseFromSubscriptionRead(ctx, &model.License{
+		ID: lic.ID, StripeSubscriptionID: sub, Status: model.StatusActive, ValidUntil: &periodEnd,
+	}, later, "valid_until")
+	if !errors.Is(err, store.ErrLicenseRestricted) {
+		t.Fatalf("period-end after immediate cancel: err=%v, want ErrLicenseRestricted", err)
+	}
+	var got time.Time
+	var st string
+	if err := s.DB.NewRaw("SELECT status, valid_until FROM licenses WHERE id = ?", lic.ID).Scan(ctx, &st, &got); err != nil {
+		t.Fatal(err)
+	}
+	if st != model.StatusCanceled || !got.Equal(endedAt) {
+		t.Fatalf("after refused period-end: %s until %v, want canceled until %v", st, got, endedAt)
+	}
+
+	// An active licence still accepts a stamped period-end date.
+	active := newLicenseOn(t, s, ctx, "subscription", model.StatusActive, &until)
+	asub := "sub_capend_ok_" + active.ID
+	linkSubscription(t, s, ctx, active.ID, asub)
+	okStamp, err := s.StripeReadStamp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateLicenseFromSubscriptionRead(ctx, &model.License{
+		ID: active.ID, StripeSubscriptionID: asub, Status: model.StatusActive, ValidUntil: &periodEnd,
+	}, okStamp, "valid_until"); err != nil {
+		t.Fatalf("period-end on an active licence: %v", err)
+	}
+	if err := s.DB.NewRaw("SELECT valid_until FROM licenses WHERE id = ?", active.ID).Scan(ctx, &got); err != nil || !got.Equal(periodEnd) {
+		t.Fatalf("active period-end valid_until=%v (err %v), want %v", got, err, periodEnd)
+	}
+}
+
 // A failed update of the subscription row fails the write: the transaction
 // is aborted, so the licence update is rolled back with it.
 func TestUpdateLicenseFromSubscriptionEnded_FailedSubscriptionSync(t *testing.T) {

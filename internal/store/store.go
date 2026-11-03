@@ -1243,6 +1243,13 @@ func updateLicenseAndSubscriptionIn(ctx context.Context, tx bun.Tx, lic *model.L
 	// took, nor revive a subscription that ended.
 	if stillLinked {
 		q = q.Where("status <> ?", model.StatusRevoked)
+		// A date-only write must not push valid_until out on a licence
+		// that already ended: cancel-at-period-end racing an immediate
+		// cancel would restore access until the period end.
+		if slices.Contains(cols, "valid_until") && !slices.Contains(cols, "status") {
+			q = q.Where("status NOT IN (?, ?, ?)",
+				model.StatusCanceled, model.StatusExpired, model.StatusRevoked)
+		}
 		switch lic.Status {
 		case model.StatusActive, model.StatusTrialing, model.StatusPastDue:
 			q = q.Where("NOT (status = ? AND COALESCE(suspended_by, ?) <> ?)",
