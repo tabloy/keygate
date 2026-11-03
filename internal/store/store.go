@@ -1988,14 +1988,6 @@ func (s *Store) TryRecordNotification(ctx context.Context, licenseID, tag string
 	return n == 1, err
 }
 
-// RecordNotification records that a notification was sent for a license.
-func (s *Store) RecordNotification(ctx context.Context, licenseID, tag string) {
-	_, _ = s.DB.NewRaw(
-		"INSERT INTO notifications (id, license_id, tag) VALUES (?, ?, ?) ON CONFLICT (license_id, tag) DO NOTHING",
-		newID(), licenseID, tag,
-	).Exec(ctx)
-}
-
 // TryRecordPastDueNotification records tag for a licence only while it
 // is still past_due on subscriptionID, in the episode that began at
 // pastDueAt (to the second), and reports whether this call recorded it:

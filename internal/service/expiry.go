@@ -352,11 +352,15 @@ func (c *ExpiryChecker) CleanupExpiredActivations(ctx context.Context) {
 
 // SendPaymentFailureReminders walks every past_due license up the
 // dunning ladder. Anchored on lic.PastDueAt so unrelated row writes
-// (audit, sync) don't reset the clock. Each step is gated by
-// HasNotification + a unique tag per past_due_at epoch, so:
+// (audit, sync) don't reset the clock. Each step is claimed
+// (ClaimNotification) under a unique tag per past_due_at epoch, and
+// queued, so:
 //
 //   - the same email never fires twice for one episode, even if the
-//     checker runs every hour;
+//     checker runs every hour, and even with every replica running it:
+//     a check-then-record would let two of them mail the same customer;
+//   - an SMTP outage does not lose a step: the queue retries it, and
+//     a mail it gives up on opens the step again for a later run;
 //   - if the checker misses a window (server down) it still fires
 //     the next time it wakes up — there's no narrow `>=N && <N+1`
 //     window that can silently swallow a reminder;
@@ -382,16 +386,16 @@ func (c *ExpiryChecker) SendPaymentFailureReminders(ctx context.Context) {
 	steps := []struct {
 		minDays int
 		tag     string
-		send    func(to, productName string)
+		render  func(productName string) (subject, body string)
 	}{
 		// Highest threshold first — only one email per check per
 		// license, and the "highest reached" wins. Without that,
 		// a license that's been past_due for 20 days would receive
 		// dunning_first + dunning_second + dunning_final on the
 		// FIRST checker run after install.
-		{14, "dunning_final", c.email.SendDunningFinal},
-		{7, "dunning_second", c.email.SendDunningSecond},
-		{1, "dunning_first", c.email.SendPaymentFailed},
+		{14, "dunning_final", c.email.RenderDunningFinal},
+		{7, "dunning_second", c.email.RenderDunningSecond},
+		{1, "dunning_first", c.email.RenderPaymentFailed},
 	}
 
 	now := time.Now()
@@ -414,14 +418,32 @@ func (c *ExpiryChecker) SendPaymentFailureReminders(ctx context.Context) {
 				continue
 			}
 			tag := step.tag + ":" + strconvI64(episode)
-			if c.store.HasNotification(ctx, lic.ID, tag) {
-				break // already sent the highest-tier; nothing lower will fire
+			token, err := c.store.ClaimNotification(ctx, lic.ID, tag)
+			if err != nil {
+				c.logger.Error("dunning claim failed", "license_id", lic.ID, "tag", step.tag, "error", err)
+				break // the next run tries again
 			}
-			step.send(lic.Email, productName)
-			c.store.RecordNotification(ctx, lic.ID, tag)
-			c.logger.Info("dunning email sent",
-				"license_id", lic.ID, "tag", step.tag,
-				"days_past_due", daysPastDue, "episode", episode)
+			if token == "" {
+				break // already sent the highest-tier, or another pass holds it; nothing lower will fire
+			}
+			// Queuing the mail and closing the claim share one
+			// transaction, as for the other reminders. Failing to queue
+			// hands the claim back for the next run; losing the claim
+			// means another pass already owns it.
+			subject, body := step.render(productName)
+			switch err := c.store.EnqueueEmailAndCloseNotification(ctx, lic.Email, subject, body, token); {
+			case err == nil:
+				c.logger.Info("dunning email queued",
+					"license_id", lic.ID, "tag", step.tag,
+					"days_past_due", daysPastDue, "episode", episode)
+			case errors.Is(err, store.ErrNotificationClaimLost):
+				c.logger.Warn("dunning claim taken over; the other pass sends it", "license_id", lic.ID, "tag", step.tag)
+			default:
+				c.logger.Error("dunning email could not be queued", "license_id", lic.ID, "tag", step.tag, "error", err)
+				if rerr := c.store.ReleaseNotification(ctx, token); rerr != nil {
+					c.logger.Error("dunning claim not released", "license_id", lic.ID, "error", rerr)
+				}
+			}
 			break // only one email per checker run per license
 		}
 	}
