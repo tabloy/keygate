@@ -3741,7 +3741,8 @@ paths:
           $ref: "#/components/responses/AdminLicenseNotFound"
         "409":
           description: |
-            `EXPIRY_PASSED`: set a new expiry date instead, which reactivates it;
+            `EXPIRY_PASSED`: set a new expiry date first, which reactivates an
+            expired license (a canceled one can then be reinstated);
             for a license on a Stripe subscription, the subscription has ended
             (unlink it to manage its expiry here).
             `STRIPE_NOT_VISIBLE`: the install's Stripe API key cannot see the

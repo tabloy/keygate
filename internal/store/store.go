@@ -2533,6 +2533,9 @@ func (s *Store) ClaimProcessedEvent(ctx context.Context, provider, eventID strin
 // when the licence or its plan is not there to read, and the caller's
 // limit stands alone.
 func lockLicenseLimitsIn(ctx context.Context, tx bun.Tx, licenseID string) (seats, activations int, known bool, err error) {
+	if err := lockLicenseRowIn(ctx, tx, licenseID); err != nil {
+		return 0, 0, false, err
+	}
 	var rows []struct {
 		Quantity       int   `bun:"quantity"`
 		PerSeat        *bool `bun:"per_seat"`
@@ -2551,6 +2554,18 @@ func lockLicenseLimitsIn(ctx context.Context, tx bun.Tx, licenseID string) (seat
 	plan := model.Plan{PerSeat: *r.PerSeat, MaxSeats: *r.MaxSeats, MaxActivations: *r.MaxActivations}
 	seats, activations = plan.Limits(r.Quantity)
 	return seats, activations, true, nil
+}
+
+// lockLicenseRowIn takes the licence row lock in a statement of its own,
+// for a caller that then reads the licence with its plan. A statement
+// that locks the licence while joining its plan reads the plan as it was
+// before the lock was waited for: when a plan change commits meanwhile,
+// Postgres checks only the locked row again, the old plan no longer joins
+// it, and the plan reads as missing. Read in a later statement, under the
+// lock, the plan is the one the licence has now.
+func lockLicenseRowIn(ctx context.Context, tx bun.Tx, licenseID string) error {
+	_, err := tx.NewRaw("SELECT 1 FROM licenses WHERE id = ? FOR UPDATE", licenseID).Exec(ctx)
+	return err
 }
 
 // licenseChangeLock is the advisory lock class a change to a licence's

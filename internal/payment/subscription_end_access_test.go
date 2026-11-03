@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stripe/stripe-go/v82"
 
 	"github.com/tabloy/keygate/internal/model"
 	"github.com/tabloy/keygate/internal/service"
@@ -244,5 +245,56 @@ func TestPortalImmediateCancelOfAnEndedSubscription(t *testing.T) {
 	var n int
 	if err := f.s.DB.NewRaw("SELECT count(*) FROM audit_logs WHERE entity_id = ? AND action = 'cancel_requested'", f.lic.ID).Scan(f.ctx, &n); err != nil || n != 1 {
 		t.Fatalf("%d cancel_requested lines (%v), want 1", n, err)
+	}
+}
+
+// Without a Stripe key, the portal's subscription endpoints and the
+// checkout success page's check answer that payments are not configured,
+// and call nobody: a call to Stripe without
+// a key fails, and used to be made all the same, answered as a 500.
+func TestPortalSubscriptionEndpointsWithoutStripe(t *testing.T) {
+	f := newUpgradeFixture(t, "nostripe")
+	l := f.reload(t)
+	l.StripeSubscriptionID, l.StripeCustomerID, l.PaymentProvider = "sub_ns_"+f.tag, "cus_ns_"+f.tag, "stripe"
+	if err := f.s.UpdateLicense(f.ctx, l, "stripe_subscription_id", "stripe_customer_id", "payment_provider"); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	stubStripe(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	stripe.Key = "" // stubStripe sets one and puts the previous back afterwards
+	call := func(method, path, body string, handle gin.HandlerFunc) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		var req *http.Request
+		if body != "" {
+			req = httptest.NewRequest(method, path, bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+		} else {
+			req = httptest.NewRequest(method, path, nil)
+		}
+		c.Request = req
+		c.Set("email", f.lic.Email)
+		handle(c)
+		return w
+	}
+	body := fmt.Sprintf(`{"license_id":%q,"immediate":true}`, f.lic.ID)
+	for name, w := range map[string]*httptest.ResponseRecorder{
+		"cancel":          call(http.MethodPost, "/portal/subscription/cancel", body, f.h.CancelSubscription),
+		"billing portal":  call(http.MethodPost, "/portal/subscription/billing-portal", body, f.h.CreatePortalSession),
+		"invoices":        call(http.MethodGet, "/portal/subscription/invoices?license_id="+f.lic.ID, "", f.h.ListInvoices),
+		"checkout verify": call(http.MethodGet, "/checkout/verify?session_id=cs_test_none", "", f.h.VerifyCheckoutSession),
+	} {
+		if w.Code != http.StatusServiceUnavailable || !bytes.Contains(w.Body.Bytes(), []byte("PAYMENTS_UNAVAILABLE")) {
+			t.Errorf("%s without Stripe = %d %s, want 503 PAYMENTS_UNAVAILABLE", name, w.Code, w.Body.String())
+		}
+	}
+	if calls != 0 {
+		t.Errorf("%d calls to Stripe without a key, want none", calls)
+	}
+	if st := f.reload(t).Status; st != model.StatusActive {
+		t.Errorf("status %s after a cancel that could not be made, want active", st)
 	}
 }

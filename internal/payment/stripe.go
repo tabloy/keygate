@@ -1034,6 +1034,9 @@ func (h *StripeHandler) VerifyCheckoutSession(c *gin.Context) {
 		response.BadRequest(c, "session_id is required")
 		return
 	}
+	if !paymentsConfigured(c) {
+		return
+	}
 
 	sess, err := session.Get(sessionID, &stripe.CheckoutSessionParams{})
 	if err != nil {
@@ -2999,6 +3002,9 @@ func (h *StripeHandler) CancelSubscription(c *gin.Context) {
 		response.BadRequest(c, "no active subscription")
 		return
 	}
+	if !paymentsConfigured(c) {
+		return
+	}
 
 	// Once Stripe has the cancel, the writes and what they tell finish
 	// even if the customer closes the page.
@@ -3434,6 +3440,9 @@ func (h *StripeHandler) CreatePortalSession(c *gin.Context) {
 		response.BadRequest(c, "no Stripe customer associated")
 		return
 	}
+	if !paymentsConfigured(c) {
+		return
+	}
 
 	// Stripe sends the customer back to return_url, so only a page of
 	// this site is accepted; anything else falls back to the portal.
@@ -3454,6 +3463,16 @@ func (h *StripeHandler) CreatePortalSession(c *gin.Context) {
 	}
 
 	response.OK(c, gin.H{"url": s.URL})
+}
+
+// paymentsConfigured answers 503 and reports false when this install has
+// no Stripe key: a call to Stripe without one fails, and is still made.
+func paymentsConfigured(c *gin.Context) bool {
+	if stripe.Key == "" {
+		response.Err(c, http.StatusServiceUnavailable, "PAYMENTS_UNAVAILABLE", "payments are not configured")
+		return false
+	}
+	return true
 }
 
 // ListInvoices returns invoice history for a license's Stripe customer.
@@ -3479,6 +3498,9 @@ func (h *StripeHandler) ListInvoices(c *gin.Context) {
 
 	if lic.StripeCustomerID == "" {
 		response.OK(c, gin.H{"invoices": []any{}})
+		return
+	}
+	if !paymentsConfigured(c) {
 		return
 	}
 

@@ -521,8 +521,10 @@ const usableStatusSQL = `CASE WHEN COALESCE(licenses.stripe_subscription_id, '')
 // ErrReinstateNeedsNewExpiry refuses to reinstate an expired or canceled
 // licence whose expiry date has passed: it would show as active, yet stay
 // unusable and be expired again by the next hourly sweep. Setting a new
-// expiry date reactivates it instead (SetLicenseValidUntil).
-var ErrReinstateNeedsNewExpiry = errors.New("this license's expiry date has passed — set a new expiry date instead, which reactivates it")
+// expiry date comes first (SetLicenseValidUntil): it reactivates an
+// expired licence, and a canceled one, usable again but still canceled,
+// can then be reinstated.
+var ErrReinstateNeedsNewExpiry = errors.New("this license's expiry date has passed — set a new expiry date first: that reactivates an expired license, and a canceled one can then be reinstated")
 
 // ErrLicenseNotReinstatable refuses a reinstate the licence's current status
 // does not allow, or of a licence that does not exist.
@@ -576,6 +578,9 @@ func (s *Store) ReinstateLicense(ctx context.Context, id string) (string, error)
 func (s *Store) SetLicenseValidUntil(ctx context.Context, id string, validUntil *time.Time) (prev, status string, err error) {
 	err = RunInTx(ctx, s.DB, func(ctx context.Context, tx bun.Tx) error {
 		var licenseType, stripeSub sql.NullString
+		if err := lockLicenseRowIn(ctx, tx, id); err != nil {
+			return err
+		}
 		if err := tx.NewRaw(`
 			SELECT l.status, p.license_type, l.stripe_subscription_id FROM licenses l
 			LEFT JOIN plans p ON p.id = l.plan_id
@@ -658,6 +663,9 @@ func (s *Store) SetLicenseQuantity(ctx context.Context, id string, quantity int)
 			MaxQuantity    sql.NullInt64  `bun:"max_quantity"`
 			MaxActivations sql.NullInt64  `bun:"max_activations"`
 			LicenseModel   sql.NullString `bun:"license_model"`
+		}
+		if err := lockLicenseRowIn(ctx, tx, id); err != nil {
+			return err
 		}
 		if err := tx.NewRaw(`
 			SELECT l.quantity, l.stripe_subscription_id, p.per_seat, p.min_quantity, p.max_quantity,

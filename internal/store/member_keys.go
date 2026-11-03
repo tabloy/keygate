@@ -256,10 +256,20 @@ func (s *Store) MarkPausedSeats(ctx context.Context, licenseID string, seats []*
 // keyHeldIn reports whether key still opens the licence the way the
 // caller found it: as the member's key when seatID is set (while the
 // product has seats, as FindLicenseByKey holds it), else as the
-// licence's own. Nor once the licence is stopped (see stoppedStatuses):
-// the caller read it usable before taking the licence lock, and a revoke,
-// suspend or expiry that committed in between must not be followed by a
-// new device or session on it.
+// licence's own. Nor once the licence is stopped (see stoppedStatuses),
+// or canceled with its expiry passed, as the licence checks refuse it: the
+// caller read it usable before taking the licence lock, and a revoke,
+// suspend, expiry or end of subscription that committed in between must
+// not be followed by a new device or session on it.
+// canceledEndedSQL is a canceled licence whose expiry has passed, or that
+// has none: no longer usable, as the licence checks have it, though
+// canceled is not among stoppedStatuses (one may work while an expiry an
+// operator set lies ahead). col prefixes the licence's columns: "l." for
+// a query that names the licence l, "" for one that reads it alone.
+func canceledEndedSQL(col string) string {
+	return col + `status = 'canceled' AND (` + col + `valid_until IS NULL OR ` + col + `valid_until <= now())`
+}
+
 func keyHeldIn(ctx context.Context, tx bun.Tx, licenseID, seatID, key string) (bool, error) {
 	var held bool
 	var err error
@@ -271,11 +281,12 @@ func keyHeldIn(ctx context.Context, tx bun.Tx, licenseID, seatID, key string) (b
 			JOIN licenses l ON l.id = s.license_id JOIN products p ON p.id = l.product_id
 			JOIN plans pl ON pl.id = l.plan_id
 			WHERE s.id = ? AND s.license_id = ? AND s.member_key_hash = ? AND s.removed_at IS NULL
-			AND s.accepted_at IS NOT NULL AND p.type IN (?) AND l.status NOT IN (?) AND NOT (`+seatPausedSQL+`))`,
+			AND s.accepted_at IS NOT NULL AND p.type IN (?) AND l.status NOT IN (?) AND NOT (`+canceledEndedSQL("l.")+`)
+			AND NOT (`+seatPausedSQL+`))`,
 			seatID, licenseID, license.HashKey(key), bun.In(model.ProductTypesSupporting(model.CapSeats)), stopped).Scan(ctx, &held)
 	} else {
 		err = tx.NewRaw(`SELECT EXISTS (SELECT 1 FROM licenses
-			WHERE id = ? AND (key_hash = ? OR license_key = ?) AND status NOT IN (?))`,
+			WHERE id = ? AND (key_hash = ? OR license_key = ?) AND status NOT IN (?) AND NOT (`+canceledEndedSQL("")+`))`,
 			licenseID, license.HashKey(key), key, stopped).Scan(ctx, &held)
 	}
 	return held, err
