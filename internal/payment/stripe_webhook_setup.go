@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -47,10 +49,21 @@ var stripeWebhookEvents = []*string{
 	stripe.String("customer.updated"),
 }
 
-// IsLocalhostURL returns true if the URL points to a local address.
-// Stripe cannot deliver webhooks to localhost.
+// IsLocalhostURL returns true if the URL's host is a local address.
+// Stripe cannot deliver webhooks to localhost. Only the host counts: a
+// public domain such as localhost-licenses.example.com, or "localhost"
+// in the path or query, is not local.
 func IsLocalhostURL(baseURL string) bool {
-	return strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1")
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
 }
 
 // SetupWebhookEndpoint ensures a Stripe webhook endpoint is configured.
