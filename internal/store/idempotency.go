@@ -43,7 +43,10 @@ var (
 //     already exists with a DIFFERENT bodyHash — the client reused the
 //     key for a semantically different request, which is a bug.
 //
-// Concurrency safety: we use INSERT ... ON CONFLICT DO NOTHING + a
+// A row past its expires_at is claimed afresh, so the 24h TTL holds even
+// when the periodic prune has not run yet.
+//
+// Concurrency safety: we use INSERT ... ON CONFLICT + a
 // followup SELECT, both atomic at the SQL layer. A race between two
 // concurrent claims of the same key is resolved by exactly ONE row's
 // INSERT succeeding; the other sees the row via SELECT and returns
@@ -53,7 +56,10 @@ func (s *Store) IdempotencyClaim(ctx context.Context, key, endpoint, bodyHash st
 	res, err := s.DB.NewRaw(`
 		INSERT INTO idempotency_keys (key, endpoint, body_hash, response_status, response_body, response_complete, created_at, expires_at)
 		VALUES (?, ?, ?, 0, '', false, now(), now() + interval '24 hours')
-		ON CONFLICT (key, endpoint) DO NOTHING
+		ON CONFLICT (key, endpoint) DO UPDATE SET
+			body_hash = EXCLUDED.body_hash, response_status = 0, response_body = '',
+			response_complete = false, created_at = now(), expires_at = EXCLUDED.expires_at
+		WHERE idempotency_keys.expires_at < now()
 	`, key, endpoint, bodyHash).Exec(ctx)
 	if err != nil {
 		return nil, err
