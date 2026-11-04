@@ -464,7 +464,7 @@ func (c *ExpiryChecker) SendRenewalReminders(ctx context.Context) {
 		if lic.Product != nil {
 			productName = lic.Product.Name
 		}
-		subject, body := c.email.RenderRenewalReminder(productName, lic.ValidUntil.Format("2006-01-02"))
+		subject, body := c.email.RenderRenewalReminder(productName, utcDate(*lic.ValidUntil))
 		switch err := c.store.EnqueueEmailAndCloseNotification(ctx, lic.Email, subject, body, token); {
 		case err == nil, errors.Is(err, store.ErrNotificationClaimLost):
 		default:

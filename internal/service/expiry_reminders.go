@@ -87,6 +87,14 @@ func daysLeft(left time.Duration) int {
 	return max(1, int(math.Ceil(left.Hours()/24)))
 }
 
+// utcDate is the calendar date a customer is shown for a license date, in
+// UTC. Timestamps scanned from the database carry the connection's time
+// zone, so formatting them directly names a different day on a server whose
+// zone is not UTC; the updates-ending reminder already formats in UTC.
+func utcDate(t time.Time) string {
+	return t.UTC().Format("2006-01-02")
+}
+
 func (c *ExpiryChecker) reminderDays(ctx context.Context) []int {
 	raw, err := c.store.GetSetting(ctx, ReminderDaysSetting)
 	if err != nil || strings.TrimSpace(raw) == "" {
@@ -159,7 +167,7 @@ func (c *ExpiryChecker) remindExpiring(ctx context.Context, lic *model.License, 
 	}
 	trial := lic.Status == model.StatusTrialing
 	subject, body := c.email.RenderLicenseExpiring(productName, c.store.DecryptLicenseKey(lic),
-		lic.ValidUntil.Format("2006-01-02"), daysLeft(left), trial, c.trialFallbackName(ctx, lic, trial))
+		utcDate(*lic.ValidUntil), daysLeft(left), trial, c.trialFallbackName(ctx, lic, trial))
 	switch err := c.store.EnqueueEmailAndCloseNotification(ctx, lic.Email, subject, body, token); {
 	case err == nil:
 		c.logger.Info("expiry reminder queued", "license_id", lic.ID, "window_days", window)
