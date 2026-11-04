@@ -114,6 +114,11 @@ func ValidateURL(value string) *AppError {
 	if !strings.HasPrefix(value, "https://") && !strings.HasPrefix(value, "http://") {
 		return &AppError{Status: 400, Code: "INVALID_INPUT", Message: "url must start with https:// or http://"}
 	}
+	// "http://" and "https:///hook" pass the prefix check but name no host,
+	// so a webhook saved with one could never be delivered.
+	if u, err := url.Parse(value); err != nil || u.Hostname() == "" {
+		return &AppError{Status: 400, Code: "INVALID_INPUT", Message: "url must include a host, such as https://example.com/hook"}
+	}
 	return nil
 }
 
