@@ -33,7 +33,7 @@ import {
   type Seat,
 } from "@/lib/api"
 import { cn, formatDate, statusColor } from "@/lib/utils"
-import { PendingChangeNotice, SubscriptionChangeDialog } from "./subscription-change"
+import { formatMoney, PendingChangeNotice, SubscriptionChangeDialog } from "./subscription-change"
 
 export default function PortalLicensesPage() {
   const { t } = useI18n()
@@ -1194,7 +1194,7 @@ function CancelDialog({
 }
 
 function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: () => void }) {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { data, isLoading } = useQuery({
     queryKey: ["portal", "invoices", licenseId],
     queryFn: () => portal.getInvoices(licenseId),
@@ -1232,7 +1232,7 @@ function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: ()
                       {inv.status}
                     </Badge>
                     <span className="font-medium">
-                      {(inv.amount_paid / 100).toFixed(2)} {inv.currency?.toUpperCase()}
+                      {formatMoney(inv.status === "paid" ? inv.amount_paid : inv.amount_due, inv.currency, locale)}
                     </span>
                     {inv.invoice_pdf && (
                       <Button variant="ghost" size="sm" asChild>
