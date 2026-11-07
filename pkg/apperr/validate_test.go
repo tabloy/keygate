@@ -97,6 +97,9 @@ func TestValidateURL(t *testing.T) {
 		{"example.com", false},
 		{"ftp://files.com", false},
 		{"not-a-url", false},
+		{"https://", false},
+		{"http:///hook", false},
+		{"https://exa mple.com/hook", false},
 	}
 	for _, tt := range tests {
 		err := ValidateURL(tt.input)
