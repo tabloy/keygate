@@ -940,7 +940,7 @@ func (s *ReleaseService) GenerateDownload(ctx context.Context, in DownloadInput)
 	if until := lic.EffectiveUpdatesUntil(); !releaseWithinUpdates(rel, until) {
 		return nil, apperr.New(403, "UPDATES_EXPIRED",
 			fmt.Sprintf("release %s was published after this license's update period ended on %s; renew to install it",
-				rel.Version, until.Format("2006-01-02")))
+				rel.Version, utcDate(*until)))
 	}
 
 	// Find the artifact for the requested platform within this release.
