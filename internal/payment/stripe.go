@@ -3515,6 +3515,7 @@ func (h *StripeHandler) ListInvoices(c *gin.Context) {
 		Status      string `json:"status"`
 		AmountDue   int64  `json:"amount_due"`
 		AmountPaid  int64  `json:"amount_paid"`
+		Total       int64  `json:"total"`
 		Currency    string `json:"currency"`
 		Created     int64  `json:"created"`
 		PeriodStart int64  `json:"period_start"`
@@ -3535,6 +3536,7 @@ func (h *StripeHandler) ListInvoices(c *gin.Context) {
 			Status:      string(inv.Status),
 			AmountDue:   inv.AmountDue,
 			AmountPaid:  inv.AmountPaid,
+			Total:       inv.Total,
 			Currency:    string(inv.Currency),
 			Created:     inv.Created,
 			PeriodStart: inv.PeriodStart,

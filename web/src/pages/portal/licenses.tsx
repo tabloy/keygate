@@ -1233,7 +1233,7 @@ function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: ()
                     </Badge>
                     <span className="font-medium">
                       {formatMoney(
-                        inv.status === "paid" || inv.status === "void" ? inv.amount_paid : inv.amount_due,
+                        inv.status === "paid" ? inv.total : inv.status === "void" ? inv.amount_paid : inv.amount_due,
                         inv.currency,
                         locale,
                       )}

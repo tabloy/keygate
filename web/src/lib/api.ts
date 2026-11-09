@@ -1177,6 +1177,9 @@ export interface Invoice {
   status: string
   amount_due: number
   amount_paid: number
+  // What the invoice billed, after discounts and tax. Not what was paid:
+  // amount_paid is 0 for one settled outside Stripe or from the balance.
+  total: number
   currency: string
   created: number
   period_start: number
