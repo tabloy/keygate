@@ -685,6 +685,8 @@ const en = {
   "portal.pausedMembers":
     "{count} member(s) are paused: this license has more people than seats, and the last to join wait for a free seat. Removing a member or getting more seats lets them back.",
   "portal.usagePaused": "Usage is not shown while your access is paused.",
+  "portal.noQuotaFeatures": "No quota-based features.",
+  "portal.quotaUsage": "Quota Usage",
   "portal.keyPaused":
     "Your access is paused: this license has more people than seats. Ask the license owner to free a seat or add seats; your key works again as soon as one is free.",
   "portal.memberKeyHint": "This key is yours alone. It stops working if you are removed from this license.",

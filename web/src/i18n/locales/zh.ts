@@ -657,6 +657,8 @@ const zh = {
   "portal.pausedMembers":
     "有 {count} 位成员已暂停：这个许可证的人数超过了席位数，最后加入的成员需要等待空余席位。移除成员或获得更多席位后即可恢复。",
   "portal.usagePaused": "你的使用权限暂停期间，不显示用量。",
+  "portal.noQuotaFeatures": "无基于配额的功能。",
+  "portal.quotaUsage": "配额用量",
   "portal.keyPaused":
     "你的使用权限已暂停：这个许可证的人数超过了席位数。请联系许可证所有者腾出席位或增加席位，有空位后你的密钥会立即恢复可用。",
   "portal.memberKeyHint": "这是你个人的密钥，被移除后会失效。",
