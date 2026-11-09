@@ -95,6 +95,24 @@ func utcDate(t time.Time) string {
 	return t.UTC().Format("2006-01-02")
 }
 
+// canRemind reports whether a reminder sweep should queue anything: its
+// switch is on and email is set up. Without email the queue does not
+// drain, so a reminder queued now would go out whenever email is finally
+// configured, long after it stopped being true. Nothing is claimed in
+// that case, so the reminder a license is due at that point still goes
+// out, once.
+func (c *ExpiryChecker) canRemind(kind string) bool {
+	if c.email == nil || !c.email.NotifyEnabled(kind) {
+		return false
+	}
+	configured, err := c.email.Configured()
+	if err != nil {
+		c.logger.Warn("email config unreadable; skipping reminders this run", "kind", kind, "error", err)
+		return false
+	}
+	return configured
+}
+
 func (c *ExpiryChecker) reminderDays(ctx context.Context) []int {
 	raw, err := c.store.GetSetting(ctx, ReminderDaysSetting)
 	if err != nil || strings.TrimSpace(raw) == "" {
@@ -116,7 +134,7 @@ func (c *ExpiryChecker) reminderDays(ctx context.Context) []int {
 func (c *ExpiryChecker) SendExpiryReminders(ctx context.Context) {
 	// Turned off: record nothing, so switching it back on reminds the
 	// licenses still inside a window (each once, for the window it is in).
-	if !c.email.NotifyEnabled("license_expiring") {
+	if !c.canRemind("license_expiring") {
 		return
 	}
 	days := c.reminderDays(ctx)

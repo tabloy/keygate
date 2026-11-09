@@ -214,7 +214,8 @@ func TestGivingUpOnAMailReopensItsReminder(t *testing.T) {
 		t.Fatalf("queue status: %q want failed", status)
 	}
 	// Given up on: the reminder is open again, and the next pass takes
-	// it.
+	// it. These reminders can have a deadline, so unlike a dunning notice
+	// they are not held back.
 	retry, err := s.ClaimNotification(ctx, lic.ID, tag)
 	if err != nil || retry == "" {
 		t.Fatalf("a reminder whose mail was given up on was not re-sent: %q %v", retry, err)

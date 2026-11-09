@@ -1100,6 +1100,17 @@ func (s *EmailService) processQueue(ctx context.Context, db *store.Store) {
 		if err != nil || e == nil {
 			return
 		}
+		outdated, err := db.IsOutdatedDunningEmail(ctx, e.ID)
+		if err != nil {
+			// Unknown whether the customer has paid. Nothing is lost by
+			// waiting: the claim lapses and the mail comes round again.
+			s.logger.Warn("email queue: could not check a dunning notice; leaving it for later", "email_id", e.ID, "error", err)
+			continue
+		}
+		if outdated {
+			db.MarkEmailFailedPermanent(ctx, e.ID, e.ClaimToken, "license is no longer in this past-due episode")
+			continue
+		}
 		if err := s.sendResolved(cfg, e.ToAddr, e.Subject, e.Body); err != nil {
 			switch {
 			case isPermanent(err):

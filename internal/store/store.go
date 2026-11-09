@@ -2015,6 +2015,44 @@ func (s *Store) TryRecordPastDueNotification(ctx context.Context, licenseID, sub
 // well inside it (service.smtpSessionTimeout).
 const notificationLease = 10 * time.Minute
 
+// dunningRetryHold is how long a dunning notice waits after the queue
+// gave up on its mail. The license can stay past due for weeks with the
+// mailbox full, and the sweep runs hourly, so without it each sweep would
+// start another round of delivery attempts to the same address. Only
+// dunning is held: other reminders can have a deadline, and one held past
+// it would never be sent.
+const dunningRetryHold = 6 * time.Hour
+
+// IsOutdatedDunningEmail reports whether a queued mail is a dunning notice
+// that no longer applies: the license has left that past-due episode, or
+// the ladder has moved on to a higher step of it. A notice can sit in the
+// queue for days while the mail server is down or its credentials are
+// wrong. A customer who has paid in the meantime must not be told their
+// access is ending, and one still past due should get the notice they are
+// on now, not every notice they missed.
+func (s *Store) IsOutdatedDunningEmail(ctx context.Context, emailID string) (bool, error) {
+	var outdated bool
+	err := s.DB.NewRaw(`
+		SELECT EXISTS (
+			SELECT 1 FROM email_queue q
+			  JOIN notifications n ON n.id = q.notification_id
+			  JOIN licenses l ON l.id = n.license_id
+			 WHERE q.id = ?
+			   AND n.tag LIKE 'dunning\_%'
+			   AND (l.status <> 'past_due' OR l.past_due_at IS NULL
+			        OR floor(extract(epoch FROM l.past_due_at))::bigint::text <> split_part(n.tag, ':', 2)
+			        OR EXISTS (
+			            SELECT 1 FROM notifications h
+			             WHERE h.license_id = n.license_id
+			               AND h.sent_at IS NOT NULL -- set in the transaction that queues it; a bare claim may still fail
+			               AND split_part(h.tag, ':', 2) = split_part(n.tag, ':', 2)
+			               AND array_position(ARRAY['dunning_first', 'dunning_second', 'dunning_final'], split_part(h.tag, ':', 1))
+			                 > array_position(ARRAY['dunning_first', 'dunning_second', 'dunning_final'], split_part(n.tag, ':', 1))
+			        ))
+		)`, emailID).Scan(ctx, &outdated)
+	return outdated, err
+}
+
 // ClaimNotification takes the lease on the (license, tag) pair before
 // anything is sent. It returns a token identifying this claim; empty
 // when the lease was not won. The unique index is the lock: with
@@ -3054,10 +3092,15 @@ func (s *Store) MarkEmailFailed(ctx context.Context, id, token, errMsg string) {
 		// The mail is given up on, so the reminder it carried was
 		// never delivered: the claim that was closed when it was
 		// queued is opened again, and a later pass sends it once the
-		// mail server is back. A claim taken over meanwhile has a
-		// different id and is left alone.
-		_, err = tx.NewRaw(
-			"UPDATE notifications SET sent_at = NULL, claimed_at = to_timestamp(0) WHERE id = ?", notificationID,
+		// mail server is back. A dunning notice is dated forward, so its
+		// pass comes after dunningRetryHold rather than at the next
+		// sweep. A claim taken over meanwhile has a different id and is
+		// left alone.
+		_, err = tx.NewRaw(`
+			UPDATE notifications SET sent_at = NULL,
+				claimed_at = CASE WHEN tag LIKE 'dunning\_%' THEN now() + ?::interval ELSE to_timestamp(0) END
+			WHERE id = ?`,
+			dunningRetryHold.String(), notificationID,
 		).Exec(ctx)
 		return err
 	})

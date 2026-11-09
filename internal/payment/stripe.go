@@ -3594,7 +3594,7 @@ func (h *StripeHandler) onTrialWillEnd(ctx context.Context, raw json.RawMessage)
 		return err
 	}
 	productName := h.productName(ctx, lic.ProductID)
-	trialEnd := time.Unix(data.TrialEnd, 0).Format("2006-01-02")
+	trialEnd := time.Unix(data.TrialEnd, 0).UTC().Format("2006-01-02")
 	if h.Email != nil {
 		h.Email.SendTrialEnding(lic.Email, productName, trialEnd)
 	}

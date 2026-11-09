@@ -286,7 +286,7 @@ func (c *ExpiryChecker) MarkPastDueAsExpired(ctx context.Context) {
 func (c *ExpiryChecker) SendUpdatesEndingReminders(ctx context.Context) {
 	// Turned off: skip without recording anything, so switching it back
 	// on reminds licenses still inside the window.
-	if !c.email.NotifyEnabled("updates_ending") {
+	if !c.canRemind("updates_ending") {
 		return
 	}
 	from := time.Now()
@@ -371,7 +371,7 @@ func (c *ExpiryChecker) SendPaymentFailureReminders(ctx context.Context) {
 	// Switched off: send nothing and record nothing. Each step records
 	// its tag as sent, so recording one that was skipped would leave the
 	// reminder lost for good once the email is switched back on.
-	if c.email == nil || !c.email.NotifyEnabled("payment_failed") {
+	if !c.canRemind("payment_failed") {
 		return
 	}
 	var licenses []*model.License
@@ -465,7 +465,7 @@ func strconvI64(n int64) string {
 // the email, and every renewal is reminded, not only the first. Queued
 // through the durable mail queue like the other reminders.
 func (c *ExpiryChecker) SendRenewalReminders(ctx context.Context) {
-	if !c.email.NotifyEnabled("renewal_reminder") {
+	if !c.canRemind("renewal_reminder") {
 		return
 	}
 	now := time.Now()

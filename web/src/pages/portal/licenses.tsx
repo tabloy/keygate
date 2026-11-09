@@ -1232,7 +1232,11 @@ function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: ()
                       {inv.status}
                     </Badge>
                     <span className="font-medium">
-                      {formatMoney(inv.status === "paid" ? inv.amount_paid : inv.amount_due, inv.currency, locale)}
+                      {formatMoney(
+                        inv.status === "paid" || inv.status === "void" ? inv.amount_paid : inv.amount_due,
+                        inv.currency,
+                        locale,
+                      )}
                     </span>
                     {inv.invoice_pdf && (
                       <Button variant="ghost" size="sm" asChild>
