@@ -26,6 +26,21 @@
   --radius-xl: 0.75rem;
 }
 
+/*
+  Tailwind v4 dropped v3's default border color (gray-200), so bare border
+  utilities fall back to currentColor. Restore the design token as the default,
+  as the Tailwind v4 upgrade guide suggests.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentColor);
+  }
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
