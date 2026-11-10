@@ -57,7 +57,7 @@ func ValidateEmail(email string) *AppError {
 }
 
 func ValidateName(field, value string) *AppError {
-	if value == "" {
+	if strings.TrimSpace(value) == "" {
 		return &AppError{Status: 400, Code: "INVALID_INPUT", Message: field + " is required"}
 	}
 	// Characters, as the message says, not bytes: 200 of them is at
