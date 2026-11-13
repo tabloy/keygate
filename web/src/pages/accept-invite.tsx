@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useAuth } from "@/hooks/use-auth"
 import { useSiteConfig } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
-import { errorCode, invites } from "@/lib/api"
+import { errorCode, invites, ServiceUnavailableError } from "@/lib/api"
 
 export default function AcceptInvitePage() {
   const { t } = useI18n()
@@ -75,17 +75,38 @@ export default function AcceptInvitePage() {
   if (acceptMut.isError) {
     // Every seat taken: the invitation itself still stands.
     const noSeat = errorCode(acceptMut.error) === "SEAT_LIMIT"
+    const unavailable = acceptMut.error instanceof ServiceUnavailableError
     return (
       <Shell>
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <XCircle className="h-5 w-5 text-destructive" />
-              {t(noSeat ? "acceptInvite.noSeatTitle" : "acceptInvite.invalidTitle")}
+              {t(
+                unavailable
+                  ? "acceptInvite.unavailableTitle"
+                  : noSeat
+                    ? "acceptInvite.noSeatTitle"
+                    : "acceptInvite.invalidTitle",
+              )}
             </CardTitle>
-            <CardDescription>{t(noSeat ? "acceptInvite.noSeatDesc" : "acceptInvite.invalidDesc")}</CardDescription>
+            <CardDescription>
+              {t(
+                unavailable
+                  ? "acceptInvite.unavailableDesc"
+                  : noSeat
+                    ? "acceptInvite.noSeatDesc"
+                    : "acceptInvite.invalidDesc",
+              )}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap gap-2">
+            {(unavailable || noSeat) && <Button onClick={() => acceptMut.mutate()}>{t("common.retry")}</Button>}
+            {unavailable && (
+              <Button asChild variant="outline">
+                <Link to="/login">{t("acceptInvite.signIn")}</Link>
+              </Button>
+            )}
             <Button asChild variant="outline">
               <Link to="/">{t("acceptInvite.goHome")}</Link>
             </Button>

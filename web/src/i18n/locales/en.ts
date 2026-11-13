@@ -24,6 +24,10 @@ const en = {
   "common.optional": "optional",
 
   // Accept-invite landing page
+  "acceptInvite.unavailableTitle": "Could not confirm your invitation",
+  "acceptInvite.unavailableDesc":
+    "The server could not confirm whether your invitation was accepted. Try again, or sign in if you already accepted it.",
+  "acceptInvite.signIn": "Sign in",
   "acceptInvite.processing": "Accepting your invitation…",
   "acceptInvite.missingToken": "Missing invite token",
   "acceptInvite.missingTokenDesc": "This URL doesn't carry a valid invitation token. Re-open the link from your email.",
