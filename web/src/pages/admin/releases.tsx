@@ -11,7 +11,7 @@ import {
   Upload,
   X,
 } from "lucide-react"
-import { type ChangeEvent, useEffect, useRef, useState } from "react"
+import { type ChangeEvent, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
@@ -758,11 +758,12 @@ function AddArtifactDialog({
   const [progress, setProgress] = useState<"idle" | "init" | "uploading" | "finalizing">("idle")
   const [error, setError] = useState("")
 
-  useEffect(() => {
-    if (!availablePlatforms.includes(platform) && availablePlatforms.length > 0) {
-      setPlatform(availablePlatforms[0])
-    }
-  }, [availablePlatforms, platform])
+  const preparedUpload = useRef<{
+    platform: string
+    file: File
+    result: Awaited<ReturnType<typeof admin.addArtifact>>
+  } | null>(null)
+  const platformOptions = availablePlatforms.includes(platform) ? availablePlatforms : [platform, ...availablePlatforms]
 
   const onFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -777,12 +778,17 @@ function AddArtifactDialog({
     }
     try {
       setProgress("init")
-      const init = await admin.addArtifact(release.id, {
-        platform,
-        content_type: file.type || "application/octet-stream",
-        expected_size: file.size,
-        filename: file.name,
-      })
+      const prepared = preparedUpload.current
+      const init =
+        prepared?.platform === platform && prepared.file === file && Date.parse(prepared.result.expires_at) > Date.now()
+          ? prepared.result
+          : await admin.addArtifact(release.id, {
+              platform,
+              content_type: file.type || "application/octet-stream",
+              expected_size: file.size,
+              filename: file.name,
+            })
+      preparedUpload.current = { platform, file, result: init }
 
       setProgress("uploading")
       const putResp = await fetch(init.upload_url, {
@@ -808,7 +814,7 @@ function AddArtifactDialog({
       setError(msg)
       setProgress("idle")
       // The artifact row may already exist (pending) even though the
-      // upload failed; refresh so it shows and a retry doesn't hit 409.
+      // upload failed; retain its upload URL for an intentional retry.
       qc.invalidateQueries({ queryKey: ["admin", "release", release.id] })
     }
   }
@@ -826,12 +832,21 @@ function AddArtifactDialog({
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>{t("releases.platform")}</Label>
-              <Select value={platform} onValueChange={setPlatform} disabled={busy}>
+              <Select
+                value={platform}
+                onValueChange={(next) => {
+                  setPlatform(next)
+                  setFile(null)
+                  preparedUpload.current = null
+                  if (fileInputRef.current) fileInputRef.current.value = ""
+                }}
+                disabled={busy}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {availablePlatforms.map((p) => (
+                  {platformOptions.map((p) => (
                     <SelectItem key={p} value={p}>
                       {p}
                     </SelectItem>
