@@ -99,7 +99,17 @@ export function SearchableSelect({
             placeholder={searchPlaceholder}
             className="h-8"
             autoComplete="off"
-            onKeyDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return
+              e.preventDefault()
+              const selector = search.trim()
+                ? '[role="option"][data-picker-result]:not([data-disabled])'
+                : '[role="option"]:not([data-disabled])'
+              const items = e.currentTarget.closest('[role="listbox"]')?.querySelectorAll<HTMLElement>(selector)
+              const target = e.key === "ArrowDown" ? items?.[0] : items?.[items.length - 1]
+              target?.focus()
+            }}
             onKeyUp={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           />
@@ -113,7 +123,7 @@ export function SearchableSelect({
           </SelectItem>
         )}
         {options.map((o) => (
-          <SelectItem key={o.id} value={o.id}>
+          <SelectItem key={o.id} value={o.id} data-picker-result="">
             {o.label}
             {o.hint ? <span className="ml-2 text-xs text-muted-foreground">{o.hint}</span> : null}
           </SelectItem>
