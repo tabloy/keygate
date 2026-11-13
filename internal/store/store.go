@@ -2278,15 +2278,17 @@ func (s *Store) RenewRefreshToken(ctx context.Context, tokenHash, newHash string
 // we want the token gone immediately rather than just revoked
 // (logout is explicit user intent — no need for reuse-detection
 // state to outlive it).
-func (s *Store) DeleteRefreshToken(ctx context.Context, tokenHash string) {
-	_, _ = s.DB.NewRaw("DELETE FROM refresh_tokens WHERE token_hash = ?", tokenHash).Exec(ctx)
+func (s *Store) DeleteRefreshToken(ctx context.Context, tokenHash string) error {
+	_, err := s.DB.NewRaw("DELETE FROM refresh_tokens WHERE token_hash = ?", tokenHash).Exec(ctx)
+	return err
 }
 
 // DeleteUserRefreshTokens wipes every refresh token for a user.
 // Called on reuse detection (security) and on user-requested
 // "log out everywhere".
-func (s *Store) DeleteUserRefreshTokens(ctx context.Context, userID string) {
-	_, _ = s.DB.NewRaw("DELETE FROM refresh_tokens WHERE user_id = ?", userID).Exec(ctx)
+func (s *Store) DeleteUserRefreshTokens(ctx context.Context, userID string) error {
+	_, err := s.DB.NewRaw("DELETE FROM refresh_tokens WHERE user_id = ?", userID).Exec(ctx)
+	return err
 }
 
 func (s *Store) CleanExpiredRefreshTokens(ctx context.Context) {

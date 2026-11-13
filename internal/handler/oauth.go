@@ -94,11 +94,16 @@ func (h *AuthHandler) Me(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	if raw, err := c.Cookie("refresh_token"); err == nil && raw != "" {
-		h.Store.DeleteRefreshToken(c, hashToken(raw))
+		if err := h.Store.DeleteRefreshToken(c, hashToken(raw)); err != nil {
+			response.Internal(c, err)
+			return
+		}
 	}
-	// Delete user's other refresh tokens to fully invalidate session
 	if uid, ok := userID.(string); ok && uid != "" {
-		h.Store.DeleteUserRefreshTokens(c, uid)
+		if err := h.Store.DeleteUserRefreshTokens(c, uid); err != nil {
+			response.Internal(c, err)
+			return
+		}
 		h.Store.Audit(c, &model.AuditLog{
 			Entity: "session", EntityID: uid, Action: "logout",
 			ActorType: "user", ActorID: uid, IPAddress: c.ClientIP(),
@@ -133,7 +138,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		// refresh_token for the user. Both parties (legit + attacker)
 		// lose their refresh capability; legit user has to re-auth
 		// from scratch.
-		h.Store.DeleteUserRefreshTokens(c, ren.Token.UserID)
+		if revokeErr := h.Store.DeleteUserRefreshTokens(c, ren.Token.UserID); revokeErr != nil {
+			response.Internal(c, revokeErr)
+			return
+		}
 		slog.Warn("refresh token reuse detected — revoking all user tokens",
 			"user_id", ren.Token.UserID, "token_id", ren.Token.ID)
 		// Clear the cookie on the client so the next page load
@@ -165,12 +173,15 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 // refreshTokenTTL is how long a refresh token lives.
 const refreshTokenTTL = 30 * 24 * time.Hour
 
-func (h *AuthHandler) issueSession(c *gin.Context, user *model.User) {
-	h.issueSessionCookie(c, user)
+func (h *AuthHandler) issueSession(c *gin.Context, user *model.User) error {
 	rawRefresh := randomHex(32)
 	expiresAt := time.Now().Add(refreshTokenTTL)
-	_ = h.Store.CreateRefreshToken(c, user.ID, hashToken(rawRefresh), expiresAt)
+	if err := h.Store.CreateRefreshToken(c, user.ID, hashToken(rawRefresh), expiresAt); err != nil {
+		return err
+	}
+	h.issueSessionCookie(c, user)
 	h.setRefreshCookie(c, rawRefresh, expiresAt)
+	return nil
 }
 
 // setRefreshCookie sets the refresh cookie to a token expiring at expiresAt.
@@ -292,7 +303,10 @@ func (h *AuthHandler) DevLogin(c *gin.Context) {
 		return
 	}
 
-	h.issueSession(c, user)
+	if err := h.issueSession(c, user); err != nil {
+		response.Internal(c, err)
+		return
+	}
 	h.Store.Audit(c, &model.AuditLog{
 		Entity: "session", EntityID: user.ID, Action: "login",
 		ActorType: "dev_login", ActorID: user.ID, IPAddress: c.ClientIP(),
@@ -346,8 +360,13 @@ func (h *AuthHandler) AcceptInvite(svc *service.SeatService) gin.HandlerFunc {
 		// model but it was constructed inside the tx and may lack
 		// fields populated by triggers.
 		user, lerr := h.Store.FindUserByID(c, res.UserID)
-		if lerr == nil {
-			h.issueSession(c, user)
+		if lerr != nil {
+			response.Internal(c, lerr)
+			return
+		}
+		if err := h.issueSession(c, user); err != nil {
+			response.Internal(c, err)
+			return
 		}
 		response.OK(c, res)
 	}
