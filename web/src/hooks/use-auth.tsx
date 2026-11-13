@@ -1,4 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react"
+import { showToast } from "@/components/toast"
+import { useI18n } from "@/i18n"
 import { auth, ServiceUnavailableError } from "@/lib/api"
 
 interface AuthUser {
@@ -16,6 +18,7 @@ interface AuthContextType {
   // The server could not be reached to confirm the session. Not a
   // sign-out: show a retry screen, never the login redirect.
   unavailable: boolean
+  loggingOut: boolean
   logout: () => Promise<void>
   refetch: () => Promise<void>
 }
@@ -24,11 +27,15 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   unavailable: false,
+  loggingOut: false,
   logout: async () => {},
   refetch: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n()
+  const logoutPending = useRef(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [unavailable, setUnavailable] = useState(false)
@@ -75,12 +82,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = async () => {
-    await auth.logout()
-    setUser(null)
+    if (logoutPending.current) return
+    logoutPending.current = true
+    setLoggingOut(true)
+    try {
+      await auth.logout()
+      setUser(null)
+    } catch {
+      showToast(t("auth.logoutFailed"), "error")
+    } finally {
+      logoutPending.current = false
+      setLoggingOut(false)
+    }
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, unavailable, logout, refetch: fetchUser }}>
+    <AuthContext.Provider value={{ user, loading, unavailable, loggingOut, logout, refetch: fetchUser }}>
       {children}
     </AuthContext.Provider>
   )

@@ -37,7 +37,7 @@ import { useI18n } from "@/i18n"
 import { cn } from "@/lib/utils"
 
 export function AdminLayout() {
-  const { user, loading, unavailable, logout, refetch } = useAuth()
+  const { user, loading, unavailable, loggingOut, logout, refetch } = useAuth()
   const { site_name, logo_url, attribution_text, attribution_url } = useSiteConfig()
   const { t } = useI18n()
   const [navOpen, setNavOpen] = useState(false)
@@ -183,8 +183,8 @@ export function AdminLayout() {
               <Link to="/portal">{t("nav.portal")}</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-destructive">
-              <LogOut className="h-4 w-4 mr-2" /> {t("nav.logout")}
+            <DropdownMenuItem disabled={loggingOut} onClick={logout} className="text-destructive">
+              <LogOut className="h-4 w-4 mr-2" /> {loggingOut ? t("common.loading") : t("nav.logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -274,7 +274,7 @@ export function AdminLayout() {
 }
 
 export function PortalLayout() {
-  const { user, loading, unavailable, logout, refetch } = useAuth()
+  const { user, loading, unavailable, loggingOut, logout, refetch } = useAuth()
   const { site_name, logo_url, attribution_text, attribution_url } = useSiteConfig()
   const { t } = useI18n()
 
@@ -316,8 +316,8 @@ export function PortalLayout() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem className="text-xs text-muted-foreground">{user.email}</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="text-destructive">
-                  <LogOut className="h-4 w-4 mr-2" /> {t("nav.logout")}
+                <DropdownMenuItem disabled={loggingOut} onClick={logout} className="text-destructive">
+                  <LogOut className="h-4 w-4 mr-2" /> {loggingOut ? t("common.loading") : t("nav.logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

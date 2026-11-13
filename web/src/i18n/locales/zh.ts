@@ -6,6 +6,7 @@ const zh = {
   "common.save": "保存",
   "common.copy": "复制",
   "common.copyId": "复制 ID",
+  "auth.logoutFailed": "退出失败，请检查网络连接后重试退出。",
   "common.copyFailed": "复制失败，请手动选中 ID 复制。",
   "common.cancel": "取消",
   "common.close": "关闭",
