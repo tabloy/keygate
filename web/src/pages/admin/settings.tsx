@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowUpCircle, Check, RefreshCw, Send, Shield, Trash2, UserPlus } from "lucide-react"
-import { useEffect, useState } from "react"
+import { type SetStateAction, useEffect, useState } from "react"
 import { DEFAULT_REMINDER_DAYS, ReminderDaysInput } from "@/components/reminder-days-input"
 import { showToast } from "@/components/toast"
 import {
@@ -135,18 +135,26 @@ export default function SettingsPage() {
     queryFn: admin.getSettings,
   })
 
-  const [form, setForm] = useState<Record<string, string>>({})
+  const [{ form, baseline }, setDraft] = useState<{
+    form: Record<string, string>
+    baseline: Record<string, string>
+  }>({ form: {}, baseline: {} })
+  const setForm = (update: SetStateAction<Record<string, string>>) =>
+    setDraft((previous) => ({
+      ...previous,
+      form: typeof update === "function" ? update(previous.form) : update,
+    }))
 
   useEffect(() => {
     if (!data?.settings) return
-    // Re-seed from the server only when the form has no unsaved edits.
-    // A background refetch — most of all the one clearing a secret
-    // triggers, which flips secrets_set and so changes the query data —
-    // would otherwise overwrite the whole form and silently discard any
-    // field the admin has edited but not yet saved.
-    setForm((prev) => {
-      const dirty = FORM_KEYS.some((k) => k in prev && effective(k, prev[k]) !== effective(k, data.settings[k]))
-      return dirty ? prev : data.settings
+    setDraft((previous) => {
+      const next = { ...data.settings }
+      for (const key of FORM_KEYS) {
+        if (key in previous.form && effective(key, previous.form[key]) !== effective(key, previous.baseline[key])) {
+          next[key] = previous.form[key]
+        }
+      }
+      return { form: next, baseline: data.settings }
     })
   }, [data])
 
@@ -157,7 +165,7 @@ export default function SettingsPage() {
   // incompatible build has since switched off.
   const changedSettings = () => {
     const changed = Object.fromEntries(
-      FORM_KEYS.filter((k) => k in form && effective(k, form[k]) !== effective(k, data?.settings?.[k])).map((k) => [
+      FORM_KEYS.filter((k) => k in form && effective(k, form[k]) !== effective(k, baseline[k])).map((k) => [
         k,
         form[k],
       ]),
