@@ -46,10 +46,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import type { AggregatedSnapshot, AnalyticsSnapshot } from "@/lib/api"
 import { admin } from "@/lib/api"
-import { dateLocale, formatDate } from "@/lib/utils"
+import { dateLocale } from "@/lib/utils"
 
 function defaultFrom(): string {
   const d = new Date()
@@ -89,6 +90,7 @@ function snapshotPeriod(s: AnalyticsSnapshot | AggregatedSnapshot, granularity: 
 }
 
 export default function AnalyticsPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const [productFilter, setProductFilter] = useState<string>("")
   const [from, setFrom] = useState(defaultFrom)

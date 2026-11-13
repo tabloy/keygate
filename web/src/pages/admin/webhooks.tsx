@@ -53,9 +53,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin, type WebhookConfig } from "@/lib/api"
-import { boolColor, formatDate } from "@/lib/utils"
+import { boolColor } from "@/lib/utils"
 
 // Must stay in sync with model.WebhookEvents on the server, which
 // refuses any other name. Dispatch only delivers to webhooks subscribed
@@ -86,6 +87,7 @@ const WEBHOOK_EVENTS = [
 ]
 
 export default function WebhooksPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [productFilter, setProductFilter] = useState<string>("")
@@ -464,6 +466,7 @@ function SecretDialog({ secret, onClose }: { secret: string; onClose: () => void
 }
 
 function DeliveryLogDialog({ webhookId, onClose }: { webhookId: string; onClose: () => void }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [page, setPage] = useState(0)

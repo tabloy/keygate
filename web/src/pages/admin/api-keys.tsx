@@ -38,11 +38,12 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
-import { formatDate } from "@/lib/utils"
 
 export default function APIKeysPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [productFilter, setProductFilter] = useState<string>("")

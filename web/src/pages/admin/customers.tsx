@@ -17,12 +17,14 @@ import {
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
-import { formatDate, maskKey, statusColor } from "@/lib/utils"
+import { maskKey, statusColor } from "@/lib/utils"
 
 export default function CustomersPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const [page, setPage] = useState(0)
   const [search, setSearch] = useState("")
@@ -142,6 +144,7 @@ function CustomerDetailDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "user-detail", userId],

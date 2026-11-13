@@ -8,11 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/hooks/use-auth"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { portal } from "@/lib/api"
-import { formatDate, statusColor } from "@/lib/utils"
+import { statusColor } from "@/lib/utils"
 
 export default function PortalAccountPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const { user, refetch } = useAuth()
   const qc = useQueryClient()

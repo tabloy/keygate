@@ -12,11 +12,13 @@ import {
   DataTableHeader,
   DataTableRow,
 } from "@/components/ui/data-table"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
-import { formatDate, statusColor } from "@/lib/utils"
+import { statusColor } from "@/lib/utils"
 
 export default function DashboardPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const { data: stats, isLoading } = useQuery({ queryKey: ["admin", "stats"], queryFn: admin.stats })
   const { data: updateData } = useQuery({

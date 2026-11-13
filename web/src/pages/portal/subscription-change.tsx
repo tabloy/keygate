@@ -5,6 +5,7 @@ import { showToast } from "@/components/toast"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import {
   errorCode,
@@ -15,7 +16,6 @@ import {
   type SubscriptionChangePreview,
   type SubscriptionChangeResult,
 } from "@/lib/api"
-import { formatDate } from "@/lib/utils"
 
 // Stripe amounts are in the currency's smallest unit, by Stripe's own
 // count of decimals (not the browser's): none for the zero-decimal
@@ -489,6 +489,7 @@ function PreviewSummary({
   productType: string | undefined
   floating: boolean
 }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   if (dropsPending(p)) {
     return <p className="text-sm">{t("portal.dropPendingExplain", { plan: p.current.plan_name })}</p>
@@ -572,6 +573,7 @@ function ChangeResult({
   onClose: () => void
   onPaying: () => void
 }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   if (result.status === "processing") {
     return (
@@ -609,6 +611,7 @@ function ChangeResult({
 // PendingChangeNotice tells the owner a change waits for payment, and
 // takes them to Stripe's page for it.
 export function PendingChangeNotice({ license }: { license: PortalLicense }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [opening, setOpening] = useState(false)

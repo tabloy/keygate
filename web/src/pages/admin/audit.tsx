@@ -15,11 +15,12 @@ import {
 } from "@/components/ui/data-table"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
-import { formatDate } from "@/lib/utils"
 
 export default function AuditPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const [entityFilter, setEntityFilter] = useState("")
   const [entityIdFilter, setEntityIdFilter] = useState("")

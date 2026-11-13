@@ -1,5 +1,6 @@
-import { createContext, type ReactNode, useContext, useEffect, useState } from "react"
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react"
 import { site } from "@/lib/api"
+import { formatDate } from "@/lib/utils"
 
 interface SiteConfig {
   site_name: string
@@ -72,4 +73,18 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
 
 export function useSiteConfig() {
   return useContext(SiteConfigContext)
+}
+
+export function useDateFormatter() {
+  const { timezone } = useSiteConfig()
+  return useMemo(() => {
+    let displayTimezone = timezone || "UTC"
+    try {
+      new Intl.DateTimeFormat(undefined, { timeZone: displayTimezone })
+    } catch {
+      displayTimezone = "UTC"
+    }
+    return (date: Parameters<typeof formatDate>[0], options?: Parameters<typeof formatDate>[1]) =>
+      formatDate(date, { ...options, timezone: options?.timezone || displayTimezone })
+  }, [timezone])
 }

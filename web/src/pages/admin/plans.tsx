@@ -41,15 +41,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import { admin, type Entitlement, errorCode, errorDetails, type Plan } from "@/lib/api"
 
 // model.MaxPlanQuantity: the most seats a plan sold per seat can sell.
 const MAX_PLAN_QUANTITY = 10000
 
-import { boolColor, formatDate } from "@/lib/utils"
+import { boolColor } from "@/lib/utils"
 
 export default function PlansPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [productFilter, setProductFilter] = useState<string>("")
