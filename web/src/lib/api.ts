@@ -658,6 +658,8 @@ export const admin = {
 
   // ─── Releases (industry-standard bundle model) ───
   listReleases: (params?: {
+    search?: string
+    version?: string
     product_id?: string
     channel?: string
     status?: string
@@ -666,6 +668,8 @@ export const admin = {
   }) => {
     const q = new URLSearchParams()
     if (params?.product_id) q.set("product_id", params.product_id)
+    if (params?.search) q.set("search", params.search)
+    if (params?.version) q.set("version", params.version)
     if (params?.channel) q.set("channel", params.channel)
     if (params?.status) q.set("status", params.status)
     if (params?.limit) q.set("limit", String(params.limit))

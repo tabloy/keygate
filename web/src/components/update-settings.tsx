@@ -19,11 +19,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PICKER_PAGE, SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useI18n } from "@/i18n"
 import { admin, type Product, RELEASE_CHANNELS, RELEASE_PLATFORMS, type ReleaseSigningKey, site } from "@/lib/api"
 import { compareSemver } from "@/lib/semver"
+import { useDebounced } from "@/lib/use-debounced"
 import { formatDate } from "@/lib/utils"
 
 // Releases belong to products that ship installable binaries. The
@@ -494,39 +496,61 @@ function AccessOption({
   )
 }
 
-// RequiredUpdateSection: versions older than the chosen release must
-// update. The version is picked from published stable releases, so it
-// can never name a release that apps cannot get.
+// Published membership and the semver maximum are independent of the option page.
 function RequiredUpdateSection({ product }: { product: Product }) {
   const { t } = useI18n()
   const mut = useProductUpdate(product, t("updateSettings.saved"))
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin", "releases", "stable-published", product.id],
-    queryFn: () => admin.listReleases({ product_id: product.id, status: "published", channel: "stable", limit: 100 }),
+  const [search, setSearch] = useState("")
+  const settledSearch = useDebounced(search)
+  const catalog = useQuery({
+    queryKey: ["admin", "releases", "stable-published", product.id, settledSearch],
+    queryFn: () =>
+      admin.listReleases({
+        product_id: product.id,
+        status: "published",
+        channel: "stable",
+        search: settledSearch,
+        limit: PICKER_PAGE,
+      }),
+    placeholderData: (previous, query) => (query?.queryKey[3] === product.id ? previous : undefined),
   })
-  // Only asked when there is nothing to pick from, to say what to do.
+  const { data, isLoading } = catalog
+  const newest =
+    data?.latest_published?.find((r) => r.product_id === product.id && r.channel === "stable")?.version ?? ""
   const { data: draftData } = useQuery({
     queryKey: ["admin", "releases", "draft-count", product.id],
     queryFn: () => admin.listReleases({ product_id: product.id, status: "draft", limit: 1 }),
-    enabled: !isLoading && (data?.releases || []).length === 0,
+    enabled: catalog.isSuccess && !newest,
   })
   const versions = [...new Set((data?.releases || []).map((r) => r.version))].sort((a, b) => compareSemver(b, a))
-  const newest = versions[0] ?? ""
   const saved = product.minimum_supported_version ?? ""
   const savedMessage = product.minimum_supported_message ?? ""
-
   const [enabled, setEnabled] = useState(saved !== "")
   const [version, setVersion] = useState(saved)
   const [message, setMessage] = useState(savedMessage)
   const chosen = version || newest
+  const listed = versions.includes(chosen) || (!!chosen && chosen === newest)
+  const membership = useQuery({
+    queryKey: ["admin", "releases", "published-version", product.id, chosen],
+    queryFn: () =>
+      admin.listReleases({ product_id: product.id, status: "published", channel: "stable", version: chosen, limit: 1 }),
+    enabled: enabled && !!chosen && !listed,
+  })
+  const verified = listed || (membership.isSuccess && !membership.isError)
+  const unpublished = enabled && !!chosen && !listed && membership.isSuccess && membership.data.total === 0
+  const readFailed = catalog.isError || (enabled && !listed && membership.isError)
+  const unresolved = enabled && (!verified || readFailed)
   const dirty = enabled ? saved !== chosen || savedMessage !== message.trim() : saved !== ""
-  const unpublished = enabled && chosen !== "" && !versions.includes(chosen)
+  const retryReads = () => {
+    void catalog.refetch()
+    if (enabled && chosen && !listed) void membership.refetch()
+  }
 
   if (isLoading) return <div className="h-32 animate-pulse bg-muted rounded-md" />
 
   // Nothing to pick from and nothing set: say what is missing instead of
   // showing a switch that cannot be turned on.
-  if (versions.length === 0 && saved === "") {
+  if (!catalog.isError && !newest && saved === "") {
     const drafts = draftData?.total ?? 0
     return (
       <div className="rounded-md border bg-muted/40 p-4 space-y-1">
@@ -540,11 +564,13 @@ function RequiredUpdateSection({ product }: { product: Product }) {
     )
   }
 
-  const save = () =>
+  const save = () => {
+    if (unresolved || (enabled && !chosen)) return
     mut.mutate({
       minimum_supported_version: enabled ? chosen : "",
       minimum_supported_message: enabled ? message.trim() : "",
     })
+  }
   const reset = () => {
     setEnabled(saved !== "")
     setVersion(saved)
@@ -553,6 +579,14 @@ function RequiredUpdateSection({ product }: { product: Product }) {
 
   return (
     <div className="space-y-4">
+      {readFailed && (
+        <div role="alert" className="text-sm text-destructive">
+          {t("updateSettings.releaseReadFailed")}{" "}
+          <Button variant="outline" size="sm" onClick={retryReads}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      )}
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           <input
@@ -571,21 +605,36 @@ function RequiredUpdateSection({ product }: { product: Product }) {
         <>
           <div className="space-y-2">
             <Label>{t("updateSettings.minimumVersion")}</Label>
-            <Select value={chosen} onValueChange={setVersion}>
-              <SelectTrigger className="w-full sm:w-56">
-                <SelectValue placeholder={t("updateSettings.selectVersion")} />
-              </SelectTrigger>
-              <SelectContent>
-                {unpublished && (
-                  <SelectItem value={chosen}>{t("updateSettings.versionNotPublished", { version: chosen })}</SelectItem>
-                )}
-                {versions.map((v) => (
-                  <SelectItem key={v} value={v}>
-                    {v === newest ? t("updateSettings.versionNewest", { version: v }) : v}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              key={product.id}
+              value={chosen}
+              onChange={setVersion}
+              options={versions.map((v) => ({
+                id: v,
+                label: v === newest ? t("updateSettings.versionNewest", { version: v }) : v,
+              }))}
+              total={data?.total ?? 0}
+              search={search}
+              onSearchChange={setSearch}
+              current={
+                chosen
+                  ? {
+                      id: chosen,
+                      label: unpublished
+                        ? t("updateSettings.versionNotPublished", { version: chosen })
+                        : chosen === newest
+                          ? t("updateSettings.versionNewest", { version: chosen })
+                          : chosen,
+                    }
+                  : null
+              }
+              placeholder={t("updateSettings.selectVersion")}
+              searchPlaceholder={t("updateSettings.searchVersions")}
+              moreLabel={(count) => t("filter.moreMatches", { count })}
+              emptyLabel={t("filter.noMatches")}
+              loading={catalog.isFetching}
+              className="w-full sm:w-56"
+            />
             <p className="text-xs text-muted-foreground">{t("updateSettings.olderMustUpdate")}</p>
             {unpublished && (
               <p className="text-xs text-amber-700 dark:text-amber-400">
@@ -604,7 +653,7 @@ function RequiredUpdateSection({ product }: { product: Product }) {
               onChange={(e) => setMessage(e.target.value)}
             />
           </div>
-          {chosen && !unpublished && (
+          {chosen && verified && !unpublished && (
             <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs space-y-1">
               <p className="font-medium">
                 {newest && newest !== chosen
@@ -629,7 +678,7 @@ function RequiredUpdateSection({ product }: { product: Product }) {
         <Button variant="outline" size="sm" onClick={reset} disabled={!dirty || mut.isPending}>
           {t("updateSettings.reset")}
         </Button>
-        <Button size="sm" onClick={save} disabled={!dirty || mut.isPending || (enabled && !chosen)}>
+        <Button size="sm" onClick={save} disabled={!dirty || mut.isPending || unresolved || (enabled && !chosen)}>
           {mut.isPending ? t("updateSettings.saving") : t("common.save")}
         </Button>
       </div>

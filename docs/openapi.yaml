@@ -4583,6 +4583,14 @@ paths:
         - { name: product_id, in: query, schema: { type: string, format: uuid } }
         - { name: channel, in: query, schema: { type: string, enum: [stable, beta, alpha, dev] } }
         - { name: status, in: query, schema: { type: string, enum: [draft, published, yanked] } }
+        - name: search
+          in: query
+          description: Literal case-insensitive version substring; exact matches sort first.
+          schema: { type: string }
+        - name: version
+          in: query
+          description: Exact version, combined with the other filters before pagination.
+          schema: { type: string }
         - $ref: "#/components/parameters/PageLimit"
         - $ref: "#/components/parameters/PageOffset"
       responses:
