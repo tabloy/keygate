@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log/slog"
 	"strconv"
 	"time"
 
 	"github.com/tabloy/keygate/internal/store"
+	"github.com/tabloy/keygate/pkg/apperr"
 )
 
 type EntitlementService struct {
@@ -100,7 +103,10 @@ func (s *EntitlementService) Check(ctx context.Context, in CheckInput) (*CheckRe
 				period = "monthly"
 			}
 			periodKey := store.CurrentPeriodKey(period)
-			counter, _ := s.store.GetUsageCounter(ctx, lic.ID, e.Feature, period, periodKey)
+			counter, err := s.store.GetUsageCounter(ctx, lic.ID, e.Feature, period, periodKey)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return nil, apperr.Internal(err)
+			}
 			used := int64(0)
 			if counter != nil {
 				used = counter.Used
