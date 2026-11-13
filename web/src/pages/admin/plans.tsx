@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
 import { ProductSelect } from "@/components/product-select"
+import { queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -55,17 +56,19 @@ export default function PlansPage() {
   const [productFilter, setProductFilter] = useState<string>("")
   const [search, setSearch] = useState("")
   const pg = useServerPagination(10, [productFilter, search])
-  const { data: productsData } = useQuery({
+  const readQuery0 = useQuery({
     // One row is all this page needs from the catalogue: whether the
     // install has any product at all, and which one a new form starts
     // on. The pickers fetch their own candidates, with search.
     queryKey: ["admin", "products", "newest"],
     queryFn: () => admin.listProducts({ limit: 1 }),
   })
-  const { data, isLoading } = useQuery({
+  const { data: productsData } = readQuery0
+  const readQuery1 = useQuery({
     queryKey: ["admin", "plans", productFilter, search, pg.page, pg.pageSize],
     queryFn: () => admin.listPlans({ product_id: productFilter, search, ...pg.params }),
   })
+  const { data, isLoading } = readQuery1
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Plan | null>(null)
   const [deleting, setDeleting] = useState<Plan | null>(null)
@@ -160,9 +163,13 @@ export default function PlansPage() {
     onError: (e: Error) => showToast(planError(e), "error"),
   })
 
+  const readState = queryReadState([readQuery0, readQuery1], [readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (!isLoading && products.length === 0) {
     return (
       <div className="space-y-6">
+        {readState.notice}
         <div>
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("plans.title")}</h1>
           <p className="text-muted-foreground">{t("plans.subtitle")}</p>
@@ -185,6 +192,7 @@ export default function PlansPage() {
 
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("plans.title")}</h1>

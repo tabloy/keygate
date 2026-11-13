@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 import { ProductSelect } from "@/components/product-select"
+import { queryReadState } from "@/components/query-read-state"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -27,7 +28,7 @@ export default function AuditPage() {
   const [page, setPage] = useState(0)
   const limit = 30
 
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["admin", "audit", entityFilter, entityIdFilter, productFilter, page],
     queryFn: () =>
       admin.listAuditLogs({
@@ -38,6 +39,7 @@ export default function AuditPage() {
         limit,
       }),
   })
+  const { data, isLoading } = readQuery0
 
   const logs = data?.audit_logs || []
   const total = data?.total || 0
@@ -50,8 +52,12 @@ export default function AuditPage() {
     return "bg-blue-100 text-blue-800"
   }
 
+  const readState = queryReadState([readQuery0])
+  if (readState.blocked) return readState.blocked
+
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div>
         <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("audit.title")}</h1>
         <p className="text-muted-foreground">{t("audit.subtitle")}</p>

@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
+import { QueryReadState } from "@/components/query-read-state"
 import { PICKER_PAGE, SearchableSelect } from "@/components/ui/searchable-select"
 import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
@@ -52,14 +53,15 @@ export function ProductSelect({
   const [search, setSearch] = useState("")
   const query = useDebounced(search, 250)
   const type = types?.join(",")
-  const { data, isFetching } = useQuery({
+  const readQuery = useQuery({
     queryKey: ["admin", "products", "picker", query, type],
     queryFn: () => admin.listProducts({ search: query, type, limit: PICKER_PAGE }),
     placeholderData: keepPreviousData,
   })
+  const { data, isFetching } = readQuery
   const products = data?.products || []
 
-  return (
+  const picker = (
     <SearchableSelect
       value={value}
       onChange={onChange}
@@ -79,4 +81,5 @@ export function ProductSelect({
       loading={isFetching}
     />
   )
+  return <QueryReadState queries={[readQuery]}>{picker}</QueryReadState>
 }

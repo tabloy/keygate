@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Activity, ArrowUpCircle, Key, Package, Users } from "lucide-react"
 import { Link } from "react-router-dom"
+import { queryReadState } from "@/components/query-read-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,16 +19,21 @@ import { formatDate, statusColor } from "@/lib/utils"
 
 export default function DashboardPage() {
   const { t } = useI18n()
-  const { data: stats, isLoading } = useQuery({ queryKey: ["admin", "stats"], queryFn: admin.stats })
+  const readQuery0 = useQuery({ queryKey: ["admin", "stats"], queryFn: admin.stats })
+  const { data: stats, isLoading } = readQuery0
   const { data: updateData } = useQuery({
     queryKey: ["admin", "update-check"],
     queryFn: admin.checkUpdate,
     staleTime: 60 * 60 * 1000,
   })
 
+  const readState = queryReadState([readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (isLoading || !stats) {
     return (
       <div className="animate-pulse space-y-4">
+        {readState.notice}
         <div className="h-32 bg-muted rounded-lg" />
         <div className="h-32 bg-muted rounded-lg" />
       </div>
@@ -43,6 +49,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div>
         <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("dashboard.title")}</h1>
         <p className="text-muted-foreground">{t("dashboard.subtitle")}</p>

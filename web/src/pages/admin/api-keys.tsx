@@ -3,6 +3,7 @@ import { Check, Copy, Eye, EyeOff, Package, Plus, RefreshCw, Trash2 } from "luci
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
+import { queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -48,17 +49,19 @@ export default function APIKeysPage() {
   const [productFilter, setProductFilter] = useState<string>("")
   const [search, setSearch] = useState("")
   const pg = useServerPagination(10, [productFilter, search])
-  const { data: productsData } = useQuery({
+  const readQuery0 = useQuery({
     // One row is all this page needs from the catalogue: whether the
     // install has any product at all, and which one a new form starts
     // on. The pickers fetch their own candidates, with search.
     queryKey: ["admin", "products", "newest"],
     queryFn: () => admin.listProducts({ limit: 1 }),
   })
-  const { data, isLoading } = useQuery({
+  const { data: productsData } = readQuery0
+  const readQuery1 = useQuery({
     queryKey: ["admin", "api-keys", productFilter, search, pg.page, pg.pageSize],
     queryFn: () => admin.listAPIKeys({ product_id: productFilter, search, ...pg.params }),
   })
+  const { data, isLoading } = readQuery1
   const [creating, setCreating] = useState(false)
   const [newKey, setNewKey] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null)
@@ -98,9 +101,13 @@ export default function APIKeysPage() {
     onError: (e: Error) => showToast(e.message, "error"),
   })
 
+  const readState = queryReadState([readQuery0, readQuery1], [readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (products.length === 0 && !isLoading) {
     return (
       <div className="space-y-6">
+        {readState.notice}
         <div>
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("apiKeys.title")}</h1>
           <p className="text-muted-foreground">{t("apiKeys.subtitle")}</p>
@@ -123,6 +130,7 @@ export default function APIKeysPage() {
 
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("apiKeys.title")}</h1>

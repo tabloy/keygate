@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Eye, Search } from "lucide-react"
 import { useState } from "react"
+import { QueryReadState, queryReadState } from "@/components/query-read-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,17 +30,22 @@ export default function CustomersPage() {
   const limit = 30
   const [viewingUser, setViewingUser] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["admin", "users", search, page],
     queryFn: () => admin.listUsers({ search: search || undefined, offset: page * limit, limit }),
   })
+  const { data, isLoading } = readQuery0
 
   const customers = data?.users || []
   const total = data?.total || 0
   const totalPages = Math.ceil(total / limit)
 
+  const readState = queryReadState([readQuery0])
+  if (readState.blocked) return readState.blocked
+
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div>
         <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("customers.title")}</h1>
         <p className="text-muted-foreground">{t("customers.subtitle", { count: total })}</p>
@@ -143,11 +149,12 @@ function CustomerDetailDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useI18n()
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["admin", "user-detail", userId],
     queryFn: () => admin.getUserDetail(userId!),
     enabled: !!userId,
   })
+  const { data, isLoading } = readQuery0
 
   const detail: UserDetail | undefined = data
 
@@ -160,266 +167,272 @@ function CustomerDetailDialog({
         </DialogHeader>
         {/* Fixed height; the tab bar stays put and each tab scrolls. */}
         <DialogBody className="flex flex-col overflow-hidden">
-          {isLoading || !detail ? (
-            <div className="space-y-4">
-              <div className="h-24 bg-muted rounded-lg animate-pulse" />
-              <div className="h-48 bg-muted rounded-lg animate-pulse" />
-            </div>
-          ) : (
-            <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
-              <TabsList className="shrink-0">
-                <TabsTrigger value="overview">{t("customers.overview")}</TabsTrigger>
-                <TabsTrigger value="licenses">{t("customers.licenses")}</TabsTrigger>
-                <TabsTrigger value="subscriptions">{t("customers.subscriptions")}</TabsTrigger>
-                <TabsTrigger value="activity">{t("customers.activity")}</TabsTrigger>
-              </TabsList>
+          <QueryReadState queries={[readQuery0]}>
+            {isLoading || !detail ? (
+              <div className="space-y-4">
+                <div className="h-24 bg-muted rounded-lg animate-pulse" />
+                <div className="h-48 bg-muted rounded-lg animate-pulse" />
+              </div>
+            ) : (
+              <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
+                <TabsList className="shrink-0">
+                  <TabsTrigger value="overview">{t("customers.overview")}</TabsTrigger>
+                  <TabsTrigger value="licenses">{t("customers.licenses")}</TabsTrigger>
+                  <TabsTrigger value="subscriptions">{t("customers.subscriptions")}</TabsTrigger>
+                  <TabsTrigger value="activity">{t("customers.activity")}</TabsTrigger>
+                </TabsList>
 
-              {/* Overview Tab */}
-              <TabsContent value="overview" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                <div className="space-y-4">
-                  {/* User info */}
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center gap-4">
-                        {detail.user.avatar_url ? (
-                          <img src={detail.user.avatar_url} className="h-14 w-14 rounded-full" alt="" />
-                        ) : (
-                          <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center text-lg font-bold">
-                            {detail.user.name?.charAt(0)?.toUpperCase() || detail.user.email.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <h3 className="text-lg font-semibold">{detail.user.name || "-"}</h3>
-                          <p className="text-sm text-muted-foreground">{detail.user.email}</p>
-                          <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                            <span>
-                              {t("customers.joined")} {formatDate(detail.user.created_at)}
-                            </span>
-                            <span>
-                              {t("customers.lastUpdated")} {formatDate(detail.user.updated_at)}
-                            </span>
+                {/* Overview Tab */}
+                <TabsContent value="overview" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                  <div className="space-y-4">
+                    {/* User info */}
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="flex items-center gap-4">
+                          {detail.user.avatar_url ? (
+                            <img src={detail.user.avatar_url} className="h-14 w-14 rounded-full" alt="" />
+                          ) : (
+                            <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center text-lg font-bold">
+                              {detail.user.name?.charAt(0)?.toUpperCase() || detail.user.email.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <h3 className="text-lg font-semibold">{detail.user.name || "-"}</h3>
+                            <p className="text-sm text-muted-foreground">{detail.user.email}</p>
+                            <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
+                              <span>
+                                {t("customers.joined")} {formatDate(detail.user.created_at)}
+                              </span>
+                              <span>
+                                {t("customers.lastUpdated")} {formatDate(detail.user.updated_at)}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
 
-                  {/* Summary stats */}
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                    {[
-                      { label: t("analytics.totalLicenses"), value: detail.licenses?.length ?? 0 },
-                      {
-                        label: t("analytics.active"),
-                        value: detail.licenses?.filter((l) => l.status === "active").length ?? 0,
-                      },
-                      { label: t("customers.totalUsage"), value: detail.total_usage ?? 0 },
-                      { label: t("customers.activeSeats"), value: detail.active_seats ?? 0 },
-                      { label: t("analytics.activations"), value: detail.activations ?? 0 },
-                    ].map((s) => (
-                      <Card key={s.label}>
-                        <CardContent className="pt-4 pb-3 text-center">
-                          <div className="text-2xl font-bold">{s.value.toLocaleString()}</div>
-                          <p className="text-xs text-muted-foreground">{s.label}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
+                    {/* Summary stats */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                      {[
+                        { label: t("analytics.totalLicenses"), value: detail.licenses?.length ?? 0 },
+                        {
+                          label: t("analytics.active"),
+                          value: detail.licenses?.filter((l) => l.status === "active").length ?? 0,
+                        },
+                        { label: t("customers.totalUsage"), value: detail.total_usage ?? 0 },
+                        { label: t("customers.activeSeats"), value: detail.active_seats ?? 0 },
+                        { label: t("analytics.activations"), value: detail.activations ?? 0 },
+                      ].map((s) => (
+                        <Card key={s.label}>
+                          <CardContent className="pt-4 pb-3 text-center">
+                            <div className="text-2xl font-bold">{s.value.toLocaleString()}</div>
+                            <p className="text-xs text-muted-foreground">{s.label}</p>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              </TabsContent>
+                </TabsContent>
 
-              {/* Licenses Tab */}
-              <TabsContent value="licenses" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                {(detail.licenses || []).length === 0 && (detail.memberships || []).length === 0 ? (
-                  <Card>
-                    <CardContent className="py-8">
-                      <p className="text-sm text-muted-foreground text-center">No licenses found.</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <DataTable>
-                    <DataTableHeader>
-                      <DataTableRow>
-                        <DataTableHead>{t("common.product")}</DataTableHead>
-                        <DataTableHead>{t("common.plan")}</DataTableHead>
-                        <DataTableHead>{t("licenses.role")}</DataTableHead>
-                        <DataTableHead>{t("common.status")}</DataTableHead>
-                        <DataTableHead>{t("licenses.licenseKey")}</DataTableHead>
-                        <DataTableHead>{t("licenses.validUntil")}</DataTableHead>
-                        <DataTableHead>{t("common.created")}</DataTableHead>
-                      </DataTableRow>
-                    </DataTableHeader>
-                    <DataTableBody>
-                      {detail.licenses.map((l) => (
-                        <DataTableRow key={l.id}>
-                          <DataTableCell className="font-medium">{l.product?.name || l.product_id}</DataTableCell>
-                          <DataTableCell>{l.plan?.name || l.plan_id}</DataTableCell>
-                          <DataTableCell>
-                            <Badge variant="secondary">{t("portal.roleOwner")}</Badge>
-                          </DataTableCell>
-                          <DataTableCell>
-                            <Badge className={statusColor(l.status)}>
-                              {t(`status.${l.status}` as TranslationKeys)}
-                            </Badge>
-                          </DataTableCell>
-                          <DataTableCell>
-                            {/* Only the tail — the key itself is revealed
+                {/* Licenses Tab */}
+                <TabsContent value="licenses" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                  {(detail.licenses || []).length === 0 && (detail.memberships || []).length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <p className="text-sm text-muted-foreground text-center">No licenses found.</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <DataTable>
+                      <DataTableHeader>
+                        <DataTableRow>
+                          <DataTableHead>{t("common.product")}</DataTableHead>
+                          <DataTableHead>{t("common.plan")}</DataTableHead>
+                          <DataTableHead>{t("licenses.role")}</DataTableHead>
+                          <DataTableHead>{t("common.status")}</DataTableHead>
+                          <DataTableHead>{t("licenses.licenseKey")}</DataTableHead>
+                          <DataTableHead>{t("licenses.validUntil")}</DataTableHead>
+                          <DataTableHead>{t("common.created")}</DataTableHead>
+                        </DataTableRow>
+                      </DataTableHeader>
+                      <DataTableBody>
+                        {detail.licenses.map((l) => (
+                          <DataTableRow key={l.id}>
+                            <DataTableCell className="font-medium">{l.product?.name || l.product_id}</DataTableCell>
+                            <DataTableCell>{l.plan?.name || l.plan_id}</DataTableCell>
+                            <DataTableCell>
+                              <Badge variant="secondary">{t("portal.roleOwner")}</Badge>
+                            </DataTableCell>
+                            <DataTableCell>
+                              <Badge className={statusColor(l.status)}>
+                                {t(`status.${l.status}` as TranslationKeys)}
+                              </Badge>
+                            </DataTableCell>
+                            <DataTableCell>
+                              {/* Only the tail — the key itself is revealed
                               one at a time from the licenses page, and
                               each reveal is audited. */}
-                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
-                              {maskKey(data?.license_key_hints?.[l.id], data?.license_key_prefixes?.[l.id])}
-                            </code>
-                          </DataTableCell>
-                          <DataTableCell className="text-xs text-muted-foreground">
-                            {l.valid_until ? formatDate(l.valid_until) : "-"}
-                          </DataTableCell>
-                          <DataTableCell className="text-xs text-muted-foreground">
-                            {formatDate(l.created_at)}
-                          </DataTableCell>
-                        </DataTableRow>
-                      ))}
-                      {/* Licences the customer is a member of: someone
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
+                                {maskKey(data?.license_key_hints?.[l.id], data?.license_key_prefixes?.[l.id])}
+                              </code>
+                            </DataTableCell>
+                            <DataTableCell className="text-xs text-muted-foreground">
+                              {l.valid_until ? formatDate(l.valid_until) : "-"}
+                            </DataTableCell>
+                            <DataTableCell className="text-xs text-muted-foreground">
+                              {formatDate(l.created_at)}
+                            </DataTableCell>
+                          </DataTableRow>
+                        ))}
+                        {/* Licences the customer is a member of: someone
                         else's, used with the customer's own key, shown
                         by its hint. */}
-                      {(detail.memberships || []).map((m) => (
-                        <DataTableRow key={m.id}>
-                          <DataTableCell className="font-medium">
-                            {m.license?.product?.name || m.license?.product_id}
-                            <div className="text-xs font-normal text-muted-foreground break-all">
-                              {t("customers.ownedBy").replace("{email}", m.license?.email ?? "")}
-                            </div>
-                          </DataTableCell>
-                          <DataTableCell>{m.license?.plan?.name || m.license?.plan_id}</DataTableCell>
-                          <DataTableCell>
-                            <Badge variant="secondary">{t("portal.roleMember")}</Badge>
-                          </DataTableCell>
-                          <DataTableCell>
-                            {m.license && (
-                              <Badge className={statusColor(m.license.status)}>
-                                {t(`status.${m.license.status}` as TranslationKeys)}
-                              </Badge>
-                            )}
-                          </DataTableCell>
-                          <DataTableCell>
-                            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
-                              {maskKey(data?.member_key_hints?.[m.id], data?.member_key_prefixes?.[m.id])}
-                            </code>
-                          </DataTableCell>
-                          <DataTableCell className="text-xs text-muted-foreground">
-                            {m.license?.valid_until ? formatDate(m.license.valid_until) : "-"}
-                          </DataTableCell>
-                          <DataTableCell className="text-xs text-muted-foreground">
-                            {m.license ? formatDate(m.license.created_at) : "-"}
-                          </DataTableCell>
-                        </DataTableRow>
-                      ))}
-                    </DataTableBody>
-                  </DataTable>
-                )}
-              </TabsContent>
-
-              {/* Subscriptions Tab */}
-              <TabsContent value="subscriptions" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                {(detail.subscriptions || []).length === 0 ? (
-                  <Card>
-                    <CardContent className="py-8">
-                      <p className="text-sm text-muted-foreground text-center">No subscriptions found.</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <DataTable>
-                    <DataTableHeader>
-                      <DataTableRow>
-                        <DataTableHead>{t("common.plan")}</DataTableHead>
-                        <DataTableHead>{t("common.status")}</DataTableHead>
-                        <DataTableHead>{t("customers.provider")}</DataTableHead>
-                        <DataTableHead>{t("customers.periodRange")}</DataTableHead>
-                        <DataTableHead>{t("customers.cancelAtEnd")}</DataTableHead>
-                        <DataTableHead>{t("common.created")}</DataTableHead>
-                      </DataTableRow>
-                    </DataTableHeader>
-                    <DataTableBody>
-                      {detail.subscriptions.map((sub) => (
-                        <DataTableRow key={sub.id}>
-                          <DataTableCell className="font-medium">{sub.plan?.name || sub.plan_id}</DataTableCell>
-                          <DataTableCell>
-                            <Badge className={statusColor(sub.status)}>
-                              {t(`status.${sub.status}` as TranslationKeys)}
-                            </Badge>
-                          </DataTableCell>
-                          <DataTableCell className="text-muted-foreground">{sub.payment_provider || "-"}</DataTableCell>
-                          <DataTableCell className="text-xs text-muted-foreground">
-                            <div>
-                              {sub.current_period_start ? formatDate(sub.current_period_start) : "-"}
-                              {" - "}
-                              {sub.current_period_end ? formatDate(sub.current_period_end) : "-"}
-                            </div>
-                            {sub.trial_start && (
-                              <div className="text-violet-600 mt-0.5">
-                                Trial: {formatDate(sub.trial_start)} - {formatDate(sub.trial_end)}
+                        {(detail.memberships || []).map((m) => (
+                          <DataTableRow key={m.id}>
+                            <DataTableCell className="font-medium">
+                              {m.license?.product?.name || m.license?.product_id}
+                              <div className="text-xs font-normal text-muted-foreground break-all">
+                                {t("customers.ownedBy").replace("{email}", m.license?.email ?? "")}
                               </div>
-                            )}
-                          </DataTableCell>
-                          <DataTableCell>
-                            {sub.cancel_at_period_end ? (
-                              <Badge variant="destructive">{t("common.yes")}</Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">{t("common.no")}</span>
-                            )}
-                          </DataTableCell>
-                          <DataTableCell className="text-xs text-muted-foreground">
-                            {formatDate(sub.created_at)}
-                          </DataTableCell>
-                        </DataTableRow>
-                      ))}
-                    </DataTableBody>
-                  </DataTable>
-                )}
-              </TabsContent>
+                            </DataTableCell>
+                            <DataTableCell>{m.license?.plan?.name || m.license?.plan_id}</DataTableCell>
+                            <DataTableCell>
+                              <Badge variant="secondary">{t("portal.roleMember")}</Badge>
+                            </DataTableCell>
+                            <DataTableCell>
+                              {m.license && (
+                                <Badge className={statusColor(m.license.status)}>
+                                  {t(`status.${m.license.status}` as TranslationKeys)}
+                                </Badge>
+                              )}
+                            </DataTableCell>
+                            <DataTableCell>
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
+                                {maskKey(data?.member_key_hints?.[m.id], data?.member_key_prefixes?.[m.id])}
+                              </code>
+                            </DataTableCell>
+                            <DataTableCell className="text-xs text-muted-foreground">
+                              {m.license?.valid_until ? formatDate(m.license.valid_until) : "-"}
+                            </DataTableCell>
+                            <DataTableCell className="text-xs text-muted-foreground">
+                              {m.license ? formatDate(m.license.created_at) : "-"}
+                            </DataTableCell>
+                          </DataTableRow>
+                        ))}
+                      </DataTableBody>
+                    </DataTable>
+                  )}
+                </TabsContent>
 
-              {/* Activity Tab */}
-              <TabsContent value="activity" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                {(detail.recent_audit_logs || []).length === 0 ? (
-                  <Card>
-                    <CardContent className="py-8">
-                      <p className="text-sm text-muted-foreground text-center">No recent activity.</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="space-y-2">
-                    {detail.recent_audit_logs.map((a) => (
-                      <div key={a.id} className="flex items-center gap-3 py-2 border-b last:border-0 text-sm">
-                        <span className="text-xs text-muted-foreground w-36 shrink-0">{formatDate(a.created_at)}</span>
-                        <Badge variant="outline" className="shrink-0">
-                          {a.entity}
-                        </Badge>
-                        <Badge
-                          className={
-                            a.action.includes("create")
-                              ? "bg-emerald-100 text-emerald-800"
-                              : a.action.includes("delete") || a.action.includes("revoke")
-                                ? "bg-red-100 text-red-800"
-                                : a.action.includes("update")
-                                  ? "bg-blue-100 text-blue-800"
-                                  : a.action.includes("suspend")
-                                    ? "bg-orange-100 text-orange-800"
-                                    : "bg-gray-100 text-gray-800"
-                          }
-                        >
-                          {a.action}
-                        </Badge>
-                        <span
-                          className="font-mono text-xs text-muted-foreground truncate max-w-[180px]"
-                          title={a.entity_id}
-                        >
-                          {a.entity_id.length > 12 ? `${a.entity_id.slice(0, 12)}...` : a.entity_id}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
-          )}
+                {/* Subscriptions Tab */}
+                <TabsContent value="subscriptions" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                  {(detail.subscriptions || []).length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <p className="text-sm text-muted-foreground text-center">No subscriptions found.</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <DataTable>
+                      <DataTableHeader>
+                        <DataTableRow>
+                          <DataTableHead>{t("common.plan")}</DataTableHead>
+                          <DataTableHead>{t("common.status")}</DataTableHead>
+                          <DataTableHead>{t("customers.provider")}</DataTableHead>
+                          <DataTableHead>{t("customers.periodRange")}</DataTableHead>
+                          <DataTableHead>{t("customers.cancelAtEnd")}</DataTableHead>
+                          <DataTableHead>{t("common.created")}</DataTableHead>
+                        </DataTableRow>
+                      </DataTableHeader>
+                      <DataTableBody>
+                        {detail.subscriptions.map((sub) => (
+                          <DataTableRow key={sub.id}>
+                            <DataTableCell className="font-medium">{sub.plan?.name || sub.plan_id}</DataTableCell>
+                            <DataTableCell>
+                              <Badge className={statusColor(sub.status)}>
+                                {t(`status.${sub.status}` as TranslationKeys)}
+                              </Badge>
+                            </DataTableCell>
+                            <DataTableCell className="text-muted-foreground">
+                              {sub.payment_provider || "-"}
+                            </DataTableCell>
+                            <DataTableCell className="text-xs text-muted-foreground">
+                              <div>
+                                {sub.current_period_start ? formatDate(sub.current_period_start) : "-"}
+                                {" - "}
+                                {sub.current_period_end ? formatDate(sub.current_period_end) : "-"}
+                              </div>
+                              {sub.trial_start && (
+                                <div className="text-violet-600 mt-0.5">
+                                  Trial: {formatDate(sub.trial_start)} - {formatDate(sub.trial_end)}
+                                </div>
+                              )}
+                            </DataTableCell>
+                            <DataTableCell>
+                              {sub.cancel_at_period_end ? (
+                                <Badge variant="destructive">{t("common.yes")}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">{t("common.no")}</span>
+                              )}
+                            </DataTableCell>
+                            <DataTableCell className="text-xs text-muted-foreground">
+                              {formatDate(sub.created_at)}
+                            </DataTableCell>
+                          </DataTableRow>
+                        ))}
+                      </DataTableBody>
+                    </DataTable>
+                  )}
+                </TabsContent>
+
+                {/* Activity Tab */}
+                <TabsContent value="activity" className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                  {(detail.recent_audit_logs || []).length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <p className="text-sm text-muted-foreground text-center">No recent activity.</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div className="space-y-2">
+                      {detail.recent_audit_logs.map((a) => (
+                        <div key={a.id} className="flex items-center gap-3 py-2 border-b last:border-0 text-sm">
+                          <span className="text-xs text-muted-foreground w-36 shrink-0">
+                            {formatDate(a.created_at)}
+                          </span>
+                          <Badge variant="outline" className="shrink-0">
+                            {a.entity}
+                          </Badge>
+                          <Badge
+                            className={
+                              a.action.includes("create")
+                                ? "bg-emerald-100 text-emerald-800"
+                                : a.action.includes("delete") || a.action.includes("revoke")
+                                  ? "bg-red-100 text-red-800"
+                                  : a.action.includes("update")
+                                    ? "bg-blue-100 text-blue-800"
+                                    : a.action.includes("suspend")
+                                      ? "bg-orange-100 text-orange-800"
+                                      : "bg-gray-100 text-gray-800"
+                            }
+                          >
+                            {a.action}
+                          </Badge>
+                          <span
+                            className="font-mono text-xs text-muted-foreground truncate max-w-[180px]"
+                            title={a.entity_id}
+                          >
+                            {a.entity_id.length > 12 ? `${a.entity_id.slice(0, 12)}...` : a.entity_id}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            )}
+          </QueryReadState>
         </DialogBody>
       </DialogContent>
     </Dialog>

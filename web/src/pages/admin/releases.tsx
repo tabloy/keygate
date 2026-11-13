@@ -14,6 +14,7 @@ import {
 import { type ChangeEvent, useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
+import { queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -95,18 +96,20 @@ export default function ReleasesPage() {
   // product that can publish?" is the server's to answer, not one to
   // infer from whichever page of the catalogue happened to load. The
   // empty state below turns on the counts, so both are needed.
-  const { data: releasableData } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["admin", "products", "releasable-count"],
     queryFn: () => admin.listProducts({ type: RELEASE_PRODUCT_TYPES.join(","), limit: 1 }),
   })
-  const { data: anyProductsData } = useQuery({
+  const { data: releasableData } = readQuery0
+  const readQuery1 = useQuery({
     queryKey: ["admin", "products", "any-count"],
     queryFn: () => admin.listProducts({ limit: 1 }),
   })
+  const { data: anyProductsData } = readQuery1
   const releasableCount = releasableData?.total ?? 0
   const anyProductCount = anyProductsData?.total ?? 0
 
-  const { data, isLoading } = useQuery({
+  const readQuery2 = useQuery({
     queryKey: ["admin", "releases", productFilter, channelFilter, statusFilter, page],
     queryFn: () =>
       admin.listReleases({
@@ -117,6 +120,7 @@ export default function ReleasesPage() {
         offset: page * PAGE_SIZE,
       }),
   })
+  const { data, isLoading } = readQuery2
   const releases = data?.releases || []
   const total = data?.total || 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -153,10 +157,14 @@ export default function ReleasesPage() {
 
   // No release-eligible products. Either no products at all, or the
   // admin has only saas products (which don't ship installable binaries).
+  const readState = queryReadState([readQuery0, readQuery1, readQuery2], [readQuery0, readQuery1])
+  if (readState.blocked) return readState.blocked
+
   if (releasableCount === 0 && releasableData && !isLoading) {
     const hasAnyProducts = anyProductCount > 0
     return (
       <div className="space-y-6">
+        {readState.notice}
         <div>
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("nav.releases")}</h1>
           <p className="text-muted-foreground">{t("releases.subtitle")}</p>
@@ -189,6 +197,7 @@ export default function ReleasesPage() {
 
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("nav.releases")}</h1>

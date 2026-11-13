@@ -21,6 +21,7 @@ import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
 import { PlanSelect } from "@/components/plan-select"
 import { ProductSelect } from "@/components/product-select"
+import { queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -95,14 +96,15 @@ export default function LicensesPage() {
   const srt = useServerSort("created_at", "desc")
   const pg = useServerPagination(20, [productFilter, statusFilter, search, srt.sort, srt.order])
 
-  const { data: productsData } = useQuery({
+  const readQuery0 = useQuery({
     // One row is all this page needs from the catalogue: whether the
     // install has any product at all, and which one a new form starts
     // on. The pickers fetch their own candidates, with search.
     queryKey: ["admin", "products", "newest"],
     queryFn: () => admin.listProducts({ limit: 1 }),
   })
-  const { data, isLoading } = useQuery({
+  const { data: productsData } = readQuery0
+  const readQuery1 = useQuery({
     queryKey: ["admin", "licenses", productFilter, statusFilter, search, srt.sort, srt.order, pg.page, pg.pageSize],
     queryFn: () =>
       admin.listLicenses({
@@ -113,6 +115,7 @@ export default function LicensesPage() {
         ...pg.params,
       }),
   })
+  const { data, isLoading } = readQuery1
 
   const [creating, setCreating] = useState(false)
   const [viewing, setViewing] = useState<string | null>(null)
@@ -137,9 +140,13 @@ export default function LicensesPage() {
     },
   })
 
+  const readState = queryReadState([readQuery0, readQuery1], [readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (!isLoading && products.length === 0) {
     return (
       <div className="space-y-6">
+        {readState.notice}
         <div>
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("licenses.title")}</h1>
           <p className="text-muted-foreground">Manage software licenses.</p>
@@ -162,6 +169,7 @@ export default function LicensesPage() {
 
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("licenses.title")}</h1>
