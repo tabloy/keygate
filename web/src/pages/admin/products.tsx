@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Cloud, Laptop, Layers, Pencil, Plus, Search, Settings2, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { CopyableId } from "@/components/copyable-id"
 import { showToast } from "@/components/toast"
 import {
@@ -282,6 +282,7 @@ function ProductDialog({
   title: string
 }) {
   const { t } = useI18n()
+  const formId = useId()
   const [name, setName] = useState(product?.name || "")
   const [slug, setSlug] = useState(product?.slug || "")
   const [licensePrefix, setLicensePrefix] = useState(product?.license_prefix || "KG")
@@ -324,8 +325,9 @@ function ProductDialog({
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-4">
           <DialogBody className="space-y-4">
             <div className="space-y-2">
-              <Label>{t("common.name")}</Label>
+              <Label htmlFor={`${formId}-name`}>{t("common.name")}</Label>
               <Input
+                id={`${formId}-name`}
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value)
@@ -341,8 +343,8 @@ function ProductDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>{t("products.slug")}</Label>
-              <Input value={slug} onChange={(e) => setSlug(e.target.value)} required />
+              <Label htmlFor={`${formId}-slug`}>{t("products.slug")}</Label>
+              <Input id={`${formId}-slug`} value={slug} onChange={(e) => setSlug(e.target.value)} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="product-license-prefix">{t("products.licensePrefix")}</Label>

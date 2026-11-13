@@ -610,6 +610,7 @@ const en = {
   "login.sendingCode": "Sending...",
   "login.codeSentTo": "Code sent to {email}",
   "login.verify": "Verify",
+  "login.verificationCode": "Verification code",
   "login.verifying": "Verifying...",
   "login.changeEmail": "Use a different email",
   "login.resendCode": "Resend code",

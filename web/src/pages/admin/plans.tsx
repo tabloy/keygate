@@ -297,10 +297,20 @@ export default function PlansPage() {
                                 <Copy className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" onClick={() => openEditor(p)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`${t("common.edit")} ${p.name}`}
+                              onClick={() => openEditor(p)}
+                            >
                               <Pencil className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => setDeleting(p)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`${t("common.delete")} ${p.name}`}
+                              onClick={() => setDeleting(p)}
+                            >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </div>

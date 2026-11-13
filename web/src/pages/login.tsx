@@ -1,5 +1,5 @@
 import { Mail, Terminal } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { Navigate, useSearchParams } from "react-router-dom"
 import { ServiceUnavailableScreen } from "@/components/service-unavailable"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ import { auth, setup } from "@/lib/api"
 
 export default function LoginPage() {
   const { t } = useI18n()
+  const formId = useId()
   const { site_name, logo_url, attribution_text, attribution_url } = useSiteConfig()
   const { user, loading, unavailable, refetch } = useAuth()
   const [params] = useSearchParams()
@@ -139,8 +140,9 @@ export default function LoginPage() {
           {otpStep === "email" && (
             <form onSubmit={handleOtpSend} className="space-y-3">
               <div className="space-y-2">
-                <Label>{t("common.email")}</Label>
+                <Label htmlFor={`${formId}-otp-email`}>{t("common.email")}</Label>
                 <Input
+                  id={`${formId}-otp-email`}
                   type="email"
                   placeholder="you@example.com"
                   value={otpEmail}
@@ -164,6 +166,7 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <Input
                   type="text"
+                  aria-label={t("login.verificationCode")}
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={6}
@@ -214,12 +217,18 @@ export default function LoginPage() {
               </div>
               <form onSubmit={handleDevLogin} className="space-y-3">
                 <div className="space-y-2">
-                  <Label>{t("common.email")}</Label>
-                  <Input type="email" value={devEmail} onChange={(e) => setDevEmail(e.target.value)} required />
+                  <Label htmlFor={`${formId}-dev-email`}>{t("common.email")}</Label>
+                  <Input
+                    id={`${formId}-dev-email`}
+                    type="email"
+                    value={devEmail}
+                    onChange={(e) => setDevEmail(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("common.name")}</Label>
-                  <Input value={devName} onChange={(e) => setDevName(e.target.value)} />
+                  <Label htmlFor={`${formId}-dev-name`}>{t("common.name")}</Label>
+                  <Input id={`${formId}-dev-name`} value={devName} onChange={(e) => setDevName(e.target.value)} />
                 </div>
                 {devError && <p className="text-sm text-destructive">{devError}</p>}
                 <Button type="submit" className="w-full" disabled={devLoading}>
