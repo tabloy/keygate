@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowUpCircle, Check, RefreshCw, Send, Shield, Trash2, UserPlus } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { DEFAULT_REMINDER_DAYS, ReminderDaysInput } from "@/components/reminder-days-input"
 import { showToast } from "@/components/toast"
 import {
@@ -128,6 +129,11 @@ const FORM_KEYS = [
 type FormKey = (typeof FORM_KEYS)[number]
 
 export default function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTab = searchParams.get("tab") || "general"
+  const tab = ["general", "team", "email", "templates", "security", "system"].includes(requestedTab)
+    ? requestedTab
+    : "general"
   const { t, locale, setLocale } = useI18n()
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({
@@ -274,7 +280,17 @@ export default function SettingsPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="general">
+      <Tabs
+        value={tab}
+        onValueChange={(next) => {
+          if (new URLSearchParams(window.location.search).get("tab") === next) return
+          setSearchParams((previous) => {
+            const params = new URLSearchParams(previous)
+            params.set("tab", next)
+            return params
+          })
+        }}
+      >
         <TabsList>
           <TabsTrigger value="general">{t("settings.general")}</TabsTrigger>
           <TabsTrigger value="team">{t("team.title")}</TabsTrigger>
