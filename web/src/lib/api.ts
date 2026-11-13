@@ -654,6 +654,7 @@ export const admin = {
       changelog?: string
       update_command?: string
       checked_at?: string
+      error?: string
     }>("/admin/system/update-check"),
 
   // ─── Releases (industry-standard bundle model) ───

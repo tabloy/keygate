@@ -230,6 +230,7 @@ export default function SettingsPage() {
     data: updateData,
     refetch: recheckUpdate,
     isFetching: updateChecking,
+    isError: updateCheckFailed,
   } = useQuery({
     queryKey: ["admin", "update-check"],
     queryFn: admin.checkUpdate,
@@ -674,7 +675,12 @@ export default function SettingsPage() {
                   {t("settings.checkUpdate")}
                 </Button>
 
-                {updateData &&
+                {updateCheckFailed || updateData?.error ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {t("settings.updateCheckFailed")}
+                  </p>
+                ) : (
+                  updateData &&
                   (updateData.available ? (
                     <div className="flex items-center gap-2 bg-blue-50 text-blue-800 rounded-lg px-4 py-2 text-sm">
                       <ArrowUpCircle className="h-4 w-4" />
@@ -695,7 +701,8 @@ export default function SettingsPage() {
                       <Check className="h-4 w-4" />
                       {t("settings.upToDate")}
                     </span>
-                  ))}
+                  ))
+                )}
               </div>
 
               {updateData?.changelog && updateData.available && (
