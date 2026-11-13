@@ -42,6 +42,10 @@ func TestValidateName(t *testing.T) {
 		{"X", true},
 		{string(make([]byte, 200)), true},  // exactly 200
 		{"", false},                        // empty
+		{"   ", false},                     // spaces only
+		{"\t\n", false},                    // other ASCII whitespaces only
+		{"\u00a0", false},                  // non-breaking space only
+		{" X ", true},                      // padding around a real name is fine here
 		{string(make([]byte, 201)), false}, // 201
 	}
 	for _, tt := range tests {
