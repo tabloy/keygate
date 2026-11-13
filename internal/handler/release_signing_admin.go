@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -78,7 +79,10 @@ func (h *ReleaseSigningAdminHandler) Rotate(c *gin.Context) {
 	var req struct {
 		Note string `json:"note"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.BadRequest(c, "invalid request body")
+		return
+	}
 	if len(req.Note) > 256 {
 		response.BadRequest(c, "note too long (max 256 chars)")
 		return
@@ -215,7 +219,10 @@ func (h *ReleaseSigningAdminHandler) Deactivate(c *gin.Context) {
 	var req struct {
 		Note string `json:"note"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.BadRequest(c, "invalid request body")
+		return
+	}
 	if len(req.Note) > 256 {
 		response.BadRequest(c, "note too long (max 256 chars)")
 		return
