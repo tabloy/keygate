@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import { formatDate } from "@/lib/utils"
 
 export default function APIKeysPage() {
@@ -421,8 +422,9 @@ function NewKeyDialog({ keyValue, onClose }: { keyValue: string; onClose: () => 
   const [copied, setCopied] = useState(false)
   const [visible, setVisible] = useState(false)
 
-  const copy = () => {
-    navigator.clipboard.writeText(keyValue)
+  const copy = async () => {
+    setCopied(false)
+    if (!(await copyText(keyValue, t("common.copyTextFailed")))) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

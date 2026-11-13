@@ -43,6 +43,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator"
 import { useI18n } from "@/i18n"
 import { admin, type Entitlement, errorCode, errorDetails, type Plan } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 
 // model.MaxPlanQuantity: the most seats a plan sold per seat can sell.
 const MAX_PLAN_QUANTITY = 10000
@@ -288,9 +289,9 @@ export default function PlansPage() {
                                 variant="ghost"
                                 size="icon"
                                 title={t("plans.copyCheckoutLink")}
-                                onClick={() => {
+                                onClick={async () => {
                                   const url = `${window.location.origin}/pay/${p.checkout_id}`
-                                  navigator.clipboard.writeText(url)
+                                  if (!(await copyText(url, t("common.copyTextFailed")))) return
                                   showToast(t("plans.linkCopied"), "success")
                                 }}
                               >

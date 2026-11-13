@@ -55,6 +55,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin, type WebhookConfig } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import { boolColor, formatDate } from "@/lib/utils"
 
 // Must stay in sync with model.WebhookEvents on the server, which
@@ -427,8 +428,9 @@ function SecretDialog({ secret, onClose }: { secret: string; onClose: () => void
   const [copied, setCopied] = useState(false)
   const [visible, setVisible] = useState(false)
 
-  const copy = () => {
-    navigator.clipboard.writeText(secret)
+  const copy = async () => {
+    setCopied(false)
+    if (!(await copyText(secret, t("common.copyTextFailed")))) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

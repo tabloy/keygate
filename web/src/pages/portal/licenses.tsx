@@ -32,6 +32,7 @@ import {
   portal,
   type Seat,
 } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import { cn, formatDate, statusColor } from "@/lib/utils"
 import { formatMoney, PendingChangeNotice, SubscriptionChangeDialog } from "./subscription-change"
 
@@ -124,8 +125,9 @@ function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense
   const hasMembers = (lic.seats ?? []).some((s) => !s.removed_at && s.email.toLowerCase() !== lic.email?.toLowerCase())
   const showSeats = (productType === "saas" || productType === "hybrid") && (seatCap !== 1 || hasMembers || perSeat)
 
-  const copyKey = () => {
-    navigator.clipboard.writeText(lic.license_key)
+  const copyKey = async () => {
+    setCopied(false)
+    if (!(await copyText(lic.license_key, t("common.copyTextFailed")))) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
