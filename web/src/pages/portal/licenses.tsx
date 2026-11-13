@@ -1056,12 +1056,12 @@ function QuotaUsageSection({ license }: { license: PortalLicense }) {
   }
 
   if (quotaEntitlements.length === 0) {
-    return <p className="text-sm text-muted-foreground py-4 text-center">No quota-based features.</p>
+    return <p className="text-sm text-muted-foreground py-4 text-center">{t("portal.noQuotaFeatures")}</p>
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm font-medium mb-2">Quota Usage</p>
+      <p className="text-sm font-medium mb-2">{t("portal.quotaUsage")}</p>
       {quotaEntitlements.map((ent) => (
         <QuotaBar key={ent.feature} entitlement={ent} licenseKey={license.license_key} />
       ))}
