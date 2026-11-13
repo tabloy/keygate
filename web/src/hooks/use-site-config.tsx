@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react"
+import { useI18n } from "@/i18n"
 import { site } from "@/lib/api"
 
 interface SiteConfig {
@@ -26,6 +27,7 @@ const defaults: SiteConfig = {
 const SiteConfigContext = createContext<SiteConfig>(defaults)
 
 export function SiteConfigProvider({ children }: { children: ReactNode }) {
+  const { setLocale } = useI18n()
   const [config, setConfig] = useState<SiteConfig>(defaults)
 
   useEffect(() => {
@@ -59,13 +61,13 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
           document.title = data.site_name
         }
         // Set default language if user hasn't explicitly chosen one
-        if (data.language && !localStorage.getItem("keygate_locale")) {
-          localStorage.setItem("keygate_locale", data.language)
-          document.documentElement.lang = data.language
+        const savedLocale = localStorage.getItem("keygate_locale")
+        if (savedLocale !== "en" && savedLocale !== "zh" && (data.language === "en" || data.language === "zh")) {
+          setLocale(data.language)
         }
       })
       .catch(() => setConfig({ ...defaults, loading: false }))
-  }, [])
+  }, [setLocale])
 
   return <SiteConfigContext.Provider value={config}>{children}</SiteConfigContext.Provider>
 }
