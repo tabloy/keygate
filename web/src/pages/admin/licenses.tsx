@@ -62,9 +62,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { type AdminSeat, admin, errorCode, errorDetails, type License, type Plan, type UsageCounter } from "@/lib/api"
-import { formatDate, maskKey, statusColor } from "@/lib/utils"
+import { maskKey, statusColor } from "@/lib/utils"
 
 // A date picked in the expiry field means "valid through that whole
 // day" in the admin's local timezone, so the license dies at local
@@ -85,6 +86,7 @@ function localDateValue(iso: string): string {
 }
 
 export default function LicensesPage() {
+  const formatDate = useDateFormatter()
   const { t, locale } = useI18n()
   const qc = useQueryClient()
   const [productFilter, setProductFilter] = useState<string>("")
@@ -491,6 +493,7 @@ function CreateLicenseDialog({
 }
 
 function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const { data: lic, isLoading } = useQuery({
@@ -1215,6 +1218,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 function UsageTab({ licenseId }: { licenseId: string }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const pg = useServerPagination(20)
@@ -1377,6 +1381,7 @@ function SeatsTab({
   hasSeats: boolean
   ownerEmail: string
 }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const pg = useServerPagination(20)

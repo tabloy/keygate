@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/hooks/use-auth"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import {
   type Activation,
@@ -32,7 +33,7 @@ import {
   portal,
   type Seat,
 } from "@/lib/api"
-import { cn, formatDate, statusColor } from "@/lib/utils"
+import { cn, statusColor } from "@/lib/utils"
 import { formatMoney, PendingChangeNotice, SubscriptionChangeDialog } from "./subscription-change"
 
 export default function PortalLicensesPage() {
@@ -96,6 +97,7 @@ function changedElsewhere(e: Error) {
 }
 
 function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense; renewalsEnabled: boolean }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const { user } = useAuth()
   // Seat members see the license too, but renewals, plan changes,
@@ -390,6 +392,7 @@ function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense
 }
 
 function ActivationsSection({ license }: { license: PortalLicense }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const { user } = useAuth()
   const qc = useQueryClient()
@@ -884,6 +887,7 @@ function SeatRow({
   onResend?: () => void
   resendState: "idle" | "sending" | "sent"
 }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const accepted = !!seat.accepted_at
   const expired = !accepted && !!seat.invite_expires_at && new Date(seat.invite_expires_at).getTime() < Date.now()

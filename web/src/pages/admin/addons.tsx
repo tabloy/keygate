@@ -39,11 +39,13 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import { type Addon, admin, type Product } from "@/lib/api"
-import { boolColor, formatDate } from "@/lib/utils"
+import { boolColor } from "@/lib/utils"
 
 export default function AddonsPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [productFilter, setProductFilter] = useState<string>("")

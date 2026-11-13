@@ -21,10 +21,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import { admin, type Product, RELEASE_CHANNELS, RELEASE_PLATFORMS, type ReleaseSigningKey, site } from "@/lib/api"
 import { compareSemver } from "@/lib/semver"
-import { formatDate } from "@/lib/utils"
 
 // Releases belong to products that ship installable binaries. The
 // server enforces it; the pickers ask for the same set so an admin never
@@ -344,6 +344,7 @@ function PlatformPicker({
 // sell an update period); those choices are shown disabled with the
 // reason instead of failing on save.
 function FeedAccessSection({ product }: { product: Product }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const [pending, setPending] = useState<boolean | null>(null)
   const [error, setError] = useState("")
@@ -638,6 +639,7 @@ function RequiredUpdateSection({ product }: { product: Product }) {
 }
 
 function SigningKeysSection({ productId }: { productId: string }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [rotateOpen, setRotateOpen] = useState(false)
@@ -769,6 +771,7 @@ function ActiveSigningKeyCard({
   onRotate: () => void
   onDeactivate: () => void
 }) {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const tauriKey = useQuery({
     queryKey: ["admin", "signing-keys", productId, "tauri", keyRow.id],

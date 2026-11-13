@@ -55,14 +55,15 @@ import {
   type SettingsTab,
   UpdateSettingsDialog,
 } from "@/components/update-settings"
+import { useDateFormatter } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import { admin, RELEASE_CHANNELS, RELEASE_PLATFORMS, type Release, type ReleaseArtifact } from "@/lib/api"
 import { compareSemver } from "@/lib/semver"
-import { formatDate } from "@/lib/utils"
 
 const PAGE_SIZE = 20
 
 export default function ReleasesPage() {
+  const formatDate = useDateFormatter()
   const { t } = useI18n()
   const qc = useQueryClient()
   const [productFilter, setProductFilter] = useState("")
