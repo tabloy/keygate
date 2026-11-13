@@ -109,7 +109,12 @@ export function UpdateSettingsDialog({
         ) : !product || product.id !== productId ? (
           <div className="flex-1 animate-pulse rounded-md bg-muted" />
         ) : (
-          <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="flex min-h-0 flex-1 flex-col">
+          <Tabs
+            key={product.id}
+            value={tab}
+            onValueChange={(v) => setTab(v as SettingsTab)}
+            className="flex min-h-0 flex-1 flex-col"
+          >
             <TabsList className="grid w-full shrink-0 grid-cols-2 sm:grid-cols-4 h-auto">
               <TabsTrigger value="signing">{t("updateSettings.tabSigning")}</TabsTrigger>
               <TabsTrigger value="feeds">{t("updateSettings.tabFeeds")}</TabsTrigger>
