@@ -446,7 +446,7 @@ function CreateLicenseDialog({
               <Input
                 type="date"
                 value={validUntil}
-                min={new Date().toISOString().slice(0, 10)}
+                min={localDateValue(new Date().toISOString())}
                 onChange={(e) => setValidUntil(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">{t("licenses.validUntilHint")}</p>
