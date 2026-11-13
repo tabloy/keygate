@@ -1108,6 +1108,8 @@ const zh = {
   "updateSettings.requireUpdate": "要求旧版本更新",
   "updateSettings.requireUpdateHint": "用于旧版本必须停止使用的情况，例如协议变更之后。对所有渠道和平台生效。",
   "updateSettings.minimumVersion": "最低版本",
+  "updateSettings.searchVersions": "搜索版本...",
+  "updateSettings.releaseReadFailed": "无法确认已发布版本，请重试后再保存。",
   "updateSettings.selectVersion": "选择版本",
   "updateSettings.versionNotPublished": "{version}（未发布）",
   "updateSettings.versionNewest": "{version}（最新）",

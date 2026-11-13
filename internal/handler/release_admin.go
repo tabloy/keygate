@@ -475,6 +475,8 @@ func (h *ReleaseAdminHandler) List(c *gin.Context) {
 	}
 
 	filter := store.ReleaseFilter{
+		Search:    c.Query("search"),
+		Version:   c.Query("version"),
 		ProductID: productID,
 		Channel:   channel,
 		Status:    status,

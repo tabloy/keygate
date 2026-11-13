@@ -1161,6 +1161,8 @@ const en = {
   "updateSettings.requireUpdateHint":
     "For when old versions must stop working, for example after a protocol change. Applies to every channel and platform.",
   "updateSettings.minimumVersion": "Minimum version",
+  "updateSettings.searchVersions": "Search versions...",
+  "updateSettings.releaseReadFailed": "Published releases could not be verified. Retry before saving.",
   "updateSettings.selectVersion": "Select a version",
   "updateSettings.versionNotPublished": "{version} (not published)",
   "updateSettings.versionNewest": "{version} (newest)",

@@ -47,6 +47,8 @@ var (
 
 // ReleaseFilter narrows ListReleases queries.
 type ReleaseFilter struct {
+	Search    string
+	Version   string
 	ProductID string
 	Channel   string
 	Status    string
@@ -238,8 +240,11 @@ func (s *Store) ListReleases(ctx context.Context, f ReleaseFilter) ([]*model.Rel
 		Relation("Product").
 		Relation("Artifacts").
 		Limit(limit).
-		Offset(offset).
-		OrderExpr("release.created_at DESC, release.id DESC")
+		Offset(offset)
+	if f.Search != "" {
+		q = q.OrderExpr("CASE WHEN release.version = ? THEN 0 ELSE 1 END", f.Search)
+	}
+	q = q.OrderExpr("release.created_at DESC, release.id DESC")
 
 	q = applyReleaseFilters(q, f)
 
@@ -257,6 +262,13 @@ func (s *Store) CountReleases(ctx context.Context, f ReleaseFilter) (int, error)
 }
 
 func applyReleaseFilters(q *bun.SelectQuery, f ReleaseFilter) *bun.SelectQuery {
+	if f.Version != "" {
+		q = q.Where("release.version = ?", f.Version)
+	}
+	if f.Search != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(f.Search)
+		q = q.Where("release.version ILIKE ?", "%"+escaped+"%")
+	}
 	if f.ProductID != "" {
 		q = q.Where("release.product_id = ?", f.ProductID)
 	}
