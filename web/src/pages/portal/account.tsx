@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Key, Mail, Pencil, Shield, User, X } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { showToast } from "@/components/toast"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ export default function PortalAccountPage() {
   const { t } = useI18n()
   const { user, refetch } = useAuth()
   const qc = useQueryClient()
+  const profilePending = useRef(false)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState("")
 
@@ -33,10 +34,19 @@ export default function PortalAccountPage() {
       showToast(t("portal.profileSaved"), "success")
     },
     onError: (e: Error) => showToast(e.message, "error"),
+    onSettled: () => {
+      profilePending.current = false
+    },
   })
 
   const licenses = data?.licenses || []
   const activeLicenses = licenses.filter((l) => l.status === "active" || l.status === "trialing")
+
+  const saveProfile = () => {
+    if (profilePending.current || !name.trim()) return
+    profilePending.current = true
+    saveMut.mutate()
+  }
 
   const startEdit = () => {
     setName(user?.name || "")
@@ -90,7 +100,7 @@ export default function PortalAccountPage() {
                       placeholder={t("portal.displayName")}
                       autoFocus
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && name.trim()) saveMut.mutate()
+                        if (e.key === "Enter" && name.trim()) saveProfile()
                         if (e.key === "Escape") cancelEdit()
                       }}
                     />
@@ -100,7 +110,7 @@ export default function PortalAccountPage() {
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8"
-                      onClick={() => saveMut.mutate()}
+                      onClick={saveProfile}
                       disabled={!name.trim() || saveMut.isPending}
                     >
                       <Check className="h-4 w-4 text-emerald-600" />
