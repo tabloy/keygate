@@ -147,7 +147,9 @@ func (h *AuthHandler) OTPVerify(c *gin.Context) {
 		h.Email.SendWelcome(user.Email, user.Name)
 	}
 
-	h.startSession(c, user)
+	if !h.startSession(c, user) {
+		return
+	}
 
 	response.OK(c, gin.H{
 		"status": "ok", "email": user.Email, "name": user.Name,
@@ -228,14 +230,18 @@ func (h *AuthHandler) loginUser(c *gin.Context, email string) (*model.User, erro
 }
 
 // startSession signs user in after a code login and records it.
-func (h *AuthHandler) startSession(c *gin.Context, user *model.User) {
-	h.issueSession(c, user)
+func (h *AuthHandler) startSession(c *gin.Context, user *model.User) bool {
+	if err := h.issueSession(c, user); err != nil {
+		response.Internal(c, err)
+		return false
+	}
 
 	h.Store.Audit(c, &model.AuditLog{
 		Entity: "session", EntityID: user.ID, Action: "login",
 		ActorType: "otp", ActorID: user.ID, IPAddress: c.ClientIP(),
 		Changes: map[string]any{"email": user.Email},
 	})
+	return true
 }
 
 // signupAllowed reports whether email may receive a login code.

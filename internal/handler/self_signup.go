@@ -274,7 +274,9 @@ func (h *AuthHandler) SignupVerify(c *gin.Context) {
 		response.Internal(c, errors.New("licence created but sign-in failed"))
 		return
 	}
-	h.startSession(c, user)
+	if !h.startSession(c, user) {
+		return
+	}
 	response.Created(c, gin.H{"status": "created", "license_id": l.ID})
 }
 
@@ -290,7 +292,9 @@ func (h *AuthHandler) signInExisting(c *gin.Context, email string, l *model.Lice
 		response.Internal(c, err)
 		return
 	}
-	h.startSession(c, user)
+	if !h.startSession(c, user) {
+		return
+	}
 	response.OK(c, gin.H{
 		"status": "existing", "license_id": l.ID,
 		"license_status": l.Status, "license_usable": service.LicenseUsable(l) == nil,
