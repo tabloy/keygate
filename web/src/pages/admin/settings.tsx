@@ -179,6 +179,7 @@ export default function SettingsPage() {
     mutationFn: () => admin.updateSettings(changedSettings()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "settings"] })
+      qc.invalidateQueries({ queryKey: ["site", "config"] })
       // Secrets are write-only: the API never returns them, so replacing
       // one leaves the settings response byte-identical and the [data]
       // effect (guarded by structural sharing) never re-seeds the form.
