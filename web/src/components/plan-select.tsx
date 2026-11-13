@@ -8,17 +8,7 @@ import { admin, type Plan } from "@/lib/api"
 // the same reason ProductSelect is: a product with more plans than one
 // page would otherwise have the rest of them unreachable — including,
 // on the change-plan dialog, as a target to move a licence to.
-export function PlanSelect({
-  productId,
-  value,
-  onChange,
-  current,
-  allLabel,
-  placeholder,
-  className = "w-48",
-  disabled,
-  withType,
-}: {
+type PlanSelectProps = {
   productId: string
   value: string
   onChange: (value: string) => void
@@ -29,7 +19,23 @@ export function PlanSelect({
   disabled?: boolean
   /** Show each plan's licence type beside its name. */
   withType?: boolean
-}) {
+}
+
+export function PlanSelect(props: PlanSelectProps) {
+  return <ProductPlanSelect key={props.productId} {...props} />
+}
+
+function ProductPlanSelect({
+  productId,
+  value,
+  onChange,
+  current,
+  allLabel,
+  placeholder,
+  className = "w-48",
+  disabled,
+  withType,
+}: PlanSelectProps) {
   const { t } = useI18n()
   const [search, setSearch] = useState("")
   const { data, isFetching } = useQuery({
@@ -49,7 +55,7 @@ export function PlanSelect({
       total={data?.total || 0}
       search={search}
       onSearchChange={setSearch}
-      current={current ? { id: current.id, label: current.name, hint: label(current) } : null}
+      current={current?.product_id === productId ? { id: current.id, label: current.name, hint: label(current) } : null}
       allLabel={allLabel}
       placeholder={placeholder}
       searchPlaceholder={t("filter.searchPlans")}
