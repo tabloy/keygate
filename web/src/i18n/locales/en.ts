@@ -1195,6 +1195,7 @@ const en = {
   "updateSettings.tauriKey": "Public key for Tauri (minisign)",
   "updateSettings.tauriKeyHint": "Tauri: {field} in the updater section of tauri.conf.json.",
   "updateSettings.copy": "Copy",
+  "updateSettings.downloadFailed": "Could not download a valid public key. Try again.",
   "updateSettings.downloadPem": "Download .pem",
   "updateSettings.rotate": "Rotate",
   "updateSettings.deactivate": "Deactivate",
