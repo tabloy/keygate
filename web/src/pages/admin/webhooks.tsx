@@ -18,6 +18,7 @@ import {
 import { Fragment, useState } from "react"
 import { Link } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
+import { QueryReadState, queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -91,17 +92,19 @@ export default function WebhooksPage() {
   const [productFilter, setProductFilter] = useState<string>("")
   const [search, setSearch] = useState("")
   const pg = useServerPagination(10, [productFilter, search])
-  const { data: productsData } = useQuery({
+  const readQuery0 = useQuery({
     // One row is all this page needs from the catalogue: whether the
     // install has any product at all, and which one a new form starts
     // on. The pickers fetch their own candidates, with search.
     queryKey: ["admin", "products", "newest"],
     queryFn: () => admin.listProducts({ limit: 1 }),
   })
-  const { data, isLoading } = useQuery({
+  const { data: productsData } = readQuery0
+  const readQuery1 = useQuery({
     queryKey: ["admin", "webhooks", productFilter, search, pg.page, pg.pageSize],
     queryFn: () => admin.listWebhooks({ product_id: productFilter, search, ...pg.params }),
   })
+  const { data, isLoading } = readQuery1
   const [creating, setCreating] = useState(false)
   const [newSecret, setNewSecret] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<WebhookConfig | null>(null)
@@ -153,9 +156,13 @@ export default function WebhooksPage() {
     },
   })
 
+  const readState = queryReadState([readQuery0, readQuery1], [readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (products.length === 0 && !isLoading) {
     return (
       <div className="space-y-6">
+        {readState.notice}
         <div>
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("webhooks.title")}</h1>
           <p className="text-muted-foreground">{t("webhooks.subtitle")}</p>
@@ -178,6 +185,7 @@ export default function WebhooksPage() {
 
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("webhooks.title")}</h1>
@@ -469,7 +477,7 @@ function DeliveryLogDialog({ webhookId, onClose }: { webhookId: string; onClose:
   const [page, setPage] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>("")
   const limit = 20
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["admin", "webhook-deliveries", webhookId, page, statusFilter],
     queryFn: () =>
       admin.listWebhookDeliveries(webhookId, {
@@ -478,6 +486,7 @@ function DeliveryLogDialog({ webhookId, onClose }: { webhookId: string; onClose:
         status: statusFilter || undefined,
       }),
   })
+  const { data, isLoading } = readQuery0
   const resendMut = useMutation({
     mutationFn: (deliveryId: string) => admin.resendWebhookDelivery(webhookId, deliveryId),
     onSuccess: () => {
@@ -525,103 +534,107 @@ function DeliveryLogDialog({ webhookId, onClose }: { webhookId: string; onClose:
           ))}
         </div>
         <DialogBody>
-          {isLoading ? (
-            <div className="h-48 animate-pulse bg-muted rounded-lg" />
-          ) : deliveries.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">{t("webhooks.noDeliveries")}</p>
-          ) : (
-            <div className="space-y-4">
-              {/* One card per delivery rather than a six column table: the
+          <QueryReadState queries={[readQuery0]}>
+            {isLoading ? (
+              <div className="h-48 animate-pulse bg-muted rounded-lg" />
+            ) : deliveries.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">{t("webhooks.noDeliveries")}</p>
+            ) : (
+              <div className="space-y-4">
+                {/* One card per delivery rather than a six column table: the
                 fields wrap on a narrow screen instead of scrolling the row
                 (and the Resend button) out of reach. */}
-              <ul className="divide-y rounded-md border">
-                {deliveries.map((d) => (
-                  <Fragment key={d.id}>
-                    <li>
-                      <button
-                        type="button"
-                        className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5 text-left hover:bg-muted/50"
-                        aria-expanded={expandedId === d.id}
-                        onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
-                      >
-                        {expandedId === d.id ? (
-                          <ChevronDown className="h-4 w-4 shrink-0" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 shrink-0" />
-                        )}
-                        <Badge variant="secondary" className="text-xs">
-                          {d.event}
-                        </Badge>
-                        <Badge
-                          className={
-                            d.status === "delivered"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : d.status === "failed"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-amber-100 text-amber-800"
-                          }
+                <ul className="divide-y rounded-md border">
+                  {deliveries.map((d) => (
+                    <Fragment key={d.id}>
+                      <li>
+                        <button
+                          type="button"
+                          className="flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5 text-left hover:bg-muted/50"
+                          aria-expanded={expandedId === d.id}
+                          onClick={() => setExpandedId(expandedId === d.id ? null : d.id)}
                         >
-                          {t(`status.${d.status}` as TranslationKeys)}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {t("webhooks.response")} {d.response_code ?? "-"} · {t("webhooks.attempts")} {d.attempts}
-                        </span>
-                        <span className="ml-auto text-xs text-muted-foreground">{formatDate(d.delivered_at)}</span>
-                      </button>
-                      {expandedId === d.id && (
-                        <div className="space-y-3 border-t bg-muted/20 px-3 py-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-[11px] font-mono text-muted-foreground break-all">id: {d.id}</span>
-                            {/* Resend re-fires the same event payload as a
+                          {expandedId === d.id ? (
+                            <ChevronDown className="h-4 w-4 shrink-0" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 shrink-0" />
+                          )}
+                          <Badge variant="secondary" className="text-xs">
+                            {d.event}
+                          </Badge>
+                          <Badge
+                            className={
+                              d.status === "delivered"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : d.status === "failed"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-amber-100 text-amber-800"
+                            }
+                          >
+                            {t(`status.${d.status}` as TranslationKeys)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {t("webhooks.response")} {d.response_code ?? "-"} · {t("webhooks.attempts")} {d.attempts}
+                          </span>
+                          <span className="ml-auto text-xs text-muted-foreground">{formatDate(d.delivered_at)}</span>
+                        </button>
+                        {expandedId === d.id && (
+                          <div className="space-y-3 border-t bg-muted/20 px-3 py-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-[11px] font-mono text-muted-foreground break-all">id: {d.id}</span>
+                              {/* Resend re-fires the same event payload as a
                               new delivery. Disabled while in flight so a slow
                               connection cannot double send. */}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => resendMut.mutate(d.id)}
-                              disabled={resendMut.isPending}
-                            >
-                              <RefreshCw className="h-3 w-3 mr-1" />
-                              {resendMut.isPending && resendMut.variables === d.id
-                                ? t("common.loading")
-                                : t("webhooks.resend")}
-                            </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => resendMut.mutate(d.id)}
+                                disabled={resendMut.isPending}
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                {resendMut.isPending && resendMut.variables === d.id
+                                  ? t("common.loading")
+                                  : t("webhooks.resend")}
+                              </Button>
+                            </div>
+                            {d.payload && (
+                              <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                  {t("webhooks.payload")}
+                                </p>
+                                <pre className="text-xs bg-muted rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">
+                                  {JSON.stringify(d.payload, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                            {d.response_body && (
+                              <div>
+                                <p className="text-xs font-medium text-muted-foreground mb-1">
+                                  {t("webhooks.responseBody")}
+                                </p>
+                                <pre className="text-xs bg-muted rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">
+                                  {d.response_body}
+                                </pre>
+                              </div>
+                            )}
                           </div>
-                          {d.payload && (
-                            <div>
-                              <p className="text-xs font-medium text-muted-foreground mb-1">{t("webhooks.payload")}</p>
-                              <pre className="text-xs bg-muted rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">
-                                {JSON.stringify(d.payload, null, 2)}
-                              </pre>
-                            </div>
-                          )}
-                          {d.response_body && (
-                            <div>
-                              <p className="text-xs font-medium text-muted-foreground mb-1">
-                                {t("webhooks.responseBody")}
-                              </p>
-                              <pre className="text-xs bg-muted rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">
-                                {d.response_body}
-                              </pre>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  </Fragment>
-                ))}
-              </ul>
-              {total > 0 && (
-                <DataTablePagination
-                  page={page}
-                  totalPages={totalPages}
-                  total={total}
-                  pageSize={limit}
-                  onPageChange={setPage}
-                />
-              )}
-            </div>
-          )}
+                        )}
+                      </li>
+                    </Fragment>
+                  ))}
+                </ul>
+                {total > 0 && (
+                  <DataTablePagination
+                    page={page}
+                    totalPages={totalPages}
+                    total={total}
+                    pageSize={limit}
+                    onPageChange={setPage}
+                  />
+                )}
+              </div>
+            )}
+          </QueryReadState>
         </DialogBody>
       </DialogContent>
     </Dialog>

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Key, Trash2 } from "lucide-react"
 import { useState, useSyncExternalStore } from "react"
+import { QueryReadState, queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -37,13 +38,14 @@ import { formatMoney, PendingChangeNotice, SubscriptionChangeDialog } from "./su
 
 export default function PortalLicensesPage() {
   const { t } = useI18n()
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["portal", "licenses"],
     queryFn: portal.licenses,
     // Coming back from Stripe's page in another tab, show what was paid,
     // however recently the list was read.
     refetchOnWindowFocus: "always",
   })
+  const { data, isLoading } = readQuery0
 
   const licenses = data?.licenses || []
   // Renewals can be switched off server-side (during a rollout, or
@@ -52,9 +54,13 @@ export default function PortalLicensesPage() {
   // a version without the field has no renewal endpoint either.
   const renewalsEnabled = data?.renewals_enabled === true
 
+  const readState = queryReadState([readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (isLoading) {
     return (
       <div className="space-y-4">
+        {readState.notice}
         {[1, 2].map((i) => (
           <div key={i} className="h-48 animate-pulse bg-muted rounded-lg" />
         ))}
@@ -64,6 +70,7 @@ export default function PortalLicensesPage() {
 
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{t("portal.myLicenses")}</h1>
         <p className="text-muted-foreground">{t("portal.myLicensesDesc")}</p>
@@ -1071,10 +1078,11 @@ function QuotaUsageSection({ license }: { license: PortalLicense }) {
 
 function QuotaBar({ entitlement, licenseKey }: { entitlement: Entitlement; licenseKey: string }) {
   const { t } = useI18n()
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["portal", "quota", licenseKey, entitlement.feature],
     queryFn: () => portal.quotaStatus({ license_key: licenseKey, feature: entitlement.feature }),
   })
+  const { data, isLoading } = readQuery0
 
   // The limit the server enforces; 0 means no limit, as it does there.
   const limit = data?.limit ?? (Number(entitlement.value) || 0)
@@ -1083,12 +1091,16 @@ function QuotaBar({ entitlement, licenseKey }: { entitlement: Entitlement; licen
   const percentage = unlimited ? 0 : Math.min((used / limit) * 100, 100)
   const isWarning = percentage >= 80
 
+  const readState = queryReadState([readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (isLoading) {
     return <div className="h-12 animate-pulse bg-muted rounded-lg" />
   }
 
   return (
     <div className="space-y-1.5">
+      {readState.notice}
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium">{entitlement.feature}</span>
         <span className={cn("text-xs", isWarning ? "text-amber-600 font-medium" : "text-muted-foreground")}>
@@ -1195,10 +1207,11 @@ function CancelDialog({
 
 function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: () => void }) {
   const { t, locale } = useI18n()
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["portal", "invoices", licenseId],
     queryFn: () => portal.getInvoices(licenseId),
   })
+  const { data, isLoading } = readQuery0
   const invoices = data?.invoices || []
 
   return (
@@ -1208,48 +1221,52 @@ function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: ()
           <DialogTitle>{t("portal.invoices")}</DialogTitle>
         </DialogHeader>
         <DialogBody>
-          {isLoading ? (
-            <div className="h-32 animate-pulse bg-muted rounded-lg" />
-          ) : invoices.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">{t("common.noData")}</p>
-          ) : (
-            <div className="space-y-2">
-              {invoices.map((inv: Invoice) => (
-                <div
-                  key={inv.id}
-                  className="flex items-center justify-between bg-muted/50 rounded-lg px-4 py-3 text-sm"
-                >
-                  <div>
-                    <p className="font-medium">{inv.number || inv.id}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(inv.created * 1000).toLocaleDateString()}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge
-                      className={
-                        inv.status === "paid" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-                      }
-                    >
-                      {inv.status}
-                    </Badge>
-                    <span className="font-medium">
-                      {formatMoney(
-                        inv.status === "paid" ? inv.total : inv.status === "void" ? inv.amount_paid : inv.amount_due,
-                        inv.currency,
-                        locale,
+          <QueryReadState queries={[readQuery0]}>
+            {isLoading ? (
+              <div className="h-32 animate-pulse bg-muted rounded-lg" />
+            ) : invoices.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">{t("common.noData")}</p>
+            ) : (
+              <div className="space-y-2">
+                {invoices.map((inv: Invoice) => (
+                  <div
+                    key={inv.id}
+                    className="flex items-center justify-between bg-muted/50 rounded-lg px-4 py-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium">{inv.number || inv.id}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(inv.created * 1000).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge
+                        className={
+                          inv.status === "paid" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                        }
+                      >
+                        {inv.status}
+                      </Badge>
+                      <span className="font-medium">
+                        {formatMoney(
+                          inv.status === "paid" ? inv.total : inv.status === "void" ? inv.amount_paid : inv.amount_due,
+                          inv.currency,
+                          locale,
+                        )}
+                      </span>
+                      {inv.invoice_pdf && (
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer">
+                            PDF
+                          </a>
+                        </Button>
                       )}
-                    </span>
-                    {inv.invoice_pdf && (
-                      <Button variant="ghost" size="sm" asChild>
-                        <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer">
-                          PDF
-                        </a>
-                      </Button>
-                    )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </QueryReadState>
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -1351,10 +1368,11 @@ function ChangePlanDialog({ license, onClose }: { license: PortalLicense; onClos
   const { t } = useI18n()
 
   // Fetch available plans via portal API (not admin)
-  const { data: plansData } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["portal", "plans", license.product_id],
     queryFn: () => portal.listPlans(license.product_id),
   })
+  const { data: plansData } = readQuery0
   // Only other subscription plans with a Stripe price: a subscription
   // can move between prices, not become a one-time purchase. Mirrors
   // the backend's change-plan gate. With a change waiting for payment,
@@ -1389,31 +1407,33 @@ function ChangePlanDialog({ license, onClose }: { license: PortalLicense; onClos
           <DialogDescription>{t("portal.changePlanDesc")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          {plans.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">{t("portal.noOtherPlans")}</p>
-          ) : (
-            <div className="space-y-2">
-              {plans.map((plan: Plan) => (
-                <div key={plan.id} className="flex items-center justify-between bg-muted/50 rounded-lg px-4 py-3">
-                  <div>
-                    <p className="font-medium text-sm">
-                      {plan.name}
-                      {plan.id === license.plan_id && (
-                        <span className="text-muted-foreground font-normal"> · {t("portal.currentPlan")}</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {planKind(t, plan)}
-                      {plan.per_seat ? ` · ${t("portal.perSeat")}` : ""}
-                    </p>
+          <QueryReadState queries={[readQuery0]}>
+            {plans.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">{t("portal.noOtherPlans")}</p>
+            ) : (
+              <div className="space-y-2">
+                {plans.map((plan: Plan) => (
+                  <div key={plan.id} className="flex items-center justify-between bg-muted/50 rounded-lg px-4 py-3">
+                    <div>
+                      <p className="font-medium text-sm">
+                        {plan.name}
+                        {plan.id === license.plan_id && (
+                          <span className="text-muted-foreground font-normal"> · {t("portal.currentPlan")}</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {planKind(t, plan)}
+                        {plan.per_seat ? ` · ${t("portal.perSeat")}` : ""}
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={() => setChosen(plan)}>
+                      {plan.id === license.plan_id ? t("portal.keepPlan") : t("portal.switchTo")}
+                    </Button>
                   </div>
-                  <Button size="sm" onClick={() => setChosen(plan)}>
-                    {plan.id === license.plan_id ? t("portal.keepPlan") : t("portal.switchTo")}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </QueryReadState>
         </DialogBody>
       </DialogContent>
     </Dialog>

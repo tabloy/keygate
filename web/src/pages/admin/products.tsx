@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Cloud, Laptop, Layers, Pencil, Plus, Search, Settings2, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { CopyableId } from "@/components/copyable-id"
+import { queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -47,10 +48,11 @@ export default function ProductsPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState("")
   const pg = useServerPagination(10, [search])
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["admin", "products", search, pg.page, pg.pageSize],
     queryFn: () => admin.listProducts({ search, ...pg.params }),
   })
+  const { data, isLoading } = readQuery0
   const [editing, setEditing] = useState<Product | null>(null)
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Product | null>(null)
@@ -87,8 +89,12 @@ export default function ProductsPage() {
 
   const { items: products, total, totalPages } = pg.from(data, data?.products)
 
+  const readState = queryReadState([readQuery0])
+  if (readState.blocked) return readState.blocked
+
   return (
     <div className="space-y-6">
+      {readState.notice}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight sr-only md:not-sr-only">{t("products.title")}</h1>

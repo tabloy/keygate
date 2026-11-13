@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
+import { QueryReadState } from "@/components/query-read-state"
 import { PICKER_PAGE, SearchableSelect } from "@/components/ui/searchable-select"
 import { useI18n } from "@/i18n"
 import { admin, type Plan } from "@/lib/api"
@@ -32,16 +33,17 @@ export function PlanSelect({
 }) {
   const { t } = useI18n()
   const [search, setSearch] = useState("")
-  const { data, isFetching } = useQuery({
+  const readQuery = useQuery({
     queryKey: ["admin", "plans", "picker", productId, search],
     queryFn: () => admin.listPlans({ product_id: productId, search, limit: PICKER_PAGE }),
     enabled: !!productId,
     placeholderData: keepPreviousData,
   })
+  const { data, isFetching } = readQuery
   const plans = data?.plans || []
   const label = (p: Plan) => (withType && p.license_type ? `[${p.license_type}]` : undefined)
 
-  return (
+  const picker = (
     <SearchableSelect
       value={value}
       onChange={onChange}
@@ -60,4 +62,5 @@ export function PlanSelect({
       loading={isFetching}
     />
   )
+  return productId ? <QueryReadState queries={[readQuery]}>{picker}</QueryReadState> : picker
 }

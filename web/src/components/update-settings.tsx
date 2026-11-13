@@ -3,6 +3,7 @@ import { Check, Copy, Download, KeyRound, Plus, RotateCw, Trash2 } from "lucide-
 import { Fragment, type ReactNode, useState } from "react"
 import { Link } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
+import { queryReadState } from "@/components/query-read-state"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -643,10 +644,11 @@ function SigningKeysSection({ productId }: { productId: string }) {
   const [rotateOpen, setRotateOpen] = useState(false)
   const [deactivateOpen, setDeactivateOpen] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const readQuery0 = useQuery({
     queryKey: ["admin", "signing-keys", productId],
     queryFn: () => admin.listSigningKeys(productId),
   })
+  const { data, isLoading } = readQuery0
   const keys = data?.keys || []
   const active = keys.find((k) => k.active)
   const history = keys.filter((k) => !k.active)
@@ -660,10 +662,14 @@ function SigningKeysSection({ productId }: { productId: string }) {
     onError: (e: Error) => showToast(e.message, "error"),
   })
 
+  const readState = queryReadState([readQuery0])
+  if (readState.blocked) return readState.blocked
+
   if (isLoading) return <div className="h-32 animate-pulse bg-muted rounded-md" />
 
   return (
     <div className="space-y-4">
+      {readState.notice}
       {!active ? (
         <Card>
           <CardContent className="py-8 text-center">
