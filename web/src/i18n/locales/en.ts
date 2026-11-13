@@ -93,6 +93,7 @@ const en = {
   "products.title": "Products",
   "products.subtitle": "Manage your software products.",
   "products.new": "New Product",
+  "products.feedRequirementFailed": "Could not check this product’s update access requirements. Retry before saving.",
   "products.feedGateOnTypeChange":
     "A plan of this product sells an update period, so its update feeds will require a license. Review it later in Releases, Update settings.",
   "products.downloadURL": "Download page (optional)",

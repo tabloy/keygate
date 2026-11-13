@@ -585,6 +585,18 @@ func (h *AdminHandler) GetProduct(c *gin.Context) {
 		response.NotFound(c, "product not found")
 		return
 	}
+	if c.Query("include_maintenance") == "true" {
+		hasMaintenance, err := h.Store.ProductHasMaintenance(c.Request.Context(), p.ID)
+		if err != nil {
+			response.Internal(c, err)
+			return
+		}
+		response.OK(c, struct {
+			*model.Product
+			HasMaintenance bool `json:"has_maintenance"`
+		}{Product: p, HasMaintenance: hasMaintenance})
+		return
+	}
 	response.OK(c, p)
 }
 
@@ -1061,7 +1073,7 @@ func (h *AdminHandler) DeleteProduct(c *gin.Context) {
 
 func (h *AdminHandler) ListPlans(c *gin.Context) {
 	page := listPage(c)
-	plans, total, err := h.Store.ListPlans(c, c.Query("product_id"), c.Query("search"), page)
+	plans, total, err := h.Store.ListPlans(c, c.Query("product_id"), c.Query("search"), page, store.PlanListFilter{FallbackEligible: c.Query("fallback_eligible") == "true", ExcludeID: c.Query("exclude_id")})
 	if err != nil {
 		response.Internal(c, err)
 		return

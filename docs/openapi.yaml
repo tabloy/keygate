@@ -236,6 +236,8 @@ tags:
     description: Customer sign-in with an emailed code, session renewal and sign-out
   - name: Portal
     description: The signed-in customer's licenses, profile, subscription and devices
+  - name: Admin Catalog
+    description: Product and plan reads for admin sessions or admin-scoped API keys
   - name: Admin Licenses
     description: |
       License administration for billing backends. Reachable with the
@@ -3107,6 +3109,94 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
         "503":
           description: "`UPGRADE_UNAVAILABLE`, the plan's Stripe price can't be sold right now"
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /admin/products/{id}:
+    get:
+      tags: [Admin Catalog]
+      summary: Read a product and optional maintenance requirement
+      description: |
+        With include_maintenance=true, includes has_maintenance from all
+        protected plans and finite-cutoff licenses, independently of paging.
+        A failed requirement read is an error, not has_maintenance=false.
+      x-required-scopes: [admin]
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: include_maintenance, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Product fields with an optional authoritative maintenance flag
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: object
+                    additionalProperties: true
+                    properties:
+                      id: { type: string, format: uuid }
+                      has_maintenance:
+                        type: boolean
+                        description: Present when include_maintenance=true
+        "401": { $ref: "#/components/responses/SessionRequired" }
+        "403":
+          description: Admin access required
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "404":
+          description: Product not found
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "500":
+          description: Maintenance requirement could not be read
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /admin/plans:
+    get:
+      tags: [Admin Catalog]
+      summary: Search a page of plans
+      description: |
+        Filters apply before pagination and total counts. fallback_eligible
+        includes free non-trial plans not sold per seat, including inactive
+        plans; the product_id filter scopes them to the intended product.
+        Saved off-page targets can be read separately through the plan detail
+        endpoint. Plan writes still validate fallback eligibility.
+      x-required-scopes: [admin]
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - { name: product_id, in: query, schema: { type: string, format: uuid } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: fallback_eligible, in: query, schema: { type: boolean, default: false } }
+        - { name: exclude_id, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0, minimum: 0 } }
+      responses:
+        "200":
+          description: Matching plan page and total, with existing plan fields preserved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  data:
+                    type: object
+                    properties:
+                      plans: { type: array, items: { type: object, additionalProperties: true } }
+                      total: { type: integer }
+                      limit: { type: integer }
+                      offset: { type: integer }
+        "401": { $ref: "#/components/responses/SessionRequired" }
+        "403":
+          description: Admin access required
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "500":
+          description: Plan catalogue could not be read
           content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   /admin/licenses:

@@ -160,16 +160,29 @@ func (s *Store) DeleteProduct(ctx context.Context, id string) error {
 
 // ─── Plan ───
 
+type PlanListFilter struct {
+	FallbackEligible bool
+	ExcludeID        string
+}
+
 // ListPlans returns one page of a product's plans (or of every
 // product's, unfiltered) and how many the filter matched. Entitlements
 // are a has-many relation, which bun loads in a query of its own, so
 // the limit applies to plans and not to their rows.
-func (s *Store) ListPlans(ctx context.Context, productID, search string, p Page) ([]*model.Plan, int, error) {
+func (s *Store) ListPlans(ctx context.Context, productID, search string, p Page, filters ...PlanListFilter) ([]*model.Plan, int, error) {
 	var out []*model.Plan
 	q := s.DB.NewSelect().Model(&out).Relation("Entitlements").Relation("Product").
 		OrderExpr("sort_order ASC, plan.created_at DESC, plan.id DESC")
 	if productID != "" {
 		q = q.Where("plan.product_id = ?", productID)
+	}
+	for _, filter := range filters {
+		if filter.FallbackEligible {
+			q = q.Where("plan.license_type <> 'trial' AND NOT plan.per_seat AND COALESCE(plan.stripe_price_id, '') = '' AND plan.updates_days = 0 AND plan.renewal_days = 0 AND COALESCE(plan.stripe_renewal_price_id, '') = ''")
+		}
+		if filter.ExcludeID != "" {
+			q = q.Where("plan.id <> ?", filter.ExcludeID)
+		}
 	}
 	if search != "" {
 		q = q.Where("plan.name ILIKE ? OR plan.slug ILIKE ?", "%"+search+"%", "%"+search+"%")

@@ -293,16 +293,24 @@ function ProductDialog({
   // an update period: the server wants its new feeds to require a
   // license in that same change, so the dialog asks for it and says so.
   const gainsFeeds = !!product && product.type === "saas" && type !== "saas"
-  const { data: plansData } = useQuery({
-    queryKey: ["admin", "plans", "for-access", product?.id],
-    queryFn: () => admin.listPlans({ product_id: product?.id, limit: 100 }),
+  const {
+    data: accessRequirement,
+    isFetching: accessLoading,
+    isError: accessFailed,
+    refetch: retryAccess,
+  } = useQuery({
+    queryKey: ["admin", "product", product?.id, "maintenance"],
+    queryFn: () => admin.getProductMaintenance(product!.id),
     enabled: gainsFeeds,
+    staleTime: 0,
+    refetchOnMount: "always",
   })
-  const needsGate =
-    gainsFeeds && (plansData?.plans || []).some((p) => (p.updates_days ?? 0) > 0 || (p.renewal_days ?? 0) > 0)
+  const accessUnknown = gainsFeeds && (accessLoading || accessFailed || !accessRequirement)
+  const needsGate = gainsFeeds && accessRequirement?.has_maintenance === true
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (accessUnknown) return
     onSubmit({
       name,
       slug,
@@ -393,6 +401,16 @@ function ProductDialog({
                 />
               </div>
             </div>
+            {gainsFeeds && accessUnknown && (
+              <div role={accessFailed ? "alert" : "status"} className="space-y-2 text-sm">
+                <p>{t(accessFailed ? "products.feedRequirementFailed" : "common.loading")}</p>
+                {accessFailed && (
+                  <Button type="button" variant="outline" disabled={accessLoading} onClick={() => void retryAccess()}>
+                    {t("common.retry")}
+                  </Button>
+                )}
+              </div>
+            )}
             {needsGate && <p className="text-xs text-muted-foreground">{t("products.feedGateOnTypeChange")}</p>}
             <div className="space-y-2">
               <Label htmlFor="product-download-url">{t("products.downloadURL")}</Label>
@@ -411,7 +429,7 @@ function ProductDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || accessUnknown}>
               {loading ? t("common.loading") : t("common.save")}
             </Button>
           </DialogFooter>
