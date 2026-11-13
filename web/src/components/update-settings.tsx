@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useI18n } from "@/i18n"
 import { admin, type Product, RELEASE_CHANNELS, RELEASE_PLATFORMS, type ReleaseSigningKey, site } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import { compareSemver } from "@/lib/semver"
 import { formatDate } from "@/lib/utils"
 
@@ -728,9 +729,10 @@ function PublicKeyField({
 }) {
   const { t } = useI18n()
   const [copied, setCopied] = useState(false)
-  const copy = () => {
+  const copy = async () => {
+    setCopied(false)
     if (!value) return
-    navigator.clipboard.writeText(value)
+    if (!(await copyText(value, t("common.copyTextFailed")))) return
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }

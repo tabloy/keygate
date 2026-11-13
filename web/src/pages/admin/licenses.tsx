@@ -64,6 +64,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { type AdminSeat, admin, errorCode, errorDetails, type License, type Plan, type UsageCounter } from "@/lib/api"
+import { copyText } from "@/lib/clipboard"
 import { formatDate, maskKey, statusColor } from "@/lib/utils"
 
 // A date picked in the expiry field means "valid through that whole
@@ -631,8 +632,9 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
     },
   })
   const copyKey = () => {
-    const write = (key: string) => {
-      navigator.clipboard.writeText(key)
+    const write = async (key: string) => {
+      setCopied(false)
+      if (!(await copyText(key, t("common.copyTextFailed")))) return
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
@@ -1448,8 +1450,9 @@ function SeatsTab({
     },
   })
   const copy = (seat: AdminSeat) => {
-    const write = (key: string) => {
-      navigator.clipboard.writeText(key)
+    const write = async (key: string) => {
+      setCopied(null)
+      if (!(await copyText(key, t("common.copyTextFailed")))) return
       setCopied(seat.id)
       setTimeout(() => setCopied((c) => (c === seat.id ? null : c)), 2000)
     }
