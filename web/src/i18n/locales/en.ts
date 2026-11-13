@@ -552,6 +552,7 @@ const en = {
     "Your customized HTML will be replaced with the bundled default. This action cannot be undone — copy the current HTML out first if you might need it back.",
   "settings.templateSaved": "Template saved.",
   "settings.templateReset": "Template reset to default.",
+  "settings.templateReadFailed": "Could not load the saved templates. Retry before editing or resetting them.",
   "settings.templateDesc":
     "Customize email templates. Use Go template syntax: {{.Product}}, {{.Plan}}, {{.LicenseKey}}, etc.",
   "settings.templateFallbackNoteExpired":

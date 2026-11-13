@@ -529,6 +529,7 @@ const zh = {
     "你的自定义 HTML 将被替换为内置默认模板。此操作不可撤销 — 如有需要请先复制保存当前 HTML。",
   "settings.templateSaved": "模板已保存。",
   "settings.templateReset": "已恢复默认模板。",
+  "settings.templateReadFailed": "无法加载已保存的模板，请重试后再编辑或重置。",
   "settings.templateDesc": "自定义邮件模板。使用 Go 模板语法：{{.Product}}、{{.Plan}}、{{.LicenseKey}} 等。",
   "settings.templateFallbackNoteExpired":
     "试用结束后转到回退方案的客户也会收到这封邮件。自定义的模板应当用 {{.FallbackPlan}} 写明那个方案；试用直接过期时它为空（预览按这种情况显示）。",
