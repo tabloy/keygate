@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"strconv"
@@ -217,7 +218,10 @@ func (s *UsageService) GetQuotaStatus(ctx context.Context, licenseKey, feature, 
 	}
 	periodKey := store.CurrentPeriodKey(period)
 
-	counter, _ := s.store.GetUsageCounter(ctx, lic.ID, feature, period, periodKey)
+	counter, err := s.store.GetUsageCounter(ctx, lic.ID, feature, period, periodKey)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, apperr.Internal(err)
+	}
 	used := int64(0)
 	if counter != nil {
 		used = counter.Used
