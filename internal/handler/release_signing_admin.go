@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 
@@ -33,7 +34,11 @@ func NewReleaseSigningAdminHandler(svc *service.ReleaseSigningService, st *store
 func (h *ReleaseSigningAdminHandler) Generate(c *gin.Context) {
 	productID := c.Param("id")
 	if _, err := h.store.FindProductByID(c.Request.Context(), productID); err != nil {
-		response.NotFound(c, "product not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "product not found")
+		} else {
+			response.Internal(c, err)
+		}
 		return
 	}
 
@@ -71,7 +76,11 @@ func (h *ReleaseSigningAdminHandler) Generate(c *gin.Context) {
 func (h *ReleaseSigningAdminHandler) Rotate(c *gin.Context) {
 	productID := c.Param("id")
 	if _, err := h.store.FindProductByID(c.Request.Context(), productID); err != nil {
-		response.NotFound(c, "product not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "product not found")
+		} else {
+			response.Internal(c, err)
+		}
 		return
 	}
 
@@ -124,7 +133,11 @@ func (h *ReleaseSigningAdminHandler) Rotate(c *gin.Context) {
 func (h *ReleaseSigningAdminHandler) List(c *gin.Context) {
 	productID := c.Param("id")
 	if _, err := h.store.FindProductByID(c.Request.Context(), productID); err != nil {
-		response.NotFound(c, "product not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "product not found")
+		} else {
+			response.Internal(c, err)
+		}
 		return
 	}
 	keys, err := h.store.ListSigningKeys(c.Request.Context(), productID)
@@ -143,7 +156,11 @@ func (h *ReleaseSigningAdminHandler) List(c *gin.Context) {
 func (h *ReleaseSigningAdminHandler) DownloadPublicKey(c *gin.Context) {
 	productID := c.Param("id")
 	if _, err := h.store.FindProductByID(c.Request.Context(), productID); err != nil {
-		response.NotFound(c, "product not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "product not found")
+		} else {
+			response.Internal(c, err)
+		}
 		return
 	}
 	pemBytes, err := h.svc.ExportPublicKeyPEM(c.Request.Context(), productID)
@@ -171,7 +188,11 @@ func (h *ReleaseSigningAdminHandler) DownloadPublicKey(c *gin.Context) {
 func (h *ReleaseSigningAdminHandler) DownloadPublicKeyTauri(c *gin.Context) {
 	productID := c.Param("id")
 	if _, err := h.store.FindProductByID(c.Request.Context(), productID); err != nil {
-		response.NotFound(c, "product not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "product not found")
+		} else {
+			response.Internal(c, err)
+		}
 		return
 	}
 	wrapped, err := h.svc.ExportPublicKeyTauri(c.Request.Context(), productID)
@@ -198,7 +219,11 @@ func (h *ReleaseSigningAdminHandler) DownloadPublicKeyTauri(c *gin.Context) {
 func (h *ReleaseSigningAdminHandler) Deactivate(c *gin.Context) {
 	productID := c.Param("id")
 	if _, err := h.store.FindProductByID(c.Request.Context(), productID); err != nil {
-		response.NotFound(c, "product not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "product not found")
+		} else {
+			response.Internal(c, err)
+		}
 		return
 	}
 
