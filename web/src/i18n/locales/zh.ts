@@ -92,6 +92,7 @@ const zh = {
   "products.title": "产品管理",
   "products.subtitle": "管理您的软件产品。",
   "products.new": "新建产品",
+  "products.feedRequirementFailed": "无法检查此产品的更新访问要求，请重试后保存。",
   "products.feedGateOnTypeChange":
     "这个产品的套餐在卖维护期，所以它的更新 feed 会要求许可证。之后可以在发布管理的更新设置里查看。",
   "products.downloadURL": "下载页面（可选）",

@@ -39,10 +39,12 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PICKER_PAGE, SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { useI18n } from "@/i18n"
 import { admin, type Entitlement, errorCode, errorDetails, type Plan } from "@/lib/api"
+import { useDebounced } from "@/lib/use-debounced"
 
 // model.MaxPlanQuantity: the most seats a plan sold per seat can sell.
 const MAX_PLAN_QUANTITY = 10000
@@ -490,16 +492,28 @@ function PlanDialog({
   // marked so the admin knows trials will expire instead (the sweep
   // re-checks the plan and does not move them).
   const isTrial = form.license_type === "trial"
+  const [fallbackSearch, setFallbackSearch] = useState("")
+  const fallbackQuery = useDebounced(fallbackSearch, 250)
   const {
     data: siblingPlans,
     isLoading: siblingPlansLoading,
+    isFetching: siblingPlansFetching,
     isError: siblingPlansFailed,
+    refetch: retrySiblingPlans,
   } = useQuery({
-    queryKey: ["admin", "plans", "trial-fallback", form.product_id],
-    queryFn: () => admin.listPlans({ product_id: form.product_id, limit: 100 }),
+    queryKey: ["admin", "plans", "trial-fallback", form.product_id, fallbackQuery, plan?.id],
+    queryFn: () =>
+      admin.listPlans({
+        product_id: form.product_id,
+        search: fallbackQuery,
+        limit: PICKER_PAGE,
+        fallback_eligible: true,
+        exclude_id: plan?.id,
+      }),
     enabled: isTrial && !!form.product_id,
   })
   const qualifiesAsFallback = (p: Plan) =>
+    p.product_id === form.product_id &&
     p.id !== plan?.id &&
     p.license_type !== "trial" &&
     !p.per_seat &&
@@ -507,10 +521,30 @@ function PlanDialog({
     !p.updates_days &&
     !p.renewal_days &&
     !p.stripe_renewal_price_id
-  const fallbackOptions = (siblingPlans?.plans ?? []).filter(
-    (p) => p.id === form.trial_fallback_plan_id || qualifiesAsFallback(p),
-  )
-  const selectedFallback = fallbackOptions.find((p) => p.id === form.trial_fallback_plan_id)
+  const fallbackOptions = siblingPlans?.plans ?? []
+  const listedFallback = fallbackOptions.find((p) => p.id === form.trial_fallback_plan_id)
+  const {
+    data: savedFallback,
+    isLoading: fallbackLoading,
+    isError: fallbackFailed,
+    refetch: retryFallback,
+  } = useQuery({
+    queryKey: ["admin", "plan", form.trial_fallback_plan_id],
+    queryFn: () => admin.getPlan(form.trial_fallback_plan_id),
+    enabled: isTrial && !!form.trial_fallback_plan_id && !listedFallback,
+  })
+  const selectedFallback =
+    listedFallback ||
+    (savedFallback?.id === form.trial_fallback_plan_id && savedFallback.product_id === form.product_id
+      ? savedFallback
+      : undefined)
+  const fallbackReadFailed =
+    siblingPlansFailed || (!!form.trial_fallback_plan_id && !selectedFallback && fallbackFailed)
+  const fallbackUnresolved = isTrial && !!form.trial_fallback_plan_id && !selectedFallback
+  const fallbackHint = (p: Plan) =>
+    [!p.active && t("common.inactive"), !qualifiesAsFallback(p) && t("plans.trialFallbackNoLongerQualifies")]
+      .filter(Boolean)
+      .join(", ")
   const selectedProduct = plan?.product || pickedProduct
   const productType = selectedProduct?.type || "hybrid"
   const supports = {
@@ -523,6 +557,7 @@ function PlanDialog({
   // max_activations=3 for a saas product just because the form
   // pre-filled it before the product was selected).
   const handleSubmit = () => {
+    if (fallbackUnresolved) return
     // The range a plan sold per seat is bought in, checked here so the
     // error is in the admin's language (the server checks it too).
     if (
@@ -597,7 +632,10 @@ function PlanDialog({
                   value={form.product_id}
                   // A fallback belongs to one product: picking another
                   // product drops it rather than submit a hidden plan.
-                  onChange={(v) => setForm((f) => ({ ...f, product_id: v, trial_fallback_plan_id: "" }))}
+                  onChange={(v) => {
+                    setFallbackSearch("")
+                    setForm((f) => ({ ...f, product_id: v, trial_fallback_plan_id: "" }))
+                  }}
                   current={plan?.product}
                   className="w-full"
                   disabled={!!plan}
@@ -796,36 +834,52 @@ function PlanDialog({
               {isTrial && (
                 <div className="space-y-2 sm:col-span-2">
                   <Label>{t("plans.trialFallback")}</Label>
-                  <Select
-                    value={form.trial_fallback_plan_id || "none"}
-                    onValueChange={(v) => set("trial_fallback_plan_id", v === "none" ? "" : v)}
-                    // Editing, the saved choice stays as it is until its
-                    // options are known, rather than cleared unseen.
-                    disabled={!!plan && (siblingPlansLoading || siblingPlansFailed)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">{t("plans.trialFallbackNone")}</SelectItem>
-                      {fallbackOptions.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                          {!p.active && ` (${t("common.inactive")})`}
-                          {!qualifiesAsFallback(p) && ` (${t("plans.trialFallbackNoLongerQualifies")})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {siblingPlansLoading ? (
+                  <SearchableSelect
+                    value={form.trial_fallback_plan_id}
+                    onChange={(value) => set("trial_fallback_plan_id", value)}
+                    options={fallbackOptions.map((p) => ({ id: p.id, label: p.name, hint: fallbackHint(p) }))}
+                    total={siblingPlans?.total ?? 0}
+                    search={fallbackSearch}
+                    onSearchChange={setFallbackSearch}
+                    current={
+                      form.trial_fallback_plan_id
+                        ? {
+                            id: form.trial_fallback_plan_id,
+                            label: selectedFallback?.name || form.trial_fallback_plan_id,
+                            hint: selectedFallback ? fallbackHint(selectedFallback) : undefined,
+                          }
+                        : null
+                    }
+                    noneLabel={t("plans.trialFallbackNone")}
+                    searchPlaceholder={t("filter.searchPlans")}
+                    emptyLabel={t("filter.noMatches")}
+                    moreLabel={(hidden) => t("filter.moreMatches", { count: hidden })}
+                    className="w-full"
+                    disabled={!form.product_id || siblingPlansFailed}
+                    loading={siblingPlansFetching || fallbackLoading}
+                  />
+                  {siblingPlansLoading || fallbackLoading ? (
                     <p className="text-xs text-muted-foreground">{t("common.loading")}</p>
-                  ) : siblingPlansFailed ? (
-                    <p className="text-xs text-destructive">
-                      {t(plan ? "plans.trialFallbackLoadFailed" : "plans.trialFallbackLoadFailedNew")}
-                    </p>
+                  ) : fallbackReadFailed ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-destructive">
+                        {t(plan ? "plans.trialFallbackLoadFailed" : "plans.trialFallbackLoadFailedNew")}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={siblingPlansFetching || fallbackLoading}
+                        onClick={() => {
+                          void retrySiblingPlans()
+                          if (form.trial_fallback_plan_id && !listedFallback) void retryFallback()
+                        }}
+                      >
+                        {t("common.retry")}
+                      </Button>
+                    </div>
                   ) : selectedFallback && !qualifiesAsFallback(selectedFallback) ? (
                     <p className="text-xs text-amber-700 dark:text-amber-400">{t("plans.trialFallbackInvalid")}</p>
-                  ) : siblingPlans && fallbackOptions.length === 0 ? (
+                  ) : !fallbackSearch && siblingPlans?.total === 0 ? (
                     <p className="text-xs text-muted-foreground">
                       {t(plan ? "plans.trialFallbackNoneAvailableEdit" : "plans.trialFallbackNoneAvailable")}
                     </p>
@@ -960,7 +1014,7 @@ function PlanDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || fallbackUnresolved}>
               {loading ? t("common.loading") : t("common.save")}
             </Button>
           </DialogFooter>

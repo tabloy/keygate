@@ -321,7 +321,7 @@ export interface SubscriptionChangeResult {
 // Builds a list request's query string. Empty and undefined values
 // are left out so a filter that is not set does not become one that
 // matches the empty string.
-function listQuery(params?: Record<string, string | number | undefined>) {
+function listQuery(params?: Record<string, string | number | boolean | undefined>) {
   const q = new URLSearchParams()
   for (const [k, v] of Object.entries(params || {})) {
     if (v !== undefined && v !== "" && v !== null) q.set(k, String(v))
@@ -337,6 +337,8 @@ export const admin = {
   listProducts: (params?: { search?: string; type?: string; limit?: number; offset?: number }) =>
     get<Paged<{ products: Product[] }>>(`/admin/products?${listQuery(params)}`),
   getProduct: (id: string) => get<Product>(`/admin/products/${id}`),
+  getProductMaintenance: (id: string) =>
+    get<Product & { has_maintenance: boolean }>(`/admin/products/${encodeURIComponent(id)}?include_maintenance=true`),
   createProduct: (data: {
     name: string
     slug: string
@@ -348,8 +350,14 @@ export const admin = {
   updateProduct: (id: string, data: Partial<Product>) => put<Product>(`/admin/products/${id}`, data),
   deleteProduct: (id: string) => del(`/admin/products/${id}`),
 
-  listPlans: (params?: { product_id?: string; search?: string; limit?: number; offset?: number }) =>
-    get<Paged<{ plans: Plan[] }>>(`/admin/plans?${listQuery(params)}`),
+  listPlans: (params?: {
+    product_id?: string
+    search?: string
+    limit?: number
+    offset?: number
+    fallback_eligible?: boolean
+    exclude_id?: string
+  }) => get<Paged<{ plans: Plan[] }>>(`/admin/plans?${listQuery(params)}`),
   getPlan: (id: string) => get<Plan>(`/admin/plans/${id}`),
   createPlan: (data: Partial<Plan>) => post<Plan>("/admin/plans", data),
   updatePlan: (id: string, data: Partial<Plan>) => put<Plan>(`/admin/plans/${id}`, data),
