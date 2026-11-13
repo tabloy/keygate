@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Code, Eye, Mail, Pencil, RotateCcw } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -134,6 +134,7 @@ function fillTemplate(html: string): string {
 export default function EmailTemplatesManager() {
   const { t } = useI18n()
   const qc = useQueryClient()
+  const editSession = useRef(0)
   const [editing, setEditing] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
   const [previewing, setPreviewing] = useState<string | null>(null)
@@ -144,11 +145,11 @@ export default function EmailTemplatesManager() {
   })
 
   const saveMut = useMutation({
-    mutationFn: (params: { key: string; value: string }) =>
+    mutationFn: (params: { key: string; value: string; session: number }) =>
       admin.updateSettings({ [`email_template_${params.key}`]: params.value }),
-    onSuccess: () => {
+    onSuccess: (_, draft) => {
       qc.invalidateQueries({ queryKey: ["admin", "email-templates"] })
-      setEditing(null)
+      if (draft.session === editSession.current) setEditing(null)
     },
     onError: (e: Error) => showToast(e.message, "error"),
   })
@@ -169,7 +170,13 @@ export default function EmailTemplatesManager() {
 
   const templates = data?.templates || {}
 
+  const closeEditor = () => {
+    editSession.current += 1
+    setEditing(null)
+  }
+
   const startEdit = (key: string) => {
+    editSession.current += 1
     const tmpl = templates[key]
     setEditValue(tmpl?.custom || tmpl?.default || "")
     setEditing(key)
@@ -263,7 +270,7 @@ export default function EmailTemplatesManager() {
       </Card>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
+      <Dialog open={!!editing} onOpenChange={(open) => !open && closeEditor()}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
@@ -287,11 +294,13 @@ export default function EmailTemplatesManager() {
                 onChange={(e) => setEditValue(e.target.value)}
               />
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setEditing(null)}>
+                <Button variant="outline" onClick={closeEditor}>
                   {t("common.cancel")}
                 </Button>
                 <Button
-                  onClick={() => editing && saveMut.mutate({ key: editing, value: editValue })}
+                  onClick={() =>
+                    editing && saveMut.mutate({ key: editing, value: editValue, session: editSession.current })
+                  }
                   disabled={saveMut.isPending}
                 >
                   {saveMut.isPending ? t("common.loading") : t("common.save")}

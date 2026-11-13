@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Key, Mail, Pencil, Shield, User, X } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { showToast } from "@/components/toast"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ export default function PortalAccountPage() {
   const { t } = useI18n()
   const { user, refetch } = useAuth()
   const qc = useQueryClient()
+  const editSession = useRef(0)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState("")
 
@@ -25,9 +26,9 @@ export default function PortalAccountPage() {
   })
 
   const saveMut = useMutation({
-    mutationFn: () => portal.updateProfile({ name: name.trim() }),
-    onSuccess: () => {
-      setEditing(false)
+    mutationFn: (draft: { name: string; session: number }) => portal.updateProfile({ name: draft.name }),
+    onSuccess: (_, draft) => {
+      if (draft.session === editSession.current) setEditing(false)
       refetch() // Refresh auth user context
       qc.invalidateQueries({ queryKey: ["portal"] })
       showToast(t("portal.profileSaved"), "success")
@@ -38,12 +39,16 @@ export default function PortalAccountPage() {
   const licenses = data?.licenses || []
   const activeLicenses = licenses.filter((l) => l.status === "active" || l.status === "trialing")
 
+  const saveProfile = () => saveMut.mutate({ name: name.trim(), session: editSession.current })
+
   const startEdit = () => {
+    editSession.current += 1
     setName(user?.name || "")
     setEditing(true)
   }
 
   const cancelEdit = () => {
+    editSession.current += 1
     setEditing(false)
     setName("")
   }
@@ -90,7 +95,7 @@ export default function PortalAccountPage() {
                       placeholder={t("portal.displayName")}
                       autoFocus
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && name.trim()) saveMut.mutate()
+                        if (e.key === "Enter" && name.trim()) saveProfile()
                         if (e.key === "Escape") cancelEdit()
                       }}
                     />
@@ -100,7 +105,7 @@ export default function PortalAccountPage() {
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8"
-                      onClick={() => saveMut.mutate()}
+                      onClick={() => saveProfile()}
                       disabled={!name.trim() || saveMut.isPending}
                     >
                       <Check className="h-4 w-4 text-emerald-600" />
