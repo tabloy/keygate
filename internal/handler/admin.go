@@ -5164,6 +5164,11 @@ func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 
 // GetEmailTemplates returns all email templates (custom from DB + hardcoded defaults).
 func (h *AdminHandler) GetEmailTemplates(c *gin.Context) {
+	settings, err := h.Store.GetSettings(c.Request.Context())
+	if err != nil {
+		response.Internal(c, err)
+		return
+	}
 	defaults := service.DefaultTemplates()
 
 	type templateInfo struct {
@@ -5173,8 +5178,7 @@ func (h *AdminHandler) GetEmailTemplates(c *gin.Context) {
 
 	result := make(map[string]templateInfo, len(defaults))
 	for key, def := range defaults {
-		custom, _ := h.Store.GetSetting(c, "email_template_"+key)
-		result[key] = templateInfo{Custom: custom, Default: def}
+		result[key] = templateInfo{Custom: settings["email_template_"+key], Default: def}
 	}
 
 	response.OK(c, gin.H{"templates": result})

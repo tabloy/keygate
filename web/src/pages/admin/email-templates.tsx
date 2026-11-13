@@ -138,14 +138,26 @@ export default function EmailTemplatesManager() {
   const [editValue, setEditValue] = useState("")
   const [previewing, setPreviewing] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     queryKey: ["admin", "email-templates"],
     queryFn: admin.getEmailTemplates,
   })
 
+  const readUnavailable = isError || !data
+  const readError = isError && (
+    <div role="alert" className="rounded-lg border border-destructive/30 p-3 space-y-2">
+      <p className="text-sm text-destructive">{t("settings.templateReadFailed")}</p>
+      <Button type="button" variant="outline" disabled={isFetching} onClick={() => void refetch()}>
+        {t("common.retry")}
+      </Button>
+    </div>
+  )
+
   const saveMut = useMutation({
-    mutationFn: (params: { key: string; value: string }) =>
-      admin.updateSettings({ [`email_template_${params.key}`]: params.value }),
+    mutationFn: (params: { key: string; value: string }) => {
+      if (readUnavailable) throw new Error(t("settings.templateReadFailed"))
+      return admin.updateSettings({ [`email_template_${params.key}`]: params.value })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "email-templates"] })
       setEditing(null)
@@ -159,7 +171,10 @@ export default function EmailTemplatesManager() {
   // AlertDialog stops a misclick from wiping work.
   const [confirmReset, setConfirmReset] = useState<string | null>(null)
   const resetMut = useMutation({
-    mutationFn: (key: string) => admin.updateSettings({ [`email_template_${key}`]: "" }),
+    mutationFn: (key: string) => {
+      if (readUnavailable) throw new Error(t("settings.templateReadFailed"))
+      return admin.updateSettings({ [`email_template_${key}`]: "" })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "email-templates"] })
       setConfirmReset(null)
@@ -170,6 +185,7 @@ export default function EmailTemplatesManager() {
   const templates = data?.templates || {}
 
   const startEdit = (key: string) => {
+    if (readUnavailable || !templates[key]) return
     const tmpl = templates[key]
     setEditValue(tmpl?.custom || tmpl?.default || "")
     setEditing(key)
@@ -193,9 +209,10 @@ export default function EmailTemplatesManager() {
         <CardContent className="space-y-2">
           <p className="text-sm text-muted-foreground mb-4">{t("settings.templateDesc")}</p>
 
+          {readError}
           {isLoading ? (
             <div className="h-32 bg-muted rounded-lg animate-pulse" />
-          ) : (
+          ) : !data ? null : (
             <div className="space-y-2">
               {Object.entries(TEMPLATE_META).map(([key, meta]) => {
                 const tmpl = templates[key]
@@ -229,6 +246,7 @@ export default function EmailTemplatesManager() {
                         className="h-8 w-8"
                         onClick={() => setPreviewing(key)}
                         title={t("settings.templatePreview")}
+                        disabled={readUnavailable}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -238,6 +256,7 @@ export default function EmailTemplatesManager() {
                         className="h-8 w-8"
                         onClick={() => startEdit(key)}
                         title={t("settings.editTemplate")}
+                        disabled={readUnavailable}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -248,7 +267,7 @@ export default function EmailTemplatesManager() {
                           className="h-8 w-8 text-orange-600"
                           onClick={() => setConfirmReset(key)}
                           title={t("settings.resetTemplate")}
-                          disabled={resetMut.isPending && resetMut.variables === key}
+                          disabled={readUnavailable || (resetMut.isPending && resetMut.variables === key)}
                         >
                           <RotateCcw className="h-4 w-4" />
                         </Button>
@@ -271,6 +290,7 @@ export default function EmailTemplatesManager() {
             </DialogTitle>
           </DialogHeader>
           <DialogBody>
+            {readError}
             <div className="space-y-3">
               <div className="text-xs text-muted-foreground">
                 {t("settings.templateVariables")}:{" "}
@@ -292,7 +312,7 @@ export default function EmailTemplatesManager() {
                 </Button>
                 <Button
                   onClick={() => editing && saveMut.mutate({ key: editing, value: editValue })}
-                  disabled={saveMut.isPending}
+                  disabled={readUnavailable || saveMut.isPending}
                 >
                   {saveMut.isPending ? t("common.loading") : t("common.save")}
                 </Button>
@@ -336,9 +356,11 @@ export default function EmailTemplatesManager() {
             </AlertDialogTitle>
             <AlertDialogDescription>{t("settings.resetTemplateDesc")}</AlertDialogDescription>
           </AlertDialogHeader>
+          {readError}
           <div className="flex justify-end gap-2">
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
+              disabled={readUnavailable || resetMut.isPending}
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={() => confirmReset && resetMut.mutate(confirmReset)}
             >
