@@ -82,7 +82,11 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	}
 	user, err := h.Store.FindUserByID(c, uidStr)
 	if err != nil {
-		response.NotFound(c, "user not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "user not found")
+		} else {
+			response.Internal(c, err)
+		}
 		return
 	}
 	response.OK(c, gin.H{
