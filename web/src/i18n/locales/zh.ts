@@ -586,6 +586,7 @@ const zh = {
   "login.sendingCode": "发送中...",
   "login.codeSentTo": "验证码已发送至 {email}",
   "login.verify": "验证",
+  "login.verificationCode": "验证码",
   "login.verifying": "验证中...",
   "login.changeEmail": "使用其他邮箱",
   "login.resendCode": "重新发送",
