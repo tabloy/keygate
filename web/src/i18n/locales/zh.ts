@@ -24,6 +24,9 @@ const zh = {
   "common.optional": "可选",
 
   // 接受邀请落地页
+  "acceptInvite.unavailableTitle": "暂时无法确认邀请",
+  "acceptInvite.unavailableDesc": "服务器暂时无法确认邀请是否已接受。请重试；如果您已经接受邀请，请登录。",
+  "acceptInvite.signIn": "登录",
   "acceptInvite.processing": "正在接受邀请…",
   "acceptInvite.missingToken": "缺少邀请 token",
   "acceptInvite.missingTokenDesc": "此 URL 不包含有效邀请 token。请重新打开邮件中的链接。",
