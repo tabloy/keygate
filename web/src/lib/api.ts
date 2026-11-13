@@ -75,7 +75,7 @@ async function request<T>(path: string, opts?: RequestInit, retried = false): Pr
   }
 
   // Could not renew: redirect to login
-  if (res.status === 401 && !signup) {
+  if (res.status === 401 && renewable) {
     // Don't redirect if already on login page or fetching auth state
     if (!window.location.pathname.startsWith("/login") && path !== "/portal/me") {
       window.location.href = "/login"
