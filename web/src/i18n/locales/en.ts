@@ -6,6 +6,7 @@ const en = {
   "common.save": "Save",
   "common.copy": "Copy",
   "common.copyId": "Copy ID",
+  "auth.logoutFailed": "Could not log out. Check your connection and try Logout again.",
   "common.copyFailed": "Could not copy. Select the ID and copy it manually.",
   "common.cancel": "Cancel",
   "common.close": "Close",
