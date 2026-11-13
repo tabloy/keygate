@@ -1,5 +1,5 @@
 import { Mail, Terminal } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Navigate, useSearchParams } from "react-router-dom"
 import { ServiceUnavailableScreen } from "@/components/service-unavailable"
 import { Button } from "@/components/ui/button"
@@ -29,6 +29,7 @@ export default function LoginPage() {
   const [otpStep, setOtpStep] = useState<"email" | "code">("email")
   const [otpEmail, setOtpEmail] = useState(params.get("email") ?? "")
   const [otpCode, setOtpCode] = useState("")
+  const otpPending = useRef(false)
   const [otpLoading, setOtpLoading] = useState(false)
   const [otpError, setOtpError] = useState("")
   const [otpCooldown, setOtpCooldown] = useState(0)
@@ -59,6 +60,8 @@ export default function LoginPage() {
 
   const handleOtpSend = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (otpPending.current) return
+    otpPending.current = true
     setOtpLoading(true)
     setOtpError("")
     try {
@@ -68,12 +71,14 @@ export default function LoginPage() {
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : t("login.failed"))
     } finally {
+      otpPending.current = false
       setOtpLoading(false)
     }
   }
 
   const handleOtpResend = async () => {
-    if (otpCooldown > 0) return
+    if (otpCooldown > 0 || otpPending.current) return
+    otpPending.current = true
     setOtpLoading(true)
     setOtpError("")
     try {
@@ -82,12 +87,15 @@ export default function LoginPage() {
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : t("login.failed"))
     } finally {
+      otpPending.current = false
       setOtpLoading(false)
     }
   }
 
   const handleOtpVerify = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (otpPending.current) return
+    otpPending.current = true
     setOtpLoading(true)
     setOtpError("")
     try {
@@ -96,6 +104,7 @@ export default function LoginPage() {
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : t("login.failed"))
     } finally {
+      otpPending.current = false
       setOtpLoading(false)
     }
   }
@@ -183,7 +192,9 @@ export default function LoginPage() {
                 <button
                   type="button"
                   className="text-muted-foreground hover:text-foreground"
+                  disabled={otpLoading}
                   onClick={() => {
+                    if (otpPending.current) return
                     setOtpStep("email")
                     setOtpCode("")
                     setOtpError("")
@@ -194,7 +205,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   className="text-muted-foreground hover:text-foreground disabled:opacity-50"
-                  disabled={otpCooldown > 0}
+                  disabled={otpCooldown > 0 || otpLoading}
                   onClick={handleOtpResend}
                 >
                   {otpCooldown > 0 ? t("login.resendIn", { seconds: String(otpCooldown) }) : t("login.resendCode")}
