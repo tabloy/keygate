@@ -40,6 +40,12 @@ func (m *meteredTestSetup) dispatch(_ context.Context, in stripeMeterEvent) (str
 	return "evt_" + in.Identifier, nil
 }
 
+// queue enqueues usage as RecordUsage does: billed to the entitlement's
+// meter and the license's Stripe customer as they are at this moment.
+func (m *meteredTestSetup) queue(ctx context.Context, lic *model.License, ent *model.Entitlement, periodKey string, quantity int64) error {
+	return m.store.InsertMeteredEvent(ctx, lic.ID, ent.Feature, periodKey, ent.StripeMeterEventName, lic.StripeCustomerID, quantity)
+}
+
 func setupMeteredTest(t *testing.T) (*meteredTestSetup, context.Context) {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -118,9 +124,9 @@ func seedMeteredLicense(t *testing.T, s *store.Store, ctx context.Context, event
 // captures the external id.
 func TestMeteredSync_HappyPath(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "api_calls_meter", "cus_TEST_123")
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "api_calls_meter", "cus_TEST_123")
 
-	if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 7); err != nil {
+	if err := tt.queue(ctx, lic, ent, "2026-05", 7); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 	pushed := tt.syncer.RunOnce(ctx, 10)
@@ -151,8 +157,8 @@ func TestMeteredSync_HappyPath(t *testing.T) {
 // Re-running drains nothing (no unsynced rows).
 func TestMeteredSync_Idempotent(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev", "cus_idem")
-	_ = tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 1)
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev", "cus_idem")
+	_ = tt.queue(ctx, lic, ent, "2026-05", 1)
 	tt.syncer.RunOnce(ctx, 10)
 	tt.syncer.RunOnce(ctx, 10) // second call
 	if len(tt.captured) != 1 {
@@ -164,8 +170,8 @@ func TestMeteredSync_Idempotent(t *testing.T) {
 // attempts increments, last_error populated. Next run retries.
 func TestMeteredSync_FailureRetries(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev", "cus_fail")
-	_ = tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 3)
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev", "cus_fail")
+	_ = tt.queue(ctx, lic, ent, "2026-05", 3)
 
 	tt.failNext = errors.New("rate_limited")
 	pushed := tt.syncer.RunOnce(ctx, 10)
@@ -195,8 +201,8 @@ func TestMeteredSync_FailureRetries(t *testing.T) {
 // indefinitely.
 func TestMeteredSync_MaxAttemptsCeiling(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev", "cus_max")
-	_ = tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 5)
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev", "cus_max")
+	_ = tt.queue(ctx, lic, ent, "2026-05", 5)
 
 	// Manually wind attempts up to the ceiling. Use NewRaw to keep
 	// the test SQL transparent — Model((*T)(nil)).Set("attempts = ?")
@@ -228,8 +234,8 @@ func TestMeteredSync_MaxAttemptsCeiling(t *testing.T) {
 // marks it synced with a sentinel external_id and moves on.
 func TestMeteredSync_NoStripeCustomer(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev", "") // empty customer id
-	_ = tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 2)
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev", "") // empty customer id
+	_ = tt.queue(ctx, lic, ent, "2026-05", 2)
 	pushed := tt.syncer.RunOnce(ctx, 10)
 	if pushed != 0 {
 		t.Fatalf("no-customer row should not count as 'pushed', got %d", pushed)
@@ -243,24 +249,121 @@ func TestMeteredSync_NoStripeCustomer(t *testing.T) {
 	}
 }
 
-// Edge case: entitlement's event_name was cleared after the row
-// was enqueued. Same drain-the-queue treatment.
-func TestMeteredSync_EventNameCleared(t *testing.T) {
-	tt, ctx := setupMeteredTest(t)
-	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_was_set", "cus_X")
-	_ = tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 4)
+// Usage goes to the meter and customer it was recorded against: what an
+// admin does to the entitlement or the license before the row syncs
+// changes how later usage is billed, not this. Recorded through
+// RecordUsage, the path the API takes.
+func TestMeteredSync_UsageKeepsWhereItWasRecorded(t *testing.T) {
+	cases := []struct {
+		name   string
+		change func(t *testing.T, s *store.Store, ctx context.Context, lic *model.License, ent *model.Entitlement)
+	}{
+		{"meter renamed", func(t *testing.T, s *store.Store, ctx context.Context, _ *model.License, ent *model.Entitlement) {
+			ent.StripeMeterEventName = "ev_replacement"
+			if err := s.UpdateEntitlement(ctx, ent); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"meter cleared", func(t *testing.T, s *store.Store, ctx context.Context, _ *model.License, ent *model.Entitlement) {
+			ent.StripeMeterEventName = ""
+			if err := s.UpdateEntitlement(ctx, ent); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"entitlement deleted", func(t *testing.T, s *store.Store, ctx context.Context, _ *model.License, ent *model.Entitlement) {
+			if err := s.DeleteEntitlement(ctx, ent.ID); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"license moved to a plan without the meter", func(t *testing.T, s *store.Store, ctx context.Context, lic *model.License, _ *model.Entitlement) {
+			plan := &model.Plan{ProductID: lic.ProductID, Name: "Basic", Slug: "basic-" + strconv.FormatInt(time.Now().UnixNano(), 36),
+				LicenseType: "subscription", LicenseModel: "standard", MaxActivations: 5}
+			if err := s.CreatePlan(ctx, plan); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.DB.NewRaw("UPDATE licenses SET plan_id = ? WHERE id = ?", plan.ID, lic.ID).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"license given another customer", func(t *testing.T, s *store.Store, ctx context.Context, lic *model.License, _ *model.Entitlement) {
+			if _, err := s.DB.NewRaw("UPDATE licenses SET stripe_customer_id = 'cus_other' WHERE id = ?", lic.ID).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tt, ctx := setupMeteredTest(t)
+			lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_original", "cus_original")
+			us := NewUsageService(tt.store, NewWebhookService(tt.store, slog.Default(), time.Second, 1, true), nil, slog.Default(), 0)
+			if _, err := us.RecordUsage(ctx, RecordUsageInput{LicenseKey: lic.LicenseKey, Feature: "api_calls", Quantity: 7}); err != nil {
+				t.Fatalf("record usage: %v", err)
+			}
 
-	// Wipe the event name to simulate admin reconfiguring after
-	// enqueue. UpdateEntitlement is the natural path.
-	ent.StripeMeterEventName = ""
-	if err := tt.store.UpdateEntitlement(ctx, ent); err != nil {
-		t.Fatalf("update entitlement: %v", err)
+			c.change(t, tt.store, ctx, lic, ent)
+
+			if pushed := tt.syncer.RunOnce(ctx, 10); pushed != 1 {
+				t.Fatalf("pushed %d, want the recorded usage sent", pushed)
+			}
+			ev := tt.captured[0]
+			if ev.EventName != "ev_original" || ev.CustomerID != "cus_original" || ev.Quantity != 7 {
+				t.Fatalf("sent %+v, want 7 to ev_original for cus_original", ev)
+			}
+		})
+	}
+}
+
+// A row queued before the meter and customer were kept with it goes
+// where the license points when it syncs, as before; with no meter
+// there any more it drains.
+func TestMeteredSync_RowQueuedBeforeTheUpgrade(t *testing.T) {
+	tt, ctx := setupMeteredTest(t)
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_now", "cus_now")
+	if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", "", "", 3); err != nil {
+		t.Fatal(err)
+	}
+	if pushed := tt.syncer.RunOnce(ctx, 10); pushed != 1 {
+		t.Fatalf("pushed %d, want 1", pushed)
+	}
+	if ev := tt.captured[0]; ev.EventName != "ev_now" || ev.CustomerID != "cus_now" || ev.Quantity != 3 {
+		t.Fatalf("sent %+v, want 3 to the license's meter and customer", ev)
 	}
 
+	if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", "", "", 4); err != nil {
+		t.Fatal(err)
+	}
+	ent.StripeMeterEventName = ""
+	if err := tt.store.UpdateEntitlement(ctx, ent); err != nil {
+		t.Fatal(err)
+	}
 	tt.syncer.RunOnce(ctx, 10)
+	if len(tt.captured) != 1 {
+		t.Fatalf("Stripe saw %d events, want none for the row with no meter", len(tt.captured))
+	}
 	rows, _ := tt.store.ListMeteredBilling(ctx, lic.ID)
-	if !rows[0].Synced || rows[0].ExternalID != "no_event_name" {
-		t.Fatalf("row should drain with sentinel, got %+v", rows[0])
+	for _, r := range rows {
+		if r.Quantity == 4 && (!r.Synced || r.ExternalID != "no_event_name") {
+			t.Fatalf("row with no meter should drain with the sentinel, got %+v", r)
+		}
+	}
+}
+
+// Usage recorded before the license had a Stripe customer goes to the
+// customer it has when the row syncs, as before.
+func TestMeteredSync_CustomerAddedAfterTheUsage(t *testing.T) {
+	tt, ctx := setupMeteredTest(t)
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_late", "")
+	if err := tt.queue(ctx, lic, ent, "2026-05", 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tt.store.DB.NewRaw("UPDATE licenses SET stripe_customer_id = 'cus_late' WHERE id = ?", lic.ID).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if pushed := tt.syncer.RunOnce(ctx, 10); pushed != 1 {
+		t.Fatalf("pushed %d, want 1", pushed)
+	}
+	if ev := tt.captured[0]; ev.EventName != "ev_late" || ev.CustomerID != "cus_late" {
+		t.Fatalf("sent %+v, want ev_late for cus_late", ev)
 	}
 }
 
@@ -305,18 +408,18 @@ func TestMeteredSync_LegacyEmptyIdentifier(t *testing.T) {
 // live one behind them.
 func TestMeteredSync_DeadRowsDoNotStarveTheBatch(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "api_calls_meter", "cus_TEST_dead")
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "api_calls_meter", "cus_TEST_dead")
 
 	// Two dead rows first (attempts at the ceiling), then one live row.
 	for range 2 {
-		if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-01", 1); err != nil {
+		if err := tt.queue(ctx, lic, ent, "2026-01", 1); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
 	}
 	if _, err := tt.store.DB.NewRaw("UPDATE metered_billing SET attempts = ? WHERE license_id = ? AND synced = false", tt.syncer.maxAttempts, lic.ID).Exec(ctx); err != nil {
 		t.Fatalf("age rows: %v", err)
 	}
-	if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-02", 5); err != nil {
+	if err := tt.queue(ctx, lic, ent, "2026-02", 5); err != nil {
 		t.Fatalf("insert live: %v", err)
 	}
 
@@ -330,9 +433,9 @@ func TestMeteredSync_DeadRowsDoNotStarveTheBatch(t *testing.T) {
 // find it running and leave the rows to it.
 func TestMeteredSync_OnePassAtATime(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev_once", "cus_once")
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_once", "cus_once")
 	for range 5 {
-		if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 1); err != nil {
+		if err := tt.queue(ctx, lic, ent, "2026-05", 1); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -362,7 +465,7 @@ func TestMeteredSync_OnePassAtATime(t *testing.T) {
 		t.Errorf("attempts = %d, %v; want at most one per row", attempts, err)
 	}
 	// Released: the next pass runs.
-	if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 1); err != nil {
+	if err := tt.queue(ctx, lic, ent, "2026-05", 1); err != nil {
 		t.Fatal(err)
 	}
 	if pushed := other.RunOnce(ctx, 10); pushed != 1 {
@@ -374,9 +477,9 @@ func TestMeteredSync_OnePassAtATime(t *testing.T) {
 // row that fails is tried once in the pass, not again for every batch.
 func TestMeteredSync_SendsTheWholeQueue(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev_all", "cus_all")
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_all", "cus_all")
 	for range 25 {
-		if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 1); err != nil {
+		if err := tt.queue(ctx, lic, ent, "2026-05", 1); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -400,9 +503,9 @@ func TestMeteredSync_SendsTheWholeQueue(t *testing.T) {
 // at the end of the queue: the rest waits for the next pass.
 func TestMeteredSync_RunOfFailuresEndsThePass(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev_down", "cus_down")
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_down", "cus_down")
 	for range 30 {
-		if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 1); err != nil {
+		if err := tt.queue(ctx, lic, ent, "2026-05", 1); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -422,15 +525,15 @@ func TestMeteredSync_RunOfFailuresEndsThePass(t *testing.T) {
 // customers' usage, are still sent in the same pass.
 func TestMeteredSync_RefusedRowsDoNotHoldTheQueue(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	gone, _ := seedMeteredLicense(t, tt.store, ctx, "ev_gone", "cus_gone")
-	good, _ := seedMeteredLicense(t, tt.store, ctx, "ev_good", "cus_good")
+	gone, goneEnt := seedMeteredLicense(t, tt.store, ctx, "ev_gone", "cus_gone")
+	good, goodEnt := seedMeteredLicense(t, tt.store, ctx, "ev_good", "cus_good")
 	for range 30 {
-		if err := tt.store.InsertMeteredEvent(ctx, gone.ID, "api_calls", "2026-05", 1); err != nil {
+		if err := tt.queue(ctx, gone, goneEnt, "2026-05", 1); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for range 20 {
-		if err := tt.store.InsertMeteredEvent(ctx, good.ID, "api_calls", "2026-05", 1); err != nil {
+		if err := tt.queue(ctx, good, goodEnt, "2026-05", 1); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -451,9 +554,9 @@ func TestMeteredSync_RefusedRowsDoNotHoldTheQueue(t *testing.T) {
 func TestMeteredSync_KeyRefusedEndsThePass(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		tt, ctx := setupMeteredTest(t)
-		lic, _ := seedMeteredLicense(t, tt.store, ctx, "ev_key", "cus_key")
+		lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_key", "cus_key")
 		for range 30 {
-			if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 1); err != nil {
+			if err := tt.queue(ctx, lic, ent, "2026-05", 1); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -473,14 +576,14 @@ func TestMeteredSync_KeyRefusedEndsThePass(t *testing.T) {
 // Stripe failures: with Stripe down the pass still ends after a run.
 func TestMeteredSync_DrainedRowsDoNotResetTheRun(t *testing.T) {
 	tt, ctx := setupMeteredTest(t)
-	billed, _ := seedMeteredLicense(t, tt.store, ctx, "ev_mixed", "cus_mixed")
-	unbilled, _ := seedMeteredLicense(t, tt.store, ctx, "ev_none", "")
+	billed, billedEnt := seedMeteredLicense(t, tt.store, ctx, "ev_mixed", "cus_mixed")
+	unbilled, unbilledEnt := seedMeteredLicense(t, tt.store, ctx, "ev_none", "")
 	for i := range 60 {
-		lic := billed
+		lic, ent := billed, billedEnt
 		if i%5 == 4 {
-			lic = unbilled
+			lic, ent = unbilled, unbilledEnt
 		}
-		if err := tt.store.InsertMeteredEvent(ctx, lic.ID, "api_calls", "2026-05", 1); err != nil {
+		if err := tt.queue(ctx, lic, ent, "2026-05", 1); err != nil {
 			t.Fatal(err)
 		}
 	}

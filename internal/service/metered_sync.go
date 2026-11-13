@@ -221,12 +221,29 @@ func (m *MeteredBillingSyncer) syncOne(ctx context.Context, row *model.MeteredBi
 		return false, nil
 	}
 
-	// Resolve customer + meter event_name in one license lookup.
-	lic, err := m.store.FindLicenseByID(ctx, row.LicenseID)
-	if err != nil {
-		return false, fmt.Errorf("license lookup: %w", err)
+	// The row goes to the meter and customer it was recorded against.
+	// The license is read only for what the row lacks: rows queued
+	// before the destination was kept with them, and usage recorded
+	// before the license had a Stripe customer.
+	eventName, customerID := row.StripeMeterEventName, row.StripeCustomerID
+	if eventName == "" || customerID == "" {
+		lic, err := m.store.FindLicenseByID(ctx, row.LicenseID)
+		if err != nil {
+			return false, fmt.Errorf("license lookup: %w", err)
+		}
+		if customerID == "" {
+			customerID = lic.StripeCustomerID
+		}
+		if eventName == "" && lic.Plan != nil {
+			for _, e := range lic.Plan.Entitlements {
+				if e.Feature == row.Feature && e.StripeMeterEventName != "" {
+					eventName = e.StripeMeterEventName
+					break
+				}
+			}
+		}
 	}
-	if lic.StripeCustomerID == "" {
+	if customerID == "" {
 		// Self-hosted / non-Stripe license — we shouldn't have
 		// enqueued the event in the first place, but tolerate it:
 		// nothing to push, mark synced to avoid log churn.
@@ -235,20 +252,10 @@ func (m *MeteredBillingSyncer) syncOne(ctx context.Context, row *model.MeteredBi
 		}
 		return false, nil
 	}
-
-	eventName := ""
-	if lic.Plan != nil {
-		for _, e := range lic.Plan.Entitlements {
-			if e.Feature == row.Feature && e.StripeMeterEventName != "" {
-				eventName = e.StripeMeterEventName
-				break
-			}
-		}
-	}
 	if eventName == "" {
-		// Entitlement reconfigured (event_name cleared) AFTER the
-		// row was enqueued. There's nothing to push to; mark synced
-		// so the queue drains.
+		// Only a row queued before the meter was kept with it, whose
+		// entitlement no longer names one: there is nothing to push
+		// to, so it is marked synced and the queue drains.
 		if err := m.store.MarkMeteredSynced(ctx, row.ID, "no_event_name"); err != nil {
 			return false, err
 		}
@@ -257,7 +264,7 @@ func (m *MeteredBillingSyncer) syncOne(ctx context.Context, row *model.MeteredBi
 
 	externalID, err := m.dispatch(ctx, stripeMeterEvent{
 		EventName:  eventName,
-		CustomerID: lic.StripeCustomerID,
+		CustomerID: customerID,
 		Quantity:   row.Quantity,
 		Identifier: row.Identifier,
 		Timestamp:  row.CreatedAt,

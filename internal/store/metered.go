@@ -59,15 +59,21 @@ func (s *Store) TryMeteredSyncLock(ctx context.Context) (release func(), ok bool
 // The identifier is the row's ID — opaque to callers, used as the
 // Stripe meter event's identifier so retries dedupe within Stripe's
 // rolling 24h window.
-func (s *Store) InsertMeteredEvent(ctx context.Context, licenseID, feature, periodKey string, quantity int64) error {
+//
+// eventName and customerID are the Stripe meter and customer the usage
+// is recorded against. The row is sent there, whatever the entitlement
+// or the license say by the time it syncs.
+func (s *Store) InsertMeteredEvent(ctx context.Context, licenseID, feature, periodKey, eventName, customerID string, quantity int64) error {
 	id := newID()
 	m := &model.MeteredBilling{
-		ID:         id,
-		LicenseID:  licenseID,
-		Feature:    feature,
-		Quantity:   quantity,
-		PeriodKey:  periodKey,
-		Identifier: id,
+		ID:                   id,
+		LicenseID:            licenseID,
+		Feature:              feature,
+		Quantity:             quantity,
+		PeriodKey:            periodKey,
+		Identifier:           id,
+		StripeMeterEventName: eventName,
+		StripeCustomerID:     customerID,
 	}
 	_, err := s.DB.NewInsert().Model(m).Exec(ctx)
 	return err

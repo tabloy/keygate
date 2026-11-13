@@ -123,8 +123,12 @@ func (s *UsageService) RecordUsage(ctx context.Context, in RecordUsageInput) (*R
 	// Best-effort: a failure here doesn't roll back the in-Keygate
 	// accounting (we'd rather over-grant than under-bill on a
 	// transient blip; the next RecordUsage isn't affected).
+	//
+	// The row keeps the meter and customer it is recorded against, so
+	// an edit to the entitlement or the license before it syncs bills
+	// later usage differently, not this.
 	if quota.StripeMeterEventName != "" {
-		if err := s.store.InsertMeteredEvent(ctx, lic.ID, in.Feature, periodKey, in.Quantity); err != nil {
+		if err := s.store.InsertMeteredEvent(ctx, lic.ID, in.Feature, periodKey, quota.StripeMeterEventName, lic.StripeCustomerID, in.Quantity); err != nil {
 			s.logger.Error("metered enqueue failed", "license_id", lic.ID, "feature", in.Feature, "error", err)
 		}
 	}

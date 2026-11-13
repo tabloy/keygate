@@ -1071,15 +1071,23 @@ func RenewedUpdatesUntil(current *time.Time, now time.Time, days int) time.Time 
 // many times as it wants without double-counting.
 type MeteredBilling struct {
 	bun.BaseModel `bun:"table:metered_billing"`
-	ID            string     `bun:",pk" json:"id"`
-	LicenseID     string     `bun:",notnull" json:"license_id"`
-	Feature       string     `bun:",notnull" json:"feature"`
-	Quantity      int64      `bun:",notnull" json:"quantity"`
-	PeriodKey     string     `bun:",notnull" json:"period_key"`
-	Identifier    string     `bun:",notnull,default:''" json:"identifier,omitempty"`
-	Synced        bool       `bun:",notnull,default:false" json:"synced"`
-	SyncedAt      *time.Time `json:"synced_at,omitempty"`
-	ExternalID    string     `json:"external_id,omitempty"`
+	ID            string `bun:",pk" json:"id"`
+	LicenseID     string `bun:",notnull" json:"license_id"`
+	Feature       string `bun:",notnull" json:"feature"`
+	Quantity      int64  `bun:",notnull" json:"quantity"`
+	PeriodKey     string `bun:",notnull" json:"period_key"`
+	Identifier    string `bun:",notnull,default:''" json:"identifier,omitempty"`
+	// StripeMeterEventName and StripeCustomerID are where the usage is
+	// billed: the meter and customer it was recorded against. Editing
+	// the entitlement or the license later does not move it. Empty on
+	// rows queued before they were kept, and the customer on usage
+	// recorded before the license had one: those are resolved from
+	// the license when the row syncs.
+	StripeMeterEventName string     `bun:",notnull,default:''" json:"stripe_meter_event_name,omitempty"`
+	StripeCustomerID     string     `bun:",notnull,default:''" json:"stripe_customer_id,omitempty"`
+	Synced               bool       `bun:",notnull,default:false" json:"synced"`
+	SyncedAt             *time.Time `json:"synced_at,omitempty"`
+	ExternalID           string     `json:"external_id,omitempty"`
 	// Attempts counts the pushes to Stripe that failed. LastError
 	// records the most recent failure message so operators can debug
 	// stuck rows without tailing logs.
