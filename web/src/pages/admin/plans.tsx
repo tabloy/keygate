@@ -45,6 +45,7 @@ import { useI18n } from "@/i18n"
 import { admin, type Entitlement, errorCode, errorDetails, type Plan } from "@/lib/api"
 
 // model.MaxPlanQuantity: the most seats a plan sold per seat can sell.
+const EMPTY_ENTITLEMENTS: Entitlement[] = []
 const MAX_PLAN_QUANTITY = 10000
 
 import { boolColor, formatDate } from "@/lib/utils"
@@ -970,7 +971,7 @@ function PlanDialog({
         {plan && (
           <>
             <Separator />
-            <EntitlementSection planId={plan.id} entitlements={plan.entitlements || []} />
+            <EntitlementSection planId={plan.id} entitlements={plan.entitlements ?? EMPTY_ENTITLEMENTS} />
           </>
         )}
       </DialogContent>
@@ -1023,7 +1024,8 @@ function EntitlementSection({ planId, entitlements: initial }: { planId: string;
         value_type: string
         value: string
       }),
-    onSuccess: () => {
+    onSuccess: (created) => {
+      setEntitlements((current) => [...current.filter((ent) => ent.id !== created.id), created])
       qc.invalidateQueries({ queryKey: ["admin", "plans"] })
       setAdding(false)
       setNewEnt({
@@ -1040,7 +1042,8 @@ function EntitlementSection({ planId, entitlements: initial }: { planId: string;
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => admin.deleteEntitlement(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      setEntitlements((current) => current.filter((ent) => ent.id !== id))
       qc.invalidateQueries({ queryKey: ["admin", "plans"] })
       setConfirmDelete(null)
     },
