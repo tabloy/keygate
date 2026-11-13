@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
@@ -53,6 +54,19 @@ func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
 
 	allowed := !gated || h.signupAllowed(c, email)
 
+	configured := false
+	if h.Email != nil {
+		var configErr error
+		configured, configErr = h.Email.Configured()
+		if configErr != nil {
+			slog.Error("otp email config unavailable; code not sent and not logged",
+				"email", email, "error", configErr)
+			response.Err(c, http.StatusServiceUnavailable, "EMAIL_UNAVAILABLE",
+				"Login email is temporarily unavailable. Please try again.")
+			return
+		}
+	}
+
 	code := generateOTPCode()
 	codeHash := hashOTPCode(code)
 	if !allowed {
@@ -94,21 +108,10 @@ func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
 	switch {
 	case h.Email == nil:
 		logCodeFallback()
+	case configured:
+		h.Email.SendOTPCode(email, code)
 	default:
-		configured, cErr := h.Email.Configured()
-		switch {
-		case cErr != nil:
-			// A transient config read error (DB blip, decrypt failure)
-			// must NOT fall back to logging the code in plaintext: that
-			// would leak a live login code on an infra hiccup. Fail
-			// closed — the user simply retries once the read recovers.
-			slog.Error("otp email config unavailable; code not sent and not logged",
-				"email", email, "error", cErr)
-		case configured:
-			h.Email.SendOTPCode(email, code)
-		default:
-			logCodeFallback()
-		}
+		logCodeFallback()
 	}
 
 	response.OK(c, gin.H{"status": "sent"})
