@@ -39,7 +39,7 @@ function refreshSession(): Promise<RefreshOutcome> {
   return refreshing
 }
 
-async function request<T>(path: string, opts?: RequestInit, retried = false): Promise<T> {
+async function request<T>(path: string, opts?: RequestInit, retried = false, asBlob = false): Promise<T> {
   let res: Response
   try {
     res = await fetch(BASE + path, {
@@ -67,7 +67,7 @@ async function request<T>(path: string, opts?: RequestInit, retried = false): Pr
   const renewable = (!path.startsWith("/auth/") && !signup) || path === "/auth/logout"
   if (res.status === 401 && !retried && renewable) {
     const outcome = await refreshSession()
-    if (outcome === "ok") return request<T>(path, opts, true)
+    if (outcome === "ok") return request<T>(path, opts, true, asBlob)
     if (outcome === "unavailable") {
       // Not a sign-out: the session may well still be renewable.
       throw new ServiceUnavailableError("Could not renew your session right now. Check your connection and try again.")
@@ -82,6 +82,8 @@ async function request<T>(path: string, opts?: RequestInit, retried = false): Pr
     }
     throw new Error("Session expired")
   }
+
+  if (res.ok && asBlob) return (await res.blob()) as T
 
   if (res.status === 204) return undefined as T
 
@@ -723,7 +725,8 @@ export const admin = {
       method: "DELETE",
       body: JSON.stringify({ note }),
     }),
-  publicKeyURL: (productId: string) => `${BASE}/admin/products/${productId}/signing-key/public.pem`,
+  downloadPublicKey: (productId: string) =>
+    request<Blob>(`/admin/products/${encodeURIComponent(productId)}/signing-key/public.pem`, undefined, false, true),
   tauriPublicKey: (productId: string) =>
     get<{ pubkey: string }>(`/admin/products/${productId}/signing-key/tauri-pubkey`),
 }

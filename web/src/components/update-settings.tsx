@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Download, KeyRound, Plus, RotateCw, Trash2 } from "lucide-react"
-import { Fragment, type ReactNode, useState } from "react"
+import { Fragment, type ReactNode, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
@@ -770,6 +770,37 @@ function ActiveSigningKeyCard({
   onDeactivate: () => void
 }) {
   const { t } = useI18n()
+  const downloading = useRef(false)
+  const [downloadPending, setDownloadPending] = useState(false)
+  const download = async () => {
+    if (downloading.current) return
+    downloading.current = true
+    setDownloadPending(true)
+    let url: string | undefined
+    try {
+      const blob = await admin.downloadPublicKey(productId)
+      const pem = await blob.text()
+      if (!pem.startsWith("-----BEGIN ED25519 PUBLIC KEY-----") || !pem.includes("-----END ED25519 PUBLIC KEY-----")) {
+        throw new Error(t("updateSettings.downloadFailed"))
+      }
+      url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = "public_key.pem"
+      document.body.append(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t("updateSettings.downloadFailed"), "error")
+    } finally {
+      if (url) {
+        const completedURL = url
+        window.setTimeout(() => URL.revokeObjectURL(completedURL), 1000)
+      }
+      downloading.current = false
+      setDownloadPending(false)
+    }
+  }
   const tauriKey = useQuery({
     queryKey: ["admin", "signing-keys", productId, "tauri", keyRow.id],
     queryFn: () => admin.tauriPublicKey(productId),
@@ -794,11 +825,9 @@ function ActiveSigningKeyCard({
           {rich(t("updateSettings.tauriKeyHint"), { field: <code>pubkey</code> })}
         </PublicKeyField>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href={admin.publicKeyURL(productId)} download="public_key.pem">
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              {t("updateSettings.downloadPem")}
-            </a>
+          <Button variant="outline" size="sm" disabled={downloadPending} onClick={download}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            {downloadPending ? t("common.loading") : t("updateSettings.downloadPem")}
           </Button>
           <Button variant="outline" size="sm" onClick={onRotate}>
             <RotateCw className="h-3.5 w-3.5 mr-1.5" />

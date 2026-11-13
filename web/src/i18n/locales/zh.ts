@@ -1140,6 +1140,7 @@ const zh = {
   "updateSettings.tauriKey": "Tauri 公钥（minisign）",
   "updateSettings.tauriKeyHint": "Tauri：填入 tauri.conf.json 中 updater 部分的 {field}。",
   "updateSettings.copy": "复制",
+  "updateSettings.downloadFailed": "无法下载有效的公钥，请重试。",
   "updateSettings.downloadPem": "下载 .pem",
   "updateSettings.rotate": "轮换",
   "updateSettings.deactivate": "停用",
