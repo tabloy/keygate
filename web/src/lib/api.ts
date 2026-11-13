@@ -407,7 +407,7 @@ export const admin = {
         key_usable: boolean
         key_unusable_reason?: string
       }
-    >(`/admin/licenses/${id}`),
+    >(`/admin/licenses/${encodeURIComponent(id)}`),
   // The key is never in a list or detail payload — one explicit
   // request per key, audited server-side.
   revealLicenseKey: (id: string) => get<{ license_key: string }>(`/admin/licenses/${id}/key`),
