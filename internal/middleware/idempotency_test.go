@@ -296,3 +296,46 @@ func TestIdempotency_BodyMismatchAfterCache(t *testing.T) {
 
 	_, _ = s.DB.NewRaw("DELETE FROM idempotency_keys WHERE key=?", key).Exec(context.Background())
 }
+
+// TestIdempotency_RejectsMalformedKey ensures invalid/fake idempotency
+// keys are rejected with 400 Bad Request before touching the handler.
+func TestIdempotency_RejectsMalformedKey(t *testing.T) {
+	handlerCalled := false
+	handler := func(c *gin.Context) {
+		handlerCalled = true
+		c.Status(http.StatusOK)
+	}
+	// Pass nil store: validation is in-memory and aborts before the DB is reached.
+	r := makeApp(nil, handler)
+
+	malformedKeys := []struct {
+		name string
+		key  string
+	}{
+		{"oversized", strings.Repeat("x", 257)},
+		{"has_null", "evil\x00key"},
+		{"has_crlf", "evil\r\nkey"},
+	}
+
+	for _, tc := range malformedKeys {
+		t.Run(tc.name, func(t *testing.T) {
+			handlerCalled = false
+			w := postJSON(r, tc.key, `{"test":1}`)
+
+			// 1. Assert status code is 400
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected status 400, got %d", w.Code)
+			}
+
+			// 2. Assert error message contains the expected code
+			if !strings.Contains(w.Body.String(), "INVALID_IDEMPOTENCY_KEY") {
+				t.Fatalf("expected error INVALID_IDEMPOTENCY_KEY, got body: %s", w.Body.String())
+			}
+
+			// 3. Assert handler was NEVER executed
+			if handlerCalled {
+				t.Fatal("handler was executed for an invalid key, but should have been blocked")
+			}
+		})
+	}
+}

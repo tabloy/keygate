@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -170,4 +171,30 @@ func TestIdempotencyAbandon_FreesSlot(t *testing.T) {
 // when tests run in parallel.
 func testTime() int64 {
 	return time.Now().UnixNano()
+}
+
+func TestValidIdempotencyKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{name: "valid_uuid", input: "c02a7b8e-1234-4567-89ab-cdef01234567", expected: true},
+		{name: "valid_short_key", input: "a", expected: true},
+		{name: "valid_256_chars", input: strings.Repeat("a", 256), expected: true},
+		{name: "empty_string", input: "", expected: false},
+		{name: "oversized_257_chars", input: strings.Repeat("a", 257), expected: false},
+		{name: "contains_null_byte", input: "key\x00attack", expected: false},
+		{name: "contains_newline", input: "key\nattack", expected: false},
+		{name: "contains_carriage_return", input: "key\rattack", expected: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := store.ValidIdempotencyKey(tc.input)
+			if actual != tc.expected {
+				t.Errorf("ValidIdempotencyKey(%q) = %v; want %v", tc.input, actual, tc.expected)
+			}
+		})
+	}
 }
