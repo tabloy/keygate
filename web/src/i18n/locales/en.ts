@@ -567,6 +567,7 @@ const en = {
   "settings.currentVersion": "Current Version",
   "settings.commitHash": "Commit",
   "settings.buildDate": "Build Date",
+  "settings.updateCheckFailed": "Could not check for updates. Check your connection and try again.",
   "settings.checkUpdate": "Check for Updates",
   "settings.updateAvailable": "Version {version} is available!",
   "settings.viewRelease": "View Release",

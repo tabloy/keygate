@@ -543,6 +543,7 @@ const zh = {
   "settings.currentVersion": "当前版本",
   "settings.commitHash": "提交哈希",
   "settings.buildDate": "构建日期",
+  "settings.updateCheckFailed": "无法检查更新，请检查网络连接后重试。",
   "settings.checkUpdate": "检查更新",
   "settings.updateAvailable": "版本 {version} 可用！",
   "settings.viewRelease": "查看发布",

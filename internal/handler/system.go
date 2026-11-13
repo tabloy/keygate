@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -19,12 +20,19 @@ import (
 )
 
 type SystemHandler struct {
-	Store       *store.Store
-	updateCache *updateInfo
-	cacheMu     sync.RWMutex
-	cacheTime   time.Time
-	RepoOwner   string
-	RepoName    string
+	Store        *store.Store
+	updateCache  *updateInfo
+	cacheMu      sync.RWMutex
+	cacheTime    time.Time
+	updateFlight *updateCheckFlight
+	httpClient   *http.Client
+	RepoOwner    string
+	RepoName     string
+}
+
+type updateCheckFlight struct {
+	done   chan struct{}
+	result *updateInfo
 }
 
 type updateInfo struct {
@@ -57,26 +65,43 @@ func (h *SystemHandler) GetVersion(c *gin.Context) {
 	})
 }
 
-// CheckUpdate checks GitHub for a newer release. Results are cached for 1 hour.
-// On startup, the background checker calls this periodically so the dashboard
-// always shows fresh update status without the admin clicking anything.
+// CheckUpdate caches successful reads for one hour. Concurrent checks
+// share one upstream request, including its failure.
 func (h *SystemHandler) CheckUpdate(c *gin.Context) {
-	h.cacheMu.RLock()
-	if h.updateCache != nil && time.Since(h.cacheTime) < time.Hour {
-		h.cacheMu.RUnlock()
-		response.OK(c, h.updateCache)
-		return
-	}
-	h.cacheMu.RUnlock()
+	response.OK(c, h.checkLatestRelease(c.Request.Context()))
+}
 
-	info := h.fetchLatestRelease()
-
+func (h *SystemHandler) checkLatestRelease(ctx context.Context) *updateInfo {
 	h.cacheMu.Lock()
-	h.updateCache = info
-	h.cacheTime = time.Now()
+	if h.updateCache != nil && h.updateCache.Error == "" && time.Since(h.cacheTime) < time.Hour {
+		info := h.updateCache
+		h.cacheMu.Unlock()
+		return info
+	}
+	if flight := h.updateFlight; flight != nil {
+		h.cacheMu.Unlock()
+		select {
+		case <-flight.done:
+			return flight.result
+		case <-ctx.Done():
+			return &updateInfo{Current: version.Version, Error: ctx.Err().Error()}
+		}
+	}
+	flight := &updateCheckFlight{done: make(chan struct{})}
+	h.updateFlight = flight
 	h.cacheMu.Unlock()
 
-	response.OK(c, info)
+	info := h.fetchLatestRelease()
+	h.cacheMu.Lock()
+	if info.Error == "" {
+		h.updateCache = info
+		h.cacheTime = time.Now()
+	}
+	flight.result = info
+	h.updateFlight = nil
+	close(flight.done)
+	h.cacheMu.Unlock()
+	return info
 }
 
 // StartAutoCheck runs a background loop that checks for updates every 6 hours.
@@ -84,11 +109,7 @@ func (h *SystemHandler) CheckUpdate(c *gin.Context) {
 func (h *SystemHandler) StartAutoCheck(done <-chan struct{}) {
 	// Check once on startup (after 30s delay to let server fully start)
 	time.AfterFunc(30*time.Second, func() {
-		info := h.fetchLatestRelease()
-		h.cacheMu.Lock()
-		h.updateCache = info
-		h.cacheTime = time.Now()
-		h.cacheMu.Unlock()
+		info := h.checkLatestRelease(context.Background())
 		if info.Available {
 			slog.Info("update available", "current", info.Current, "latest", info.Latest, "url", info.ReleaseURL)
 		}
@@ -101,11 +122,7 @@ func (h *SystemHandler) StartAutoCheck(done <-chan struct{}) {
 		case <-done:
 			return
 		case <-ticker.C:
-			info := h.fetchLatestRelease()
-			h.cacheMu.Lock()
-			h.updateCache = info
-			h.cacheTime = time.Now()
-			h.cacheMu.Unlock()
+			h.checkLatestRelease(context.Background())
 		}
 	}
 }
@@ -116,10 +133,14 @@ func (h *SystemHandler) fetchLatestRelease() *updateInfo {
 		CheckedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := h.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
 	url := "https://api.github.com/repos/" + h.RepoOwner + "/" + h.RepoName + "/releases/latest"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		info.Error = "failed to create GitHub request"
 		return info
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
@@ -153,6 +174,10 @@ func (h *SystemHandler) fetchLatestRelease() *updateInfo {
 		return info
 	}
 
+	if !semver.IsValid(normalizeSemver(release.TagName)) {
+		info.Error = "GitHub release has an invalid version"
+		return info
+	}
 	info.Latest = release.TagName
 	info.ReleaseURL = release.HTMLURL
 	info.ReleaseDate = release.PublishedAt
