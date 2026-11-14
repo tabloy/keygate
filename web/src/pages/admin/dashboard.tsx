@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Activity, ArrowUpCircle, Key, Package, Users } from "lucide-react"
 import { Link } from "react-router-dom"
-import { Badge } from "@/components/ui/badge"
+import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -12,9 +12,9 @@ import {
   DataTableHeader,
   DataTableRow,
 } from "@/components/ui/data-table"
-import { type TranslationKeys, useI18n } from "@/i18n"
+import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
-import { formatDate, statusColor } from "@/lib/utils"
+import { formatDate } from "@/lib/utils"
 
 export default function DashboardPage() {
   const { t } = useI18n()
@@ -102,7 +102,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap gap-3">
               {Object.entries(stats.by_status).map(([status, count]) => (
                 <div key={status} className="flex items-center gap-2">
-                  <Badge className={statusColor(status)}>{t(`status.${status}` as TranslationKeys)}</Badge>
+                  <StatusBadge status={status} />
                   <span className="text-sm font-medium">{count}</span>
                 </div>
               ))}
@@ -139,7 +139,7 @@ export default function DashboardPage() {
                     <DataTableCell className="text-muted-foreground">{lic.product?.name || "-"}</DataTableCell>
                     <DataTableCell className="text-muted-foreground">{lic.plan?.name || "-"}</DataTableCell>
                     <DataTableCell>
-                      <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as TranslationKeys)}</Badge>
+                      <StatusBadge status={lic.status} />
                     </DataTableCell>
                     <DataTableCell className="text-muted-foreground text-xs">
                       {formatDate(lic.created_at)}

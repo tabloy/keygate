@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Key, Trash2 } from "lucide-react"
 import { useState, useSyncExternalStore } from "react"
+import { StatusBadge } from "@/components/status-badge"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -32,7 +33,7 @@ import {
   portal,
   type Seat,
 } from "@/lib/api"
-import { cn, formatDate, statusColor } from "@/lib/utils"
+import { cn, formatDate } from "@/lib/utils"
 import { formatMoney, PendingChangeNotice, SubscriptionChangeDialog } from "./subscription-change"
 
 export default function PortalLicensesPage() {
@@ -198,7 +199,7 @@ function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense
             <CardTitle className="text-lg">{lic.product?.name || "License"}</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">{lic.plan?.name}</p>
           </div>
-          <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as TranslationKeys)}</Badge>
+          <StatusBadge status={lic.status} />
         </div>
       </CardHeader>
       <CardContent className="space-y-4">

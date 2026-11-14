@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Eye, Search } from "lucide-react"
 import { useState } from "react"
+import { StatusBadge } from "@/components/status-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -17,10 +18,10 @@ import {
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { type TranslationKeys, useI18n } from "@/i18n"
+import { useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
-import { formatDate, maskKey, statusColor } from "@/lib/utils"
+import { formatDate, maskKey } from "@/lib/utils"
 
 export default function CustomersPage() {
   const { t } = useI18n()
@@ -257,9 +258,7 @@ function CustomerDetailDialog({
                             <Badge variant="secondary">{t("portal.roleOwner")}</Badge>
                           </DataTableCell>
                           <DataTableCell>
-                            <Badge className={statusColor(l.status)}>
-                              {t(`status.${l.status}` as TranslationKeys)}
-                            </Badge>
+                            <StatusBadge status={l.status} />
                           </DataTableCell>
                           <DataTableCell>
                             {/* Only the tail — the key itself is revealed
@@ -292,13 +291,7 @@ function CustomerDetailDialog({
                           <DataTableCell>
                             <Badge variant="secondary">{t("portal.roleMember")}</Badge>
                           </DataTableCell>
-                          <DataTableCell>
-                            {m.license && (
-                              <Badge className={statusColor(m.license.status)}>
-                                {t(`status.${m.license.status}` as TranslationKeys)}
-                              </Badge>
-                            )}
-                          </DataTableCell>
+                          <DataTableCell>{m.license && <StatusBadge status={m.license.status} />}</DataTableCell>
                           <DataTableCell>
                             <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
                               {maskKey(data?.member_key_hints?.[m.id], data?.member_key_prefixes?.[m.id])}
@@ -342,9 +335,7 @@ function CustomerDetailDialog({
                         <DataTableRow key={sub.id}>
                           <DataTableCell className="font-medium">{sub.plan?.name || sub.plan_id}</DataTableCell>
                           <DataTableCell>
-                            <Badge className={statusColor(sub.status)}>
-                              {t(`status.${sub.status}` as TranslationKeys)}
-                            </Badge>
+                            <StatusBadge status={sub.status} />
                           </DataTableCell>
                           <DataTableCell className="text-muted-foreground">{sub.payment_provider || "-"}</DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">

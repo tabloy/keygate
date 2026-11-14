@@ -21,6 +21,7 @@ import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
 import { PlanSelect } from "@/components/plan-select"
 import { ProductSelect } from "@/components/product-select"
+import { StatusBadge } from "@/components/status-badge"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -64,7 +65,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { type AdminSeat, admin, errorCode, errorDetails, type License, type Plan, type UsageCounter } from "@/lib/api"
-import { formatDate, maskKey, statusColor } from "@/lib/utils"
+import { formatDate, maskKey } from "@/lib/utils"
 
 // A date picked in the expiry field means "valid through that whole
 // day" in the admin's local timezone, so the license dies at local
@@ -273,9 +274,7 @@ export default function LicensesPage() {
                             } / ${(lic.activation_limit ?? lic.plan?.max_activations) || "-"}`}
                       </DataTableCell>
                       <DataTableCell>
-                        <Badge className={statusColor(lic.status)}>
-                          {t(`status.${lic.status}` as TranslationKeys)}
-                        </Badge>
+                        <StatusBadge status={lic.status} />
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground text-xs">
                         {lic.valid_until ? formatDate(lic.valid_until) : t("licenses.perpetual")}
@@ -704,9 +703,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                   </div>
                   <div>
                     <p className="text-muted-foreground">{t("common.status")}</p>
-                    <Badge className={`mt-1 ${statusColor(lic.status)}`}>
-                      {t(`status.${lic.status}` as TranslationKeys)}
-                    </Badge>
+                    <StatusBadge status={lic.status} className="mt-1" />
                   </div>
                   <div>
                     <p className="text-muted-foreground">{t("common.product")}</p>
