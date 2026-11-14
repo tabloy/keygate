@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
-import { formatDate, maskKey, statusColor } from "@/lib/utils"
+import { formatDate, formatLicenseExpiry, maskKey, statusColor } from "@/lib/utils"
 
 export default function CustomersPage() {
   const { t } = useI18n()
@@ -270,7 +270,7 @@ function CustomerDetailDialog({
                             </code>
                           </DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">
-                            {l.valid_until ? formatDate(l.valid_until) : "-"}
+                            {formatLicenseExpiry(l.valid_until, t)}
                           </DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">
                             {formatDate(l.created_at)}
@@ -305,7 +305,7 @@ function CustomerDetailDialog({
                             </code>
                           </DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">
-                            {m.license?.valid_until ? formatDate(m.license.valid_until) : "-"}
+                            {formatLicenseExpiry(m.license?.valid_until, t)}
                           </DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">
                             {m.license ? formatDate(m.license.created_at) : "-"}

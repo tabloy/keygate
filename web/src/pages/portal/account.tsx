@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/hooks/use-auth"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { portal } from "@/lib/api"
-import { formatDate, statusColor } from "@/lib/utils"
+import { formatLicenseExpiry, statusColor } from "@/lib/utils"
 
 export default function PortalAccountPage() {
   const { t } = useI18n()
@@ -180,10 +180,8 @@ export default function PortalAccountPage() {
                   <div>
                     <p className="font-medium text-sm">{lic.product?.name || "License"}</p>
                     <p className="text-xs text-muted-foreground">
-                      {lic.plan?.name} &middot;{" "}
-                      {lic.valid_until
-                        ? `${t("licenses.validUntil")} ${formatDate(lic.valid_until)}`
-                        : t("licenses.perpetual")}
+                      {lic.plan?.name} &middot; {lic.valid_until ? `${t("licenses.validUntil")} ` : ""}
+                      {formatLicenseExpiry(lic.valid_until, t)}
                     </p>
                   </div>
                   <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as TranslationKeys)}</Badge>
