@@ -55,6 +55,17 @@ export function statusColor(status: string): string {
   }
 }
 
+export function actionColor(action: string): string {
+  const a = action.toLowerCase()
+  if (a.includes("create") || a.includes("invited")) return "bg-emerald-100 text-emerald-800"
+  if (a.includes("delete") || a.includes("revoke") || a.includes("removed")) return "bg-red-100 text-red-800"
+  if (a.includes("suspend")) return "bg-orange-100 text-orange-800"
+  if (a.includes("update") || a.includes("change") || a.includes("rotate") || a.includes("reissue")) {
+    return "bg-blue-100 text-blue-800"
+  }
+  return "bg-gray-100 text-gray-800"
+}
+
 // Rows show only the tail of a key, after the prefix of the product
 // that issued it. The full value never rides in a list or detail
 // payload: it is fetched per reveal and audited.

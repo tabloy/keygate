@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
-import { formatDate } from "@/lib/utils"
+import { actionColor, formatDate } from "@/lib/utils"
 
 export default function AuditPage() {
   const { t } = useI18n()
@@ -42,13 +42,6 @@ export default function AuditPage() {
   const logs = data?.audit_logs || []
   const total = data?.total || 0
   const totalPages = Math.ceil(total / limit)
-
-  const actionColor = (action: string) => {
-    if (action === "created") return "bg-emerald-100 text-emerald-800"
-    if (action === "deleted" || action === "revoked") return "bg-red-100 text-red-800"
-    if (action === "suspended") return "bg-orange-100 text-orange-800"
-    return "bg-blue-100 text-blue-800"
-  }
 
   return (
     <div className="space-y-6">

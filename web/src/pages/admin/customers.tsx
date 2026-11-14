@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
-import { formatDate, maskKey, statusColor } from "@/lib/utils"
+import { actionColor, formatDate, maskKey, statusColor } from "@/lib/utils"
 
 export default function CustomersPage() {
   const { t } = useI18n()
@@ -392,21 +392,7 @@ function CustomerDetailDialog({
                         <Badge variant="outline" className="shrink-0">
                           {a.entity}
                         </Badge>
-                        <Badge
-                          className={
-                            a.action.includes("create")
-                              ? "bg-emerald-100 text-emerald-800"
-                              : a.action.includes("delete") || a.action.includes("revoke")
-                                ? "bg-red-100 text-red-800"
-                                : a.action.includes("update")
-                                  ? "bg-blue-100 text-blue-800"
-                                  : a.action.includes("suspend")
-                                    ? "bg-orange-100 text-orange-800"
-                                    : "bg-gray-100 text-gray-800"
-                          }
-                        >
-                          {a.action}
-                        </Badge>
+                        <Badge className={actionColor(a.action)}>{a.action}</Badge>
                         <span
                           className="font-mono text-xs text-muted-foreground truncate max-w-[180px]"
                           title={a.entity_id}
