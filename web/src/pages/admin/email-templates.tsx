@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Code, Eye, Mail, Pencil, RotateCcw } from "lucide-react"
 import { useState } from "react"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -194,7 +195,7 @@ export default function EmailTemplatesManager() {
           <p className="text-sm text-muted-foreground mb-4">{t("settings.templateDesc")}</p>
 
           {isLoading ? (
-            <div className="h-32 bg-muted rounded-lg animate-pulse" />
+            <LoadingSkeleton className="h-32" />
           ) : (
             <div className="space-y-2">
               {Object.entries(TEMPLATE_META).map(([key, meta]) => {

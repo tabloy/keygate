@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Eye, Search } from "lucide-react"
 import { useState } from "react"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -63,7 +64,7 @@ export default function CustomersPage() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <div className="h-64 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton className="h-64" />
           ) : (
             <>
               <DataTable>
@@ -162,8 +163,8 @@ function CustomerDetailDialog({
         <DialogBody className="flex flex-col overflow-hidden">
           {isLoading || !detail ? (
             <div className="space-y-4">
-              <div className="h-24 bg-muted rounded-lg animate-pulse" />
-              <div className="h-48 bg-muted rounded-lg animate-pulse" />
+              <LoadingSkeleton className="h-24" />
+              <LoadingSkeleton className="h-48" />
             </div>
           ) : (
             <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">

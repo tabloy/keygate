@@ -19,6 +19,7 @@ import {
 import { useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { PlanSelect } from "@/components/plan-select"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
@@ -216,7 +217,7 @@ export default function LicensesPage() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <div className="h-64 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton className="h-64" />
           ) : (
             <>
               <DataTable>
@@ -655,7 +656,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
           {lic && <CopyableId id={lic.id} />}
         </DialogHeader>
         {isLoading || !lic ? (
-          <div className="h-48 animate-pulse bg-muted rounded-lg" />
+          <LoadingSkeleton className="h-48" />
         ) : (
           <Tabs defaultValue="info" className="flex min-h-0 flex-1 flex-col">
             <TabsList className="shrink-0">
@@ -1242,7 +1243,7 @@ function UsageTab({ licenseId }: { licenseId: string }) {
   const counters = data?.counters || []
   const { items: events, total, totalPages } = pg.from(data, data?.events)
 
-  if (isLoading) return <div className="h-32 animate-pulse bg-muted rounded-lg" />
+  if (isLoading) return <LoadingSkeleton className="h-32" />
 
   return (
     <div className="space-y-6 pt-2">
@@ -1464,7 +1465,7 @@ function SeatsTab({
   const activeCount = (data?.active_count ?? 0) + (hasSeats ? 1 : 0)
   const busy = reissueMut.isPending || removeMut.isPending
 
-  if (isLoading) return <div className="h-32 animate-pulse bg-muted rounded-lg" />
+  if (isLoading) return <LoadingSkeleton className="h-32" />
 
   return (
     <div className="space-y-4 pt-2">

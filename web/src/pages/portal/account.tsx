@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Key, Mail, Pencil, Shield, User, X } from "lucide-react"
 import { useState } from "react"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { showToast } from "@/components/toast"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -165,7 +166,7 @@ export default function PortalAccountPage() {
           {isLoading ? (
             <div className="space-y-3">
               {[1, 2].map((i) => (
-                <div key={i} className="h-16 animate-pulse bg-muted rounded-lg" />
+                <LoadingSkeleton key={i} className="h-16" />
               ))}
             </div>
           ) : licenses.length === 0 ? (

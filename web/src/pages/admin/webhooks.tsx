@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link } from "react-router-dom"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
 import {
@@ -201,7 +202,7 @@ export default function WebhooksPage() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <div className="h-32 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton />
           ) : (
             <>
               <DataTable>
@@ -526,7 +527,7 @@ function DeliveryLogDialog({ webhookId, onClose }: { webhookId: string; onClose:
         </div>
         <DialogBody>
           {isLoading ? (
-            <div className="h-48 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton className="h-48" />
           ) : deliveries.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">{t("webhooks.noDeliveries")}</p>
           ) : (

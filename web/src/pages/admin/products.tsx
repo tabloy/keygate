@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Cloud, Laptop, Layers, Pencil, Plus, Search, Settings2, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { CopyableId } from "@/components/copyable-id"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -117,7 +118,7 @@ export default function ProductsPage() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <div className="h-32 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton />
           ) : (
             <>
               <DataTable>

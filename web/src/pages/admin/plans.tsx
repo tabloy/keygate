@@ -3,6 +3,7 @@ import { Copy, Package, Pencil, Plus, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
 import {
@@ -215,7 +216,7 @@ export default function PlansPage() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <div className="h-32 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton />
           ) : (
             <>
               <DataTable>

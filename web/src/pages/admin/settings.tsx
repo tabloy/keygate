@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowUpCircle, Check, RefreshCw, Send, Shield, Trash2, UserPlus } from "lucide-react"
 import { useEffect, useState } from "react"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { DEFAULT_REMINDER_DAYS, ReminderDaysInput } from "@/components/reminder-days-input"
 import { showToast } from "@/components/toast"
 import {
@@ -759,7 +760,7 @@ function TeamManagement() {
 
           {/* Current members */}
           {isLoading ? (
-            <div className="h-24 bg-muted rounded-lg animate-pulse" />
+            <LoadingSkeleton className="h-24" />
           ) : members.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">{t("team.empty")}</p>
           ) : (

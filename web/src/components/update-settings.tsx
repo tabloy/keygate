@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Download, KeyRound, Plus, RotateCw, Trash2 } from "lucide-react"
 import { Fragment, type ReactNode, useState } from "react"
 import { Link } from "react-router-dom"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
 import {
@@ -107,7 +108,7 @@ export function UpdateSettingsDialog({
             {t("updateSettings.selectProductHint")}
           </div>
         ) : !product || product.id !== productId ? (
-          <div className="flex-1 animate-pulse rounded-md bg-muted" />
+          <LoadingSkeleton className="flex-1" />
         ) : (
           <Tabs value={tab} onValueChange={(v) => setTab(v as SettingsTab)} className="flex min-h-0 flex-1 flex-col">
             <TabsList className="grid w-full shrink-0 grid-cols-2 sm:grid-cols-4 h-auto">
@@ -522,7 +523,7 @@ function RequiredUpdateSection({ product }: { product: Product }) {
   const dirty = enabled ? saved !== chosen || savedMessage !== message.trim() : saved !== ""
   const unpublished = enabled && chosen !== "" && !versions.includes(chosen)
 
-  if (isLoading) return <div className="h-32 animate-pulse bg-muted rounded-md" />
+  if (isLoading) return <LoadingSkeleton className="h-32" />
 
   // Nothing to pick from and nothing set: say what is missing instead of
   // showing a switch that cannot be turned on.
@@ -660,7 +661,7 @@ function SigningKeysSection({ productId }: { productId: string }) {
     onError: (e: Error) => showToast(e.message, "error"),
   })
 
-  if (isLoading) return <div className="h-32 animate-pulse bg-muted rounded-md" />
+  if (isLoading) return <LoadingSkeleton className="h-32" />
 
   return (
     <div className="space-y-4">

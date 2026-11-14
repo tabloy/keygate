@@ -1,6 +1,7 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Minus, Plus } from "lucide-react"
 import { useEffect, useState } from "react"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { showToast } from "@/components/toast"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -367,7 +368,7 @@ export function SubscriptionChangeDialog({
               {/* While a fresh preview loads, the old one is neither shown
                   nor confirmable: its proration date may have run out. */}
               {preview.isFetching ? (
-                <div className="h-28 animate-pulse bg-muted rounded-lg" />
+                <LoadingSkeleton className="h-28" />
               ) : preview.isError ? (
                 <p role="alert" className="text-sm text-destructive">
                   {errorText(preview.error)}

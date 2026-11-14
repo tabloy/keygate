@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Eye, EyeOff, Package, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
 import {
@@ -146,7 +147,7 @@ export default function APIKeysPage() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <div className="h-32 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton />
           ) : (
             <DataTable>
               <DataTableHeader>

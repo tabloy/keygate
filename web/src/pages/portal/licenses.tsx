@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Key, Trash2 } from "lucide-react"
 import { useState, useSyncExternalStore } from "react"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -56,7 +57,7 @@ export default function PortalLicensesPage() {
     return (
       <div className="space-y-4">
         {[1, 2].map((i) => (
-          <div key={i} className="h-48 animate-pulse bg-muted rounded-lg" />
+          <LoadingSkeleton key={i} className="h-48" />
         ))}
       </div>
     )
@@ -502,7 +503,7 @@ function ActivationsSection({ license }: { license: PortalLicense }) {
       </div>
 
       {actQuery.isLoading ? (
-        <div className="h-16 animate-pulse bg-muted rounded-lg" />
+        <LoadingSkeleton className="h-16" />
       ) : activations.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">{t("portal.noDevices")}</p>
       ) : (
@@ -804,7 +805,7 @@ function SeatsSection({ license, onAddSeats }: { license: PortalLicense; onAddSe
       )}
 
       {seatsQuery.isLoading ? (
-        <div className="h-16 animate-pulse bg-muted rounded-lg" />
+        <LoadingSkeleton className="h-16" />
       ) : (
         <div className="space-y-2">
           <div className="flex items-center gap-2 bg-muted/50 rounded px-3 py-2 text-sm">
@@ -1084,7 +1085,7 @@ function QuotaBar({ entitlement, licenseKey }: { entitlement: Entitlement; licen
   const isWarning = percentage >= 80
 
   if (isLoading) {
-    return <div className="h-12 animate-pulse bg-muted rounded-lg" />
+    return <LoadingSkeleton className="h-12" />
   }
 
   return (
@@ -1209,7 +1210,7 @@ function InvoicesDialog({ licenseId, onClose }: { licenseId: string; onClose: ()
         </DialogHeader>
         <DialogBody>
           {isLoading ? (
-            <div className="h-32 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton className="h-32" />
           ) : invoices.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">{t("common.noData")}</p>
           ) : (

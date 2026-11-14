@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
+import { LoadingSkeleton } from "@/components/loading-skeleton"
 import { ProductSelect } from "@/components/product-select"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -108,7 +109,7 @@ export default function AuditPage() {
       <Card>
         <CardContent className="pt-6">
           {isLoading ? (
-            <div className="h-64 animate-pulse bg-muted rounded-lg" />
+            <LoadingSkeleton className="h-64" />
           ) : (
             <>
               <DataTable>
