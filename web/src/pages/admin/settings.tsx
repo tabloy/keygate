@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UserAvatar } from "@/components/user-avatar"
 import { useAuth } from "@/hooks/use-auth"
 import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
@@ -767,13 +768,7 @@ function TeamManagement() {
               {members.map((m) => (
                 <div key={m.id} className="flex items-center justify-between py-2 px-3 rounded-lg border">
                   <div className="flex items-center gap-3">
-                    {m.avatar_url ? (
-                      <img src={m.avatar_url} className="h-8 w-8 rounded-full" alt="" />
-                    ) : (
-                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                        {m.name?.charAt(0)?.toUpperCase() || m.email.charAt(0).toUpperCase()}
-                      </div>
-                    )}
+                    <UserAvatar user={m} size="sm" />
                     <div>
                       <div className="font-medium text-sm">{m.name || m.email}</div>
                       <div className="text-xs text-muted-foreground">{m.email}</div>

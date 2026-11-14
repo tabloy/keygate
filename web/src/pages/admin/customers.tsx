@@ -17,6 +17,7 @@ import {
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { UserAvatar } from "@/components/user-avatar"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
@@ -82,13 +83,7 @@ export default function CustomersPage() {
                     <DataTableRow key={u.id}>
                       <DataTableCell>
                         <div className="flex items-center gap-3">
-                          {u.avatar_url ? (
-                            <img src={u.avatar_url} className="h-8 w-8 rounded-full" alt="" />
-                          ) : (
-                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                              {u.name?.charAt(0)?.toUpperCase() || u.email.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                          <UserAvatar user={u} size="sm" />
                           <span className="font-medium">{u.name || "-"}</span>
                         </div>
                       </DataTableCell>
@@ -181,13 +176,7 @@ function CustomerDetailDialog({
                   <Card>
                     <CardContent className="pt-6">
                       <div className="flex items-center gap-4">
-                        {detail.user.avatar_url ? (
-                          <img src={detail.user.avatar_url} className="h-14 w-14 rounded-full" alt="" />
-                        ) : (
-                          <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center text-lg font-bold">
-                            {detail.user.name?.charAt(0)?.toUpperCase() || detail.user.email.charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <UserAvatar user={detail.user} size="lg" />
                         <div>
                           <h3 className="text-lg font-semibold">{detail.user.name || "-"}</h3>
                           <p className="text-sm text-muted-foreground">{detail.user.email}</p>

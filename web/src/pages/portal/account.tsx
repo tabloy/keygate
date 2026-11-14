@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { UserAvatar } from "@/components/user-avatar"
 import { useAuth } from "@/hooks/use-auth"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { portal } from "@/lib/api"
@@ -68,13 +69,7 @@ export default function PortalAccountPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-4">
-            {user?.avatar_url ? (
-              <img src={user.avatar_url} alt={user.name} className="h-16 w-16 rounded-full border" />
-            ) : (
-              <div className="h-16 w-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold">
-                {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase()}
-              </div>
-            )}
+            <UserAvatar user={user} size="xl" variant="primary" className="border" />
             <div className="flex-1">
               {editing ? (
                 <div className="flex items-center gap-2">

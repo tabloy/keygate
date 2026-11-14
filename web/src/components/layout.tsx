@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { UserAvatar } from "@/components/user-avatar"
 import { useAuth } from "@/hooks/use-auth"
 import { useSiteConfig } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
@@ -169,9 +170,7 @@ export function AdminLayout() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="w-full justify-start gap-2">
-              <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
-                {user.name?.charAt(0)?.toUpperCase() || user.email.charAt(0).toUpperCase()}
-              </div>
+              <UserAvatar user={user} size="xs" variant="primary" />
               <span className="truncate text-sm">{user.name || user.email}</span>
               <ChevronDown className="h-4 w-4 ml-auto opacity-50 shrink-0" />
             </Button>
