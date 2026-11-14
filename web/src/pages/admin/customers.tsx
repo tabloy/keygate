@@ -13,6 +13,7 @@ import {
   DataTableHeader,
   DataTablePagination,
   DataTableRow,
+  useServerPagination,
 } from "@/components/ui/data-table"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -24,19 +25,16 @@ import { formatDate, maskKey, statusColor } from "@/lib/utils"
 
 export default function CustomersPage() {
   const { t } = useI18n()
-  const [page, setPage] = useState(0)
   const [search, setSearch] = useState("")
-  const limit = 30
+  const pg = useServerPagination(30, [search])
   const [viewingUser, setViewingUser] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "users", search, page],
-    queryFn: () => admin.listUsers({ search: search || undefined, offset: page * limit, limit }),
+    queryKey: ["admin", "users", search, pg.page, pg.pageSize],
+    queryFn: () => admin.listUsers({ search: search || undefined, ...pg.params }),
   })
 
-  const customers = data?.users || []
-  const total = data?.total || 0
-  const totalPages = Math.ceil(total / limit)
+  const { items: customers, total, totalPages } = pg.from(data, data?.users)
 
   return (
     <div className="space-y-6">
@@ -51,10 +49,7 @@ export default function CustomersPage() {
           <Input
             placeholder={t("common.search")}
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(0)
-            }}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
@@ -110,11 +105,12 @@ export default function CustomersPage() {
               </DataTable>
               {total > 0 && (
                 <DataTablePagination
-                  page={page}
+                  page={pg.page}
                   totalPages={totalPages}
                   total={total}
-                  pageSize={limit}
-                  onPageChange={setPage}
+                  pageSize={pg.pageSize}
+                  onPageChange={pg.setPage}
+                  onPageSizeChange={pg.setPageSize}
                 />
               )}
             </>

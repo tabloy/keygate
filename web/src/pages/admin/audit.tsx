@@ -12,6 +12,7 @@ import {
   DataTableHeader,
   DataTablePagination,
   DataTableRow,
+  useServerPagination,
 } from "@/components/ui/data-table"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -24,24 +25,20 @@ export default function AuditPage() {
   const [entityFilter, setEntityFilter] = useState("")
   const [entityIdFilter, setEntityIdFilter] = useState("")
   const [productFilter, setProductFilter] = useState("")
-  const [page, setPage] = useState(0)
-  const limit = 30
+  const pg = useServerPagination(30, [entityFilter, entityIdFilter, productFilter])
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "audit", entityFilter, entityIdFilter, productFilter, page],
+    queryKey: ["admin", "audit", entityFilter, entityIdFilter, productFilter, pg.page, pg.pageSize],
     queryFn: () =>
       admin.listAuditLogs({
         entity: entityFilter || undefined,
         entity_id: entityIdFilter || undefined,
         product_id: productFilter || undefined,
-        offset: page * limit,
-        limit,
+        ...pg.params,
       }),
   })
 
-  const logs = data?.audit_logs || []
-  const total = data?.total || 0
-  const totalPages = Math.ceil(total / limit)
+  const { items: logs, total, totalPages } = pg.from(data, data?.audit_logs)
 
   const actionColor = (action: string) => {
     if (action === "created") return "bg-emerald-100 text-emerald-800"
@@ -62,7 +59,6 @@ export default function AuditPage() {
           value={entityFilter || "all"}
           onValueChange={(v) => {
             setEntityFilter(v === "all" ? "" : v)
-            setPage(0)
           }}
         >
           <SelectTrigger className="w-full sm:w-48">
@@ -85,7 +81,6 @@ export default function AuditPage() {
           value={entityIdFilter}
           onChange={(e) => {
             setEntityIdFilter(e.target.value)
-            setPage(0)
           }}
           className="w-full sm:w-64"
         />
@@ -96,7 +91,6 @@ export default function AuditPage() {
           value={productFilter}
           onChange={(v) => {
             setProductFilter(v)
-            setPage(0)
           }}
           allLabel={t("audit.allProducts")}
           placeholder={t("audit.filterProduct")}
@@ -150,11 +144,12 @@ export default function AuditPage() {
               </DataTable>
               {total > 0 && (
                 <DataTablePagination
-                  page={page}
+                  page={pg.page}
                   totalPages={totalPages}
                   total={total}
-                  pageSize={limit}
-                  onPageChange={setPage}
+                  pageSize={pg.pageSize}
+                  onPageChange={pg.setPage}
+                  onPageSizeChange={pg.setPageSize}
                 />
               )}
             </>
