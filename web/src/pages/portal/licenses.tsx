@@ -32,7 +32,7 @@ import {
   portal,
   type Seat,
 } from "@/lib/api"
-import { cn, formatDate, statusColor } from "@/lib/utils"
+import { cn, formatDate, formatLicenseExpiry, statusColor } from "@/lib/utils"
 import { formatMoney, PendingChangeNotice, SubscriptionChangeDialog } from "./subscription-change"
 
 export default function PortalLicensesPage() {
@@ -226,7 +226,7 @@ function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense
           </div>
           <div>
             <p className="text-muted-foreground">{t("licenses.validUntil")}</p>
-            <p className="font-medium">{lic.valid_until ? formatDate(lic.valid_until) : t("licenses.perpetual")}</p>
+            <p className="font-medium">{formatLicenseExpiry(lic.valid_until, t)}</p>
           </div>
           {/* The count and cap are the team's: a member is told so, as
               the list below holds only their own devices. */}

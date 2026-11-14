@@ -64,7 +64,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { type AdminSeat, admin, errorCode, errorDetails, type License, type Plan, type UsageCounter } from "@/lib/api"
-import { formatDate, maskKey, statusColor } from "@/lib/utils"
+import { formatDate, formatLicenseExpiry, maskKey, statusColor } from "@/lib/utils"
 
 // A date picked in the expiry field means "valid through that whole
 // day" in the admin's local timezone, so the license dies at local
@@ -278,7 +278,7 @@ export default function LicensesPage() {
                         </Badge>
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground text-xs">
-                        {lic.valid_until ? formatDate(lic.valid_until) : t("licenses.perpetual")}
+                        {formatLicenseExpiry(lic.valid_until, t)}
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground text-xs">
                         {formatDate(lic.created_at)}
@@ -725,7 +725,7 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     <p className="text-muted-foreground">{t("licenses.validUntil")}</p>
                     {editingValidUntil === null ? (
                       <div className="flex items-center gap-1 mt-1">
-                        <p>{lic.valid_until ? formatDate(lic.valid_until) : t("licenses.perpetual")}</p>
+                        <p>{formatLicenseExpiry(lic.valid_until, t)}</p>
                         {/* A subscription owns the expiry of the licence it
                           bills: editing it here would be overwritten on the
                           next renewal. A one-time purchase renews nothing,
