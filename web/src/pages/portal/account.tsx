@@ -180,7 +180,10 @@ export default function PortalAccountPage() {
                   <div>
                     <p className="font-medium text-sm">{lic.product?.name || "License"}</p>
                     <p className="text-xs text-muted-foreground">
-                      {lic.plan?.name} &middot; {t("licenses.validUntil")} {formatDate(lic.valid_until)}
+                      {lic.plan?.name} &middot;{" "}
+                      {lic.valid_until
+                        ? `${t("licenses.validUntil")} ${formatDate(lic.valid_until)}`
+                        : t("licenses.perpetual")}
                     </p>
                   </div>
                   <Badge className={statusColor(lic.status)}>{t(`status.${lic.status}` as TranslationKeys)}</Badge>
