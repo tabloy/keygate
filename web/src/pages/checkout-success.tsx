@@ -1,5 +1,6 @@
 import { CheckCircle, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useSiteConfig } from "@/hooks/use-site-config"
@@ -63,7 +64,7 @@ export default function CheckoutSuccessPage() {
                     {kind === "renewal" ? t("checkout.renewalSuccess") : t("checkout.upgradeSuccess")}
                   </p>
                   <Button className="mt-4" asChild>
-                    <a href="/portal">{t("checkout.backToPortal")}</a>
+                    <Link to="/portal">{t("checkout.backToPortal")}</Link>
                   </Button>
                 </>
               ) : (
@@ -72,7 +73,7 @@ export default function CheckoutSuccessPage() {
                     {email ? t("checkout.licenseSentTo", { email }) : t("checkout.licenseCreated")}
                   </p>
                   <Button className="mt-4" asChild>
-                    <a href="/login">{t("checkout.viewLicense")}</a>
+                    <Link to="/login">{t("checkout.viewLicense")}</Link>
                   </Button>
                 </>
               )}
@@ -84,9 +85,9 @@ export default function CheckoutSuccessPage() {
                 {status === "pending" ? t("checkout.processing") : t("checkout.upgradeNotApplied")}
               </p>
               <Button className="mt-4" asChild>
-                <a href={kind === "renewal" || kind === "upgrade" ? "/portal" : "/login"}>
+                <Link to={kind === "renewal" || kind === "upgrade" ? "/portal" : "/login"}>
                   {t("checkout.backToPortal")}
-                </a>
+                </Link>
               </Button>
             </div>
           )}
