@@ -47,7 +47,8 @@ import { admin, type Entitlement, errorCode, errorDetails, type Plan } from "@/l
 // model.MaxPlanQuantity: the most seats a plan sold per seat can sell.
 const MAX_PLAN_QUANTITY = 10000
 
-import { boolColor, formatDate } from "@/lib/utils"
+import { ActiveBadge } from "@/components/active-badge"
+import { formatDate } from "@/lib/utils"
 
 export default function PlansPage() {
   const { t } = useI18n()
@@ -272,9 +273,7 @@ export default function PlansPage() {
                         </DataTableCell>
                         <DataTableCell>
                           <div className="flex flex-wrap gap-1">
-                            <Badge className={boolColor(p.active)}>
-                              {p.active ? t("common.active") : t("common.inactive")}
-                            </Badge>
+                            <ActiveBadge active={p.active} />
                             {p.self_signup && <Badge variant="outline">{t("plans.selfSignup")}</Badge>}
                           </div>
                         </DataTableCell>

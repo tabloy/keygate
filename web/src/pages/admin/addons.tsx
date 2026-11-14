@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Package, Pencil, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { ActiveBadge } from "@/components/active-badge"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
 import {
@@ -41,7 +42,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useI18n } from "@/i18n"
 import { type Addon, admin, type Product } from "@/lib/api"
-import { boolColor, formatDate } from "@/lib/utils"
+import { formatDate } from "@/lib/utils"
 
 export default function AddonsPage() {
   const { t } = useI18n()
@@ -152,9 +153,7 @@ export default function AddonsPage() {
                       </DataTableCell>
                       <DataTableCell>{a.value}</DataTableCell>
                       <DataTableCell>
-                        <Badge className={boolColor(a.active)}>
-                          {a.active ? t("common.active") : t("common.inactive")}
-                        </Badge>
+                        <ActiveBadge active={a.active} />
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground">{formatDate(a.created_at)}</DataTableCell>
                       <DataTableCell>

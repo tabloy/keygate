@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { Fragment, useState } from "react"
 import { Link } from "react-router-dom"
+import { ActiveBadge } from "@/components/active-badge"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
 import {
@@ -55,7 +56,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin, type WebhookConfig } from "@/lib/api"
-import { boolColor, formatDate } from "@/lib/utils"
+import { formatDate } from "@/lib/utils"
 
 // Must stay in sync with model.WebhookEvents on the server, which
 // refuses any other name. Dispatch only delivers to webhooks subscribed
@@ -238,9 +239,7 @@ export default function WebhooksPage() {
                         </div>
                       </DataTableCell>
                       <DataTableCell>
-                        <Badge className={boolColor(wh.active)}>
-                          {wh.active ? t("common.active") : t("webhooks.inactive")}
-                        </Badge>
+                        <ActiveBadge active={wh.active} inactiveLabelKey="webhooks.inactive" />
                       </DataTableCell>
                       <DataTableCell className="text-muted-foreground text-xs">
                         {formatDate(wh.created_at)}
