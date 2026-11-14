@@ -18,20 +18,11 @@ import {
 } from "lucide-react"
 import { useRef, useState } from "react"
 import { Link } from "react-router-dom"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { CopyableId } from "@/components/copyable-id"
 import { PlanSelect } from "@/components/plan-select"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -912,51 +903,33 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     in flight so a second click cannot post a second
                     copy. */}
                   {lic.email && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        {/* Only a key that works is mailed; the server
-                          refuses the rest. */}
+                    <ConfirmDialog
+                      trigger={
                         <Button variant="outline" size="sm" disabled={resendMut.isPending || !lic.key_usable}>
                           <Mail className="h-4 w-4 mr-1" /> {t("licenses.resendEmail")}
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t("licenses.resendEmail")}</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {t("licenses.resendEmailConfirm", { email: lic.email })}
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <div className="flex justify-end gap-2 mt-4">
-                          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => resendMut.mutate()}>
-                            {t("licenses.resendEmailAction")}
-                          </AlertDialogAction>
-                        </div>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      }
+                      title={t("licenses.resendEmail")}
+                      description={t("licenses.resendEmailConfirm", { email: lic.email })}
+                      actionLabel={t("licenses.resendEmailAction")}
+                      variant="default"
+                      onConfirm={() => resendMut.mutate()}
+                    />
                   )}
                   {/* Same states the server suspends: a licence in use. */}
                   {(lic.status === "active" || lic.status === "trialing" || lic.status === "past_due") && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
+                    <ConfirmDialog
+                      trigger={
                         <Button variant="outline" size="sm" disabled={suspendMut.isPending}>
                           <Pause className="h-4 w-4 mr-1" /> {t("licenses.suspend")}
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t("licenses.suspend")}</AlertDialogTitle>
-                          <AlertDialogDescription>{t("licenses.suspendConfirm")}</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <div className="flex justify-end gap-2 mt-4">
-                          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => suspendMut.mutate()}>
-                            {t("licenses.suspend")}
-                          </AlertDialogAction>
-                        </div>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      }
+                      title={t("licenses.suspend")}
+                      description={t("licenses.suspendConfirm")}
+                      actionLabel={t("licenses.suspend")}
+                      variant="default"
+                      onConfirm={() => suspendMut.mutate()}
+                    />
                   )}
                   {/* Mirrors store.ReinstateLicense. An expired or canceled
                     license whose expiry date has passed would stay unusable
@@ -975,34 +948,23 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                     </Button>
                   )}
                   {lic.status !== "revoked" && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
+                    <ConfirmDialog
+                      trigger={
                         <Button variant="destructive" size="sm" disabled={revokeMut.isPending}>
                           <Ban className="h-4 w-4 mr-1" /> {t("licenses.revoke")}
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t("licenses.revoke")}</AlertDialogTitle>
-                          <AlertDialogDescription>{t("licenses.revokeConfirm")}</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <div className="flex justify-end gap-2 mt-4">
-                          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                            onClick={() => revokeMut.mutate()}
-                          >
-                            {t("licenses.revoke")}
-                          </AlertDialogAction>
-                        </div>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      }
+                      title={t("licenses.revoke")}
+                      description={t("licenses.revokeConfirm")}
+                      actionLabel={t("licenses.revoke")}
+                      onConfirm={() => revokeMut.mutate()}
+                    />
                   )}
                   {/* Cancel and revoke (the /refund route): only a licence
                     a subscription bills has one to cancel. */}
                   {lic.stripe_subscription_id && lic.status !== "revoked" && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
+                    <ConfirmDialog
+                      trigger={
                         <Button
                           variant="outline"
                           size="sm"
@@ -1011,23 +973,12 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                         >
                           {t("licenses.refund")}
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t("licenses.refund")}</AlertDialogTitle>
-                          <AlertDialogDescription>{t("licenses.refundConfirm")}</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <div className="flex justify-end gap-2 mt-4">
-                          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                            onClick={() => refundMut.mutate()}
-                          >
-                            {t("licenses.refund")}
-                          </AlertDialogAction>
-                        </div>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      }
+                      title={t("licenses.refund")}
+                      description={t("licenses.refundConfirm")}
+                      actionLabel={t("licenses.refund")}
+                      onConfirm={() => refundMut.mutate()}
+                    />
                   )}
                   {/* A Stripe subscription owns the plan of the licence it
                     bills (the server refuses); a revoked one has none to
@@ -1151,64 +1102,37 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
             onClose={() => setChangingPlan(false)}
           />
         )}
-        <AlertDialog open={confirmUnlink} onOpenChange={() => setConfirmUnlink(false)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("licenses.unlinkTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>{t("licenses.unlinkConfirm")}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex justify-end gap-2">
-              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={() => unlinkMut.mutate()} disabled={unlinkMut.isPending}>
-                {unlinkMut.isPending ? t("common.loading") : t("licenses.unlink")}
-              </AlertDialogAction>
-            </div>
-          </AlertDialogContent>
-        </AlertDialog>
-        <AlertDialog open={confirmRotate} onOpenChange={(o) => !o && !rotateMut.isPending && setConfirmRotate(false)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("licenses.rotateKeyTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("licenses.rotateKeyDesc")} {t("licenses.rotateKeyAdminNote")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex justify-end gap-2">
-              <AlertDialogCancel disabled={rotateMut.isPending}>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-white hover:bg-destructive/90"
-                disabled={rotateMut.isPending}
-                onClick={(e) => {
-                  e.preventDefault()
-                  if (rotating.current) return
-                  rotating.current = true
-                  rotateMut.mutate()
-                }}
-              >
-                {t("licenses.rotateKey")}
-              </AlertDialogAction>
-            </div>
-          </AlertDialogContent>
-        </AlertDialog>
-        <AlertDialog open={!!confirmDeactivation} onOpenChange={() => setConfirmDeactivation(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {t("licenses.deactivateTitle", { device: confirmDeactivation?.label || "" })}
-              </AlertDialogTitle>
-              <AlertDialogDescription>{t("licenses.deactivateDesc")}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex justify-end gap-2">
-              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-white hover:bg-destructive/90"
-                onClick={() => confirmDeactivation && deleteActMut.mutate(confirmDeactivation.id)}
-              >
-                {t("licenses.deactivate")}
-              </AlertDialogAction>
-            </div>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+          open={confirmUnlink}
+          onOpenChange={() => setConfirmUnlink(false)}
+          title={t("licenses.unlinkTitle")}
+          description={t("licenses.unlinkConfirm")}
+          actionLabel={unlinkMut.isPending ? t("common.loading") : t("licenses.unlink")}
+          variant="default"
+          loading={unlinkMut.isPending}
+          onConfirm={() => unlinkMut.mutate()}
+        />
+        <ConfirmDialog
+          open={confirmRotate}
+          onOpenChange={(o) => !o && !rotateMut.isPending && setConfirmRotate(false)}
+          title={t("licenses.rotateKeyTitle")}
+          description={`${t("licenses.rotateKeyDesc")} ${t("licenses.rotateKeyAdminNote")}`}
+          actionLabel={t("licenses.rotateKey")}
+          loading={rotateMut.isPending}
+          onConfirm={() => {
+            if (rotating.current) return
+            rotating.current = true
+            rotateMut.mutate()
+          }}
+        />
+        <ConfirmDialog
+          open={!!confirmDeactivation}
+          onOpenChange={() => setConfirmDeactivation(null)}
+          title={t("licenses.deactivateTitle", { device: confirmDeactivation?.label || "" })}
+          description={t("licenses.deactivateDesc")}
+          actionLabel={t("licenses.deactivate")}
+          onConfirm={() => confirmDeactivation && deleteActMut.mutate(confirmDeactivation.id)}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -1334,26 +1258,18 @@ function UsageTab({ licenseId }: { licenseId: string }) {
           </>
         )}
       </div>
-      <AlertDialog open={!!confirmResetUsage} onOpenChange={() => setConfirmResetUsage(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("licenses.resetCounterTitle", {
-                feature: confirmResetUsage
-                  ? `${confirmResetUsage.feature} (${confirmResetUsage.period} ${confirmResetUsage.period_key})`
-                  : "",
-              })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("licenses.resetCounterDesc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => confirmResetUsage && resetMut.mutate(confirmResetUsage)}>
-              {t("licenses.resetCounter")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!confirmResetUsage}
+        onOpenChange={() => setConfirmResetUsage(null)}
+        title={t("licenses.resetCounterTitle", {
+          feature: confirmResetUsage
+            ? `${confirmResetUsage.feature} (${confirmResetUsage.period} ${confirmResetUsage.period_key})`
+            : "",
+        })}
+        description={t("licenses.resetCounterDesc")}
+        actionLabel={t("licenses.resetCounter")}
+        onConfirm={() => confirmResetUsage && resetMut.mutate(confirmResetUsage)}
+      />
     </div>
   )
 }
@@ -1614,43 +1530,32 @@ function SeatsTab({
         />
       )}
 
-      <AlertDialog open={confirming} onOpenChange={(o) => !o && !busy && setConfirming(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {asking?.action === "reissue"
-                ? t("licenses.reissueMemberKeyTitle").replace("{email}", asking.seat.email)
-                : t(asking?.seat.accepted_at ? "portal.removeMemberTitle" : "portal.cancelInviteTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {(asking?.action === "reissue"
-                ? t("licenses.reissueMemberKeyDesc")
-                : t(asking?.seat.accepted_at ? "licenses.adminRemoveMemberDesc" : "licenses.adminCancelInviteDesc")
-              ).replace("{email}", asking?.seat.email ?? "")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel disabled={busy}>
-              {t(asking?.action === "remove" && !asking.seat.accepted_at ? "portal.keepInvite" : "common.cancel")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={busy}
-              onClick={(e) => {
-                e.preventDefault()
-                if (!asking || submitting.current) return
-                submitting.current = true
-                if (asking.action === "reissue") reissueMut.mutate(asking.seat)
-                else removeMut.mutate(asking.seat)
-              }}
-            >
-              {asking?.action === "reissue"
-                ? t("licenses.rotateKey")
-                : t(asking?.seat.accepted_at ? "portal.removeMember" : "portal.cancelInvite")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(o) => !o && !busy && setConfirming(false)}
+        title={
+          asking?.action === "reissue"
+            ? t("licenses.reissueMemberKeyTitle").replace("{email}", asking.seat.email)
+            : t(asking?.seat.accepted_at ? "portal.removeMemberTitle" : "portal.cancelInviteTitle")
+        }
+        description={(asking?.action === "reissue"
+          ? t("licenses.reissueMemberKeyDesc")
+          : t(asking?.seat.accepted_at ? "licenses.adminRemoveMemberDesc" : "licenses.adminCancelInviteDesc")
+        ).replace("{email}", asking?.seat.email ?? "")}
+        cancelLabel={t(asking?.action === "remove" && !asking.seat.accepted_at ? "portal.keepInvite" : "common.cancel")}
+        actionLabel={
+          asking?.action === "reissue"
+            ? t("licenses.rotateKey")
+            : t(asking?.seat.accepted_at ? "portal.removeMember" : "portal.cancelInvite")
+        }
+        loading={busy}
+        onConfirm={() => {
+          if (!asking || submitting.current) return
+          submitting.current = true
+          if (asking.action === "reissue") reissueMut.mutate(asking.seat)
+          else removeMut.mutate(asking.seat)
+        }}
+      />
     </div>
   )
 }

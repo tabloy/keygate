@@ -2,17 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Eye, EyeOff, Package, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -243,43 +235,24 @@ export default function APIKeysPage() {
       {newKey && <NewKeyDialog keyValue={newKey} onClose={() => setNewKey(null)} />}
 
       {/* Rotate */}
-      <AlertDialog open={!!rotating} onOpenChange={() => setRotating(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("apiKeys.rotateTitle")} — "{rotating?.name}"
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("apiKeys.rotateConfirm")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => rotating && rotateMut.mutate(rotating.id)}>
-              {t("apiKeys.rotate")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!rotating}
+        onOpenChange={() => setRotating(null)}
+        title={`${t("apiKeys.rotateTitle")} — "${rotating?.name}"`}
+        description={t("apiKeys.rotateConfirm")}
+        actionLabel={t("apiKeys.rotate")}
+        variant="default"
+        onConfirm={() => rotating && rotateMut.mutate(rotating.id)}
+      />
 
       {/* Delete */}
-      <AlertDialog open={!!deleting} onOpenChange={() => setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("common.delete")} "{deleting?.name}"?
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("apiKeys.deleteConfirm")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => deleting && deleteMut.mutate(deleting.id)}
-            >
-              {t("common.delete")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={() => setDeleting(null)}
+        title={`${t("common.delete")} "${deleting?.name}"?`}
+        description={t("apiKeys.deleteConfirm")}
+        onConfirm={() => deleting && deleteMut.mutate(deleting.id)}
+      />
     </div>
   )
 }

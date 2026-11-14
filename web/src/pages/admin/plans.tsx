@@ -2,18 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Copy, Package, Pencil, Plus, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { CopyableId } from "@/components/copyable-id"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -353,50 +345,29 @@ export default function PlansPage() {
       )}
 
       {/* Lowering max seats below what some licenses hold */}
-      <AlertDialog open={seatWarningOpen} onOpenChange={setSeatWarningOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("plans.seatsLowerTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("plans.seatsLowerConfirm")
-                .replace("{count}", String(seatWarning?.over ?? 0))
-                .replace("{max}", String(seatWarning?.update.max_seats ?? 0))}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (seatWarning) updateMut.mutate(seatWarning.update)
-                setSeatWarningOpen(false)
-              }}
-            >
-              {t("common.save")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={seatWarningOpen}
+        onOpenChange={setSeatWarningOpen}
+        title={t("plans.seatsLowerTitle")}
+        description={t("plans.seatsLowerConfirm")
+          .replace("{count}", String(seatWarning?.over ?? 0))
+          .replace("{max}", String(seatWarning?.update.max_seats ?? 0))}
+        actionLabel={t("common.save")}
+        variant="default"
+        onConfirm={() => {
+          if (seatWarning) updateMut.mutate(seatWarning.update)
+          setSeatWarningOpen(false)
+        }}
+      />
 
       {/* Delete */}
-      <AlertDialog open={!!deleting} onOpenChange={() => setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("common.delete")} "{deleting?.name}"?
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("plans.deleteConfirm")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => deleting && deleteMut.mutate(deleting.id)}
-            >
-              {t("common.delete")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={() => setDeleting(null)}
+        title={`${t("common.delete")} "${deleting?.name}"?`}
+        description={t("plans.deleteConfirm")}
+        onConfirm={() => deleting && deleteMut.mutate(deleting.id)}
+      />
     </div>
   )
 }
@@ -1177,25 +1148,13 @@ function EntitlementSection({ planId, entitlements: initial }: { planId: string;
         </div>
       )}
 
-      <AlertDialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("plans.deleteEntitlementTitle", { feature: confirmDelete?.feature || "" })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("plans.deleteEntitlementDesc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => confirmDelete && deleteMut.mutate(confirmDelete.id)}
-            >
-              {t("common.delete")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={() => setConfirmDelete(null)}
+        title={t("plans.deleteEntitlementTitle", { feature: confirmDelete?.feature || "" })}
+        description={t("plans.deleteEntitlementDesc")}
+        onConfirm={() => confirmDelete && deleteMut.mutate(confirmDelete.id)}
+      />
     </div>
   )
 }

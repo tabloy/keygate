@@ -2,17 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Download, KeyRound, Plus, RotateCw, Trash2 } from "lucide-react"
 import { Fragment, type ReactNode, useState } from "react"
 import { Link } from "react-router-dom"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -176,20 +168,16 @@ function RequireSigningField({ product }: { product: Product }) {
         <Label htmlFor="require-signing">{t("updateSettings.requireSigning")}</Label>
       </div>
       <p className="text-xs text-muted-foreground">{t("updateSettings.requireSigningHint")}</p>
-      <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("updateSettings.unsignedTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("updateSettings.unsignedDesc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => save(false)} disabled={mut.isPending}>
-              {t("updateSettings.allowUnsigned")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirmOff}
+        onOpenChange={setConfirmOff}
+        title={t("updateSettings.unsignedTitle")}
+        description={t("updateSettings.unsignedDesc")}
+        actionLabel={t("updateSettings.allowUnsigned")}
+        variant="default"
+        loading={mut.isPending}
+        onConfirm={() => save(false)}
+      />
     </div>
   )
 }
@@ -434,24 +422,16 @@ function FeedAccessSection({ product }: { product: Product }) {
       </AccessOption>
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <AlertDialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pending ? t("updateSettings.confirmGateTitle") : t("updateSettings.confirmPublicTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {pending ? t("updateSettings.confirmGateDesc") : t("updateSettings.confirmPublicDesc")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => pending !== null && save(pending)} disabled={mut.isPending}>
-              {pending ? t("updateSettings.requireLicense") : t("updateSettings.makePublic")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(o) => !o && setPending(null)}
+        title={pending ? t("updateSettings.confirmGateTitle") : t("updateSettings.confirmPublicTitle")}
+        description={pending ? t("updateSettings.confirmGateDesc") : t("updateSettings.confirmPublicDesc")}
+        actionLabel={pending ? t("updateSettings.requireLicense") : t("updateSettings.makePublic")}
+        variant="default"
+        loading={mut.isPending}
+        onConfirm={() => pending !== null && save(pending)}
+      />
     </div>
   )
 }

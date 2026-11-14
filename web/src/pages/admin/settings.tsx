@@ -1,18 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowUpCircle, Check, RefreshCw, Send, Shield, Trash2, UserPlus } from "lucide-react"
 import { useEffect, useState } from "react"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { DEFAULT_REMINDER_DAYS, ReminderDaysInput } from "@/components/reminder-days-input"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -782,25 +773,17 @@ function TeamManagement() {
                   <div className="flex items-center gap-2">
                     <Badge variant={m.role === "owner" ? "default" : "secondary"}>{m.role}</Badge>
                     {isOwner && m.id !== user?.id && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      <ConfirmDialog
+                        trigger={
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{t("team.remove")}</AlertDialogTitle>
-                            <AlertDialogDescription>{t("team.removeConfirm")}</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <div className="flex justify-end gap-2 mt-4">
-                            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => removeMut.mutate(m.id)}>
-                              {t("team.remove")}
-                            </AlertDialogAction>
-                          </div>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        }
+                        title={t("team.remove")}
+                        description={t("team.removeConfirm")}
+                        actionLabel={t("team.remove")}
+                        onConfirm={() => removeMut.mutate(m.id)}
+                      />
                     )}
                   </div>
                 </div>

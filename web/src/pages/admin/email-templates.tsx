@@ -1,16 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Code, Eye, Mail, Pencil, RotateCcw } from "lucide-react"
 import { useState } from "react"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -326,27 +318,16 @@ export default function EmailTemplatesManager() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!confirmReset} onOpenChange={() => setConfirmReset(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("settings.resetTemplateTitle", {
-                template: (confirmReset && TEMPLATE_META[confirmReset]?.label) || "",
-              })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("settings.resetTemplateDesc")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => confirmReset && resetMut.mutate(confirmReset)}
-            >
-              {t("settings.resetTemplate")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!confirmReset}
+        onOpenChange={() => setConfirmReset(null)}
+        title={t("settings.resetTemplateTitle", {
+          template: (confirmReset && TEMPLATE_META[confirmReset]?.label) || "",
+        })}
+        description={t("settings.resetTemplateDesc")}
+        actionLabel={t("settings.resetTemplate")}
+        onConfirm={() => confirmReset && resetMut.mutate(confirmReset)}
+      />
     </div>
   )
 }

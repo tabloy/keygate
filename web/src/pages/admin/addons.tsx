@@ -2,17 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Package, Pencil, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router-dom"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -189,25 +181,13 @@ export default function AddonsPage() {
       {creating && <AddonDialog open onClose={() => setCreating(false)} products={products} />}
       {editing && <AddonDialog open onClose={() => setEditing(null)} products={products} addon={editing} />}
 
-      <AlertDialog open={!!deleting} onOpenChange={() => setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("common.delete")} "{deleting?.name}"?
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t("addons.deleteConfirm")}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => deleting && deleteMut.mutate(deleting.id)}
-            >
-              {t("common.delete")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={() => setDeleting(null)}
+        title={`${t("common.delete")} "${deleting?.name}"?`}
+        description={t("addons.deleteConfirm")}
+        onConfirm={() => deleting && deleteMut.mutate(deleting.id)}
+      />
     </div>
   )
 }

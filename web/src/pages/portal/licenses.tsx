@@ -1,16 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Key, Trash2 } from "lucide-react"
 import { useState, useSyncExternalStore } from "react"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -538,25 +530,14 @@ function ActivationsSection({ license }: { license: PortalLicense }) {
         </div>
       )}
 
-      <AlertDialog open={confirming} onOpenChange={(o) => !o && setConfirming(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("portal.removeDeviceTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("portal.removeDeviceDesc").replace("{device}", removing?.label || removing?.identifier || "")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => removing && removeMut.mutate(removing.id)}
-            >
-              {t("portal.removeDevice")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(o) => !o && setConfirming(false)}
+        title={t("portal.removeDeviceTitle")}
+        description={t("portal.removeDeviceDesc").replace("{device}", removing?.label || removing?.identifier || "")}
+        actionLabel={t("portal.removeDevice")}
+        onConfirm={() => removing && removeMut.mutate(removing.id)}
+      />
     </div>
   )
 }
@@ -835,32 +816,18 @@ function SeatsSection({ license, onAddSeats }: { license: PortalLicense; onAddSe
 
       {showInvite && <InviteSeatDialog license={license} onClose={() => setShowInvite(false)} />}
 
-      <AlertDialog open={confirming} onOpenChange={(o) => !o && setConfirming(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t(removing?.accepted_at ? "portal.removeMemberTitle" : "portal.cancelInviteTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t(removing?.accepted_at ? "portal.removeMemberDesc" : "portal.cancelInviteDesc").replace(
-                "{email}",
-                removing?.email || "",
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex justify-end gap-2">
-            {/* "Cancel" beside "Cancel invitation" reads as the same
-                thing; a pending invite's dialog says what dismissing does. */}
-            <AlertDialogCancel>{t(removing?.accepted_at ? "common.cancel" : "portal.keepInvite")}</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => removing && removeMut.mutate(removing.id)}
-            >
-              {t(removing?.accepted_at ? "portal.removeMember" : "portal.cancelInvite")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(o) => !o && setConfirming(false)}
+        title={t(removing?.accepted_at ? "portal.removeMemberTitle" : "portal.cancelInviteTitle")}
+        description={t(removing?.accepted_at ? "portal.removeMemberDesc" : "portal.cancelInviteDesc").replace(
+          "{email}",
+          removing?.email || "",
+        )}
+        cancelLabel={t(removing?.accepted_at ? "common.cancel" : "portal.keepInvite")}
+        actionLabel={t(removing?.accepted_at ? "portal.removeMember" : "portal.cancelInvite")}
+        onConfirm={() => removing && removeMut.mutate(removing.id)}
+      />
     </div>
   )
 }

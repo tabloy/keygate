@@ -13,17 +13,9 @@ import {
 } from "lucide-react"
 import { type ChangeEvent, useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
+import { ConfirmDialog } from "@/components/confirm-dialog"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -397,22 +389,15 @@ export default function ReleasesPage() {
       {openRelease && <ReleaseDetailDialog release={openRelease} onClose={() => setOpenRelease(null)} />}
       {yanking && <YankDialog release={yanking} onClose={() => setYanking(null)} />}
       {unyanking && (
-        <AlertDialog open onOpenChange={() => setUnyanking(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("releases.unyankTitle", { version: unyanking.version })}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("releases.unyankDesc", { version: unyanking.version })}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex justify-end gap-2">
-              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={() => unyanking && unyankMut.mutate(unyanking.id)}>
-                {t("releases.unyank")}
-              </AlertDialogAction>
-            </div>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+          open
+          onOpenChange={() => setUnyanking(null)}
+          title={t("releases.unyankTitle", { version: unyanking.version })}
+          description={t("releases.unyankDesc", { version: unyanking.version })}
+          actionLabel={t("releases.unyank")}
+          variant="default"
+          onConfirm={() => unyanking && unyankMut.mutate(unyanking.id)}
+        />
       )}
       {settings && (
         <UpdateSettingsDialog
@@ -424,46 +409,31 @@ export default function ReleasesPage() {
         />
       )}
       {deleting && (
-        <AlertDialog open onOpenChange={() => setDeleting(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("releases.deleteDraftTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>{t("releases.deleteDraftDesc")}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex justify-end gap-2 pt-2">
-              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction onClick={() => deleteMut.mutate(deleting.id)} disabled={deleteMut.isPending}>
-                {t("common.delete")}
-              </AlertDialogAction>
-            </div>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+          open
+          onOpenChange={() => setDeleting(null)}
+          title={t("releases.deleteDraftTitle")}
+          description={t("releases.deleteDraftDesc")}
+          loading={deleteMut.isPending}
+          onConfirm={() => deleteMut.mutate(deleting.id)}
+        />
       )}
       {confirmPublish && (
-        <AlertDialog open onOpenChange={() => setConfirmPublish(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("releases.publishOlderTitle")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {rich(t("releases.publishOlderDesc"), {
-                  version: <strong>{confirmPublish.rel.version}</strong>,
-                  latest: <strong>{confirmPublish.latest}</strong>,
-                })}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="flex justify-end gap-2 pt-2">
-              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  publishMut.mutate(confirmPublish.rel.id)
-                  setConfirmPublish(null)
-                }}
-              >
-                {t("releases.publishAnyway")}
-              </AlertDialogAction>
-            </div>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+          open
+          onOpenChange={() => setConfirmPublish(null)}
+          title={t("releases.publishOlderTitle")}
+          description={rich(t("releases.publishOlderDesc"), {
+            version: <strong>{confirmPublish.rel.version}</strong>,
+            latest: <strong>{confirmPublish.latest}</strong>,
+          })}
+          actionLabel={t("releases.publishAnyway")}
+          variant="default"
+          onConfirm={() => {
+            publishMut.mutate(confirmPublish.rel.id)
+            setConfirmPublish(null)
+          }}
+        />
       )}
     </div>
   )
