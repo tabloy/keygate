@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
 import { ProductSelect } from "@/components/product-select"
+import { SearchInput } from "@/components/search-input"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -196,12 +197,7 @@ export default function PlansPage() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Input
-          placeholder={t("common.search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-64"
-        />
+        <SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} className="w-full sm:w-64" />
         {/* "all" maps back to no filter here: it used to be sent as a
             product_id of its own, which matched nothing. */}
         <ProductSelect

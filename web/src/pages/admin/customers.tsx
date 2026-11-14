@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
-import { Eye, Search } from "lucide-react"
+import { Eye } from "lucide-react"
 import { useState } from "react"
+import { SearchInput } from "@/components/search-input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -15,7 +16,6 @@ import {
   DataTableRow,
 } from "@/components/ui/data-table"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
@@ -46,18 +46,14 @@ export default function CustomersPage() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t("common.search")}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(0)
-            }}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(v) => {
+            setSearch(v)
+            setPage(0)
+          }}
+          placeholder={t("common.search")}
+        />
       </div>
 
       <Card>

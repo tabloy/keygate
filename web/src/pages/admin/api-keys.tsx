@@ -3,6 +3,7 @@ import { Check, Copy, Eye, EyeOff, Package, Plus, RefreshCw, Trash2 } from "luci
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
+import { SearchInput } from "@/components/search-input"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -135,12 +136,7 @@ export default function APIKeysPage() {
 
       <div className="flex flex-wrap gap-3">
         <ProductSelect value={productFilter} onChange={setProductFilter} allLabel={t("filter.allProducts")} />
-        <Input
-          placeholder={t("common.search")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full sm:w-64"
-        />
+        <SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} className="w-full sm:w-64" />
       </div>
 
       <Card>

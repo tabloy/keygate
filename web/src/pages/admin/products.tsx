@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Cloud, Laptop, Layers, Pencil, Plus, Search, Settings2, Trash2 } from "lucide-react"
+import { Cloud, Laptop, Layers, Pencil, Plus, Settings2, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { CopyableId } from "@/components/copyable-id"
+import { SearchInput } from "@/components/search-input"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -100,18 +101,14 @@ export default function ProductsPage() {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t("common.search")}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              pg.setPage(0)
-            }}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(v) => {
+            setSearch(v)
+            pg.setPage(0)
+          }}
+          placeholder={t("common.search")}
+        />
       </div>
 
       <Card>

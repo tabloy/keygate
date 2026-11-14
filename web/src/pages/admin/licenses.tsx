@@ -12,7 +12,6 @@ import {
   Plus,
   RefreshCw,
   RotateCw,
-  Search,
   Trash2,
   Unlink,
 } from "lucide-react"
@@ -21,6 +20,7 @@ import { Link } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
 import { PlanSelect } from "@/components/plan-select"
 import { ProductSelect } from "@/components/product-select"
+import { SearchInput } from "@/components/search-input"
 import { showToast } from "@/components/toast"
 import {
   AlertDialog,
@@ -178,15 +178,12 @@ export default function LicensesPage() {
         wrap, and the search box takes the whole first row rather than
         being squeezed to a few characters. */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t("licenses.searchPlaceholder")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder={t("licenses.searchPlaceholder")}
+          className="w-full sm:w-auto sm:flex-1 sm:max-w-sm"
+        />
         {/* The two dropdowns share one row on a phone rather than
           taking one each: they fit side by side, and the search box
           above them is the control that needs the full width. */}
