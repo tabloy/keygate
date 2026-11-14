@@ -62,3 +62,54 @@ export function maskKey(hint?: string, prefix?: string): string {
   if (!hint) return "••••"
   return prefix ? `${prefix}-••••-${hint}` : `••••-${hint}`
 }
+
+// formatBytes converts a raw byte count into a human-readable string
+// (e.g. for release artifact sizes).
+export function formatBytes(n: number): string {
+  if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${n} B`
+}
+
+// formatQuota formats a quota or usage count for display, abbreviating
+// large numbers (e.g. for activation or seat counts).
+export function formatQuota(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} GB`
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} MB`
+  return n.toLocaleString()
+}
+
+// Stripe currency helpers — zero-decimal and three-decimal currency sets.
+// formatMoney converts a Stripe amount (smallest currency unit) into a
+// human-readable string using the browser's locale.
+const STRIPE_ZERO_DECIMAL = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "JPY",
+  "KMF",
+  "KRW",
+  "MGA",
+  "PYG",
+  "RWF",
+  "UGX",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+])
+const STRIPE_THREE_DECIMAL = new Set(["BHD", "JOD", "KWD", "OMR", "TND"])
+
+export function formatMoney(amount: number, currency: string, locale?: string): string {
+  const code = (currency || "usd").toUpperCase()
+  const digits = STRIPE_ZERO_DECIMAL.has(code) ? 0 : STRIPE_THREE_DECIMAL.has(code) ? 3 : 2
+  try {
+    const fmt = new Intl.NumberFormat(locale, { style: "currency", currency: code })
+    return fmt.format(amount / 10 ** digits)
+  } catch {
+    return `${(amount / 100).toFixed(2)} ${code}`
+  }
+}

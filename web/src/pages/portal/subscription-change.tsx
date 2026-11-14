@@ -15,40 +15,9 @@ import {
   type SubscriptionChangePreview,
   type SubscriptionChangeResult,
 } from "@/lib/api"
-import { formatDate } from "@/lib/utils"
+import { formatDate, formatMoney } from "@/lib/utils"
 
-// Stripe amounts are in the currency's smallest unit, by Stripe's own
-// count of decimals (not the browser's): none for the zero-decimal
-// currencies, three for the three-decimal ones, two for every other,
-// ISK and UGX included.
-const STRIPE_ZERO_DECIMAL = new Set([
-  "BIF",
-  "CLP",
-  "DJF",
-  "GNF",
-  "JPY",
-  "KMF",
-  "KRW",
-  "MGA",
-  "PYG",
-  "RWF",
-  "VND",
-  "VUV",
-  "XAF",
-  "XOF",
-  "XPF",
-])
-const STRIPE_THREE_DECIMAL = new Set(["BHD", "JOD", "KWD", "OMR", "TND"])
-export function formatMoney(amount: number, currency: string, locale?: string) {
-  const code = (currency || "usd").toUpperCase()
-  const digits = STRIPE_ZERO_DECIMAL.has(code) ? 0 : STRIPE_THREE_DECIMAL.has(code) ? 3 : 2
-  try {
-    const fmt = new Intl.NumberFormat(locale, { style: "currency", currency: code })
-    return fmt.format(amount / 10 ** digits)
-  } catch {
-    return `${(amount / 100).toFixed(2)} ${code}`
-  }
-}
+export { formatMoney }
 
 // people is who is on the licence now: the owner and its members.
 function peopleOn(license: PortalLicense) {

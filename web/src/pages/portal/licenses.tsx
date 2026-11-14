@@ -32,7 +32,7 @@ import {
   portal,
   type Seat,
 } from "@/lib/api"
-import { cn, formatDate, statusColor } from "@/lib/utils"
+import { cn, formatDate, formatQuota, statusColor } from "@/lib/utils"
 import { formatMoney, PendingChangeNotice, SubscriptionChangeDialog } from "./subscription-change"
 
 export default function PortalLicensesPage() {
@@ -589,7 +589,7 @@ function EntitlementsSection({ entitlements }: { entitlements: Entitlement[] }) 
             ) : ent.value_type === "quota" ? (
               <span>
                 {/^\+?\d+$/.test(ent.value) && Number(ent.value) > 0
-                  ? formatNumber(Number(ent.value))
+                  ? formatQuota(Number(ent.value))
                   : t("common.unlimited")}{" "}
                 {ent.quota_unit || "units"} / {ent.quota_period || "period"}
               </span>
@@ -1093,8 +1093,8 @@ function QuotaBar({ entitlement, licenseKey }: { entitlement: Entitlement; licen
         <span className="font-medium">{entitlement.feature}</span>
         <span className={cn("text-xs", isWarning ? "text-amber-600 font-medium" : "text-muted-foreground")}>
           {unlimited
-            ? `${formatNumber(used)} / ${t("common.unlimited")}`
-            : `${formatNumber(used)} / ${formatNumber(limit)} (${Math.round(percentage)}%)`}
+            ? `${formatQuota(used)} / ${t("common.unlimited")}`
+            : `${formatQuota(used)} / ${formatQuota(limit)} (${Math.round(percentage)}%)`}
         </span>
       </div>
       <div className={cn("h-2.5 bg-muted rounded-full overflow-hidden", unlimited && "hidden")}>
@@ -1113,12 +1113,6 @@ function QuotaBar({ entitlement, licenseKey }: { entitlement: Entitlement; licen
       )}
     </div>
   )
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} GB`
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} MB`
-  return n.toLocaleString()
 }
 
 function CancelDialog({

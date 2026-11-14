@@ -58,7 +58,7 @@ import {
 import { useI18n } from "@/i18n"
 import { admin, RELEASE_CHANNELS, RELEASE_PLATFORMS, type Release, type ReleaseArtifact } from "@/lib/api"
 import { compareSemver } from "@/lib/semver"
-import { formatDate } from "@/lib/utils"
+import { formatBytes, formatDate } from "@/lib/utils"
 
 const PAGE_SIZE = 20
 
@@ -929,13 +929,6 @@ function YankDialog({ release, onClose }: { release: Release; onClose: () => voi
 }
 
 // ─── Helpers ───
-
-function formatBytes(n: number): string {
-  if (n >= 1024 * 1024 * 1024) return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
-  if (n >= 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`
-  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${n} B`
-}
 
 const CLIENT_HASH_MAX_BYTES = 256 * 1024 * 1024
 
