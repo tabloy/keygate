@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
@@ -38,6 +39,24 @@ func (h *AuthHandler) OTPSend(c *gin.Context) {
 // claiming a licence on a plan the operator opened is itself the
 // sign-up that gate is about.
 func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
+	// Whether a code can be mailed is read first. If the settings cannot
+	// be read (a DB blip, a secret that will not decrypt) nothing can be
+	// sent, and the code must not fall back to the log either: that would
+	// leak a live login code on an infra hiccup. So the caller hears it
+	// now, the same for every address, and no code is stored to count
+	// against the three an address gets per ten minutes.
+	emailConfigured := false
+	if h.Email != nil {
+		configured, err := h.Email.Configured()
+		if err != nil {
+			slog.Error("otp email config unavailable; code not sent", "email", email, "error", err)
+			response.Err(c, http.StatusServiceUnavailable, "EMAIL_UNAVAILABLE",
+				"login email is temporarily unavailable, please try again shortly")
+			return
+		}
+		emailConfigured = configured
+	}
+
 	// Rate limit: max 3 OTP requests per email per 10 minutes
 	count, err := h.Store.CountRecentOTPCodes(c, email)
 	if err != nil {
@@ -91,24 +110,10 @@ func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
 		slog.Warn("SMTP not configured — OTP code printed to log (configure SMTP for email delivery)",
 			"email", email, "code", code)
 	}
-	switch {
-	case h.Email == nil:
+	if emailConfigured {
+		h.Email.SendOTPCode(email, code)
+	} else {
 		logCodeFallback()
-	default:
-		configured, cErr := h.Email.Configured()
-		switch {
-		case cErr != nil:
-			// A transient config read error (DB blip, decrypt failure)
-			// must NOT fall back to logging the code in plaintext: that
-			// would leak a live login code on an infra hiccup. Fail
-			// closed — the user simply retries once the read recovers.
-			slog.Error("otp email config unavailable; code not sent and not logged",
-				"email", email, "error", cErr)
-		case configured:
-			h.Email.SendOTPCode(email, code)
-		default:
-			logCodeFallback()
-		}
 	}
 
 	response.OK(c, gin.H{"status": "sent"})
@@ -147,7 +152,9 @@ func (h *AuthHandler) OTPVerify(c *gin.Context) {
 		h.Email.SendWelcome(user.Email, user.Name)
 	}
 
-	h.startSession(c, user)
+	if !h.startSession(c, user) {
+		return
+	}
 
 	response.OK(c, gin.H{
 		"status": "ok", "email": user.Email, "name": user.Name,
@@ -227,15 +234,20 @@ func (h *AuthHandler) loginUser(c *gin.Context, email string) (*model.User, erro
 	return user, nil
 }
 
-// startSession signs user in after a code login and records it.
-func (h *AuthHandler) startSession(c *gin.Context, user *model.User) {
-	h.issueSession(c, user)
+// startSession signs user in after a code login and records it. If
+// the session cannot be stored it writes the 500 and returns false.
+func (h *AuthHandler) startSession(c *gin.Context, user *model.User) bool {
+	if err := h.issueSession(c, user); err != nil {
+		response.Internal(c, err)
+		return false
+	}
 
 	h.Store.Audit(c, &model.AuditLog{
 		Entity: "session", EntityID: user.ID, Action: "login",
 		ActorType: "otp", ActorID: user.ID, IPAddress: c.ClientIP(),
 		Changes: map[string]any{"email": user.Email},
 	})
+	return true
 }
 
 // signupAllowed reports whether email may receive a login code.

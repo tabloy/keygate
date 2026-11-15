@@ -74,8 +74,10 @@ async function request<T>(path: string, opts?: RequestInit, retried = false): Pr
     }
   }
 
-  // Could not renew: redirect to login
-  if (res.status === 401 && !signup) {
+  // Could not renew: redirect to login. Only for calls a session would
+  // have carried: an auth call's 401 ("invalid or expired code") is its
+  // own answer and falls through to be shown as it is.
+  if (res.status === 401 && renewable) {
     // Don't redirect if already on login page or fetching auth state
     if (!window.location.pathname.startsWith("/login") && path !== "/portal/me") {
       window.location.href = "/login"
@@ -119,6 +121,28 @@ async function request<T>(path: string, opts?: RequestInit, retried = false): Pr
 
 function get<T>(path: string) {
   return request<T>(path)
+}
+
+// downloadFile saves what path answers as filename. A plain <a href>
+// skips the session renewal every other call gets, so a page left open
+// past the session's day saved the 401 error as the file. Here an
+// expired session is renewed once, and a failure is thrown, not saved.
+async function downloadFile(path: string, filename: string): Promise<void> {
+  const fetchIt = () => fetch(BASE + path, { credentials: "include" })
+  let res = await fetchIt()
+  if (res.status === 401 && (await refreshSession()) === "ok") res = await fetchIt()
+  if (!res.ok) {
+    const json = await res.json().catch(() => null)
+    throw new Error(json?.error?.message || `Download failed (${res.status})`)
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 function post<T>(path: string, body?: unknown) {
   return request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined })
@@ -654,6 +678,8 @@ export const admin = {
       changelog?: string
       update_command?: string
       checked_at?: string
+      // Set when GitHub could not be asked; nothing else is known then.
+      error?: string
     }>("/admin/system/update-check"),
 
   // ─── Releases (industry-standard bundle model) ───
@@ -723,7 +749,8 @@ export const admin = {
       method: "DELETE",
       body: JSON.stringify({ note }),
     }),
-  publicKeyURL: (productId: string) => `${BASE}/admin/products/${productId}/signing-key/public.pem`,
+  downloadPublicKey: (productId: string) =>
+    downloadFile(`/admin/products/${productId}/signing-key/public.pem`, "public_key.pem"),
   tauriPublicKey: (productId: string) =>
     get<{ pubkey: string }>(`/admin/products/${productId}/signing-key/tauri-pubkey`),
 }

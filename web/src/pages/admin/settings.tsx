@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/hooks/use-auth"
+import { SITE_CONFIG_KEY } from "@/hooks/use-site-config"
 import { useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
 import EmailTemplatesManager from "@/pages/admin/email-templates"
@@ -179,6 +180,8 @@ export default function SettingsPage() {
     mutationFn: () => admin.updateSettings(changedSettings()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "settings"] })
+      // Name, logo, colour and language show everywhere at once.
+      qc.invalidateQueries({ queryKey: SITE_CONFIG_KEY })
       // Secrets are write-only: the API never returns them, so replacing
       // one leaves the settings response byte-identical and the [data]
       // effect (guarded by structural sharing) never re-seeds the form.
@@ -230,6 +233,7 @@ export default function SettingsPage() {
     data: updateData,
     refetch: recheckUpdate,
     isFetching: updateChecking,
+    isError: updateRequestFailed,
   } = useQuery({
     queryKey: ["admin", "update-check"],
     queryFn: admin.checkUpdate,
@@ -674,7 +678,14 @@ export default function SettingsPage() {
                   {t("settings.checkUpdate")}
                 </Button>
 
-                {updateData &&
+                {/* A check that could not reach GitHub knows nothing about
+                    the latest version: say so, never "up to date". */}
+                {updateRequestFailed || updateData?.error ? (
+                  <span role="alert" className="text-sm text-destructive">
+                    {t("settings.updateCheckFailed")}
+                  </span>
+                ) : (
+                  updateData &&
                   (updateData.available ? (
                     <div className="flex items-center gap-2 bg-blue-50 text-blue-800 rounded-lg px-4 py-2 text-sm">
                       <ArrowUpCircle className="h-4 w-4" />
@@ -695,7 +706,8 @@ export default function SettingsPage() {
                       <Check className="h-4 w-4" />
                       {t("settings.upToDate")}
                     </span>
-                  ))}
+                  ))
+                )}
               </div>
 
               {updateData?.changelog && updateData.available && (

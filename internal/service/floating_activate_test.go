@@ -57,7 +57,7 @@ func TestFloatingPlanRefusesDeviceActivation(t *testing.T) {
 
 	_, priv, _ := ed25519.GenerateKey(rand.Reader)
 	ls := NewLicenseService(s, priv, slog.Default(), nil, nil)
-	fs := NewFloatingService(s, slog.Default())
+	fs := NewFloatingService(s, slog.Default(), nil)
 	if _, err := fs.CheckOut(ctx, CheckOutInput{LicenseKey: key, Identifier: "ws-1"}); err != nil {
 		t.Fatalf("checkout: %v", err)
 	}

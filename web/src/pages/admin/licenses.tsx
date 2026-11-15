@@ -17,7 +17,7 @@ import {
   Unlink,
 } from "lucide-react"
 import { useRef, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { CopyableId } from "@/components/copyable-id"
 import { PlanSelect } from "@/components/plan-select"
 import { ProductSelect } from "@/components/product-select"
@@ -115,7 +115,20 @@ export default function LicensesPage() {
   })
 
   const [creating, setCreating] = useState(false)
-  const [viewing, setViewing] = useState<string | null>(null)
+  // The open license lives in the URL (?id=), so the dashboard's links
+  // to a license, a reload and the back button all land on it.
+  const [params, setParams] = useSearchParams()
+  const viewing = params.get("id")
+  const setViewing = (id: string | null) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (id) next.set("id", id)
+        else next.delete("id")
+        return next
+      },
+      { replace: !id },
+    )
 
   const products = productsData?.products || []
   const { items: licenses, total, totalPages } = pg.from(data, data?.licenses)
@@ -329,7 +342,7 @@ export default function LicensesPage() {
       )}
 
       {/* Detail */}
-      {viewing && <LicenseDetail id={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <LicenseDetail key={viewing} id={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
@@ -446,7 +459,7 @@ function CreateLicenseDialog({
               <Input
                 type="date"
                 value={validUntil}
-                min={new Date().toISOString().slice(0, 10)}
+                min={localDateValue(new Date().toISOString())}
                 onChange={(e) => setValidUntil(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">{t("licenses.validUntilHint")}</p>
@@ -493,7 +506,11 @@ function CreateLicenseDialog({
 function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { t } = useI18n()
   const qc = useQueryClient()
-  const { data: lic, isLoading } = useQuery({
+  const {
+    data: lic,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["admin", "license", id],
     queryFn: () => admin.getLicense(id),
   })
@@ -654,7 +671,16 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <DialogDescription>{lic?.email}</DialogDescription>
           {lic && <CopyableId id={lic.id} />}
         </DialogHeader>
-        {isLoading || !lic ? (
+        {error && !lic ? (
+          // Opened from a link (?id=) to a license that is gone, or the
+          // read failed: say so rather than load forever.
+          <div role="alert" className="space-y-3 py-4">
+            <p className="text-sm text-destructive">{error.message}</p>
+            <Button variant="outline" onClick={onClose}>
+              {t("common.close")}
+            </Button>
+          </div>
+        ) : isLoading || !lic ? (
           <div className="h-48 animate-pulse bg-muted rounded-lg" />
         ) : (
           <Tabs defaultValue="info" className="flex min-h-0 flex-1 flex-col">

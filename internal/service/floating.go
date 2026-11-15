@@ -12,12 +12,13 @@ import (
 )
 
 type FloatingService struct {
-	store  *store.Store
-	logger *slog.Logger
+	store    *store.Store
+	logger   *slog.Logger
+	failures FailureTracker
 }
 
-func NewFloatingService(s *store.Store, logger *slog.Logger) *FloatingService {
-	return &FloatingService{store: s, logger: logger}
+func NewFloatingService(s *store.Store, logger *slog.Logger, failures FailureTracker) *FloatingService {
+	return &FloatingService{store: s, logger: logger, failures: failures}
 }
 
 type CheckOutInput struct {
@@ -41,12 +42,22 @@ func (s *FloatingService) CheckOut(ctx context.Context, in CheckOutInput) (*Chec
 	// non-floating plan, suspended/revoked/expired) to one 404. Each
 	// of these would otherwise be an oracle for license existence or
 	// configuration; the legitimate floating client never hits them.
+	//
+	// Checkout is how a floating licence starts, as activate is for a
+	// device one (which refuses floating plans), so each of these 404s
+	// counts against the caller's address the way verify's do.
 	lic, err := loadLicenseForSDK(ctx, s.store, in.LicenseKey, in.ProductID, model.CapActivations, true)
-	if err != nil {
-		return nil, err
+	if err == nil && (lic.Plan == nil || lic.Plan.LicenseModel != "floating") {
+		err = licenseNotFound()
 	}
-	if lic.Plan == nil || lic.Plan.LicenseModel != "floating" {
-		return nil, licenseNotFound()
+	if err != nil {
+		var ae *apperr.AppError
+		if errors.As(err, &ae) && ae.Code == "LICENSE_NOT_FOUND" {
+			if locked := recordAddressFailure(s.failures, in.IPAddress); locked != nil {
+				return nil, locked
+			}
+		}
+		return nil, err
 	}
 
 	timeout := lic.Plan.FloatingTimeout

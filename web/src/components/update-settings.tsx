@@ -794,11 +794,13 @@ function ActiveSigningKeyCard({
           {rich(t("updateSettings.tauriKeyHint"), { field: <code>pubkey</code> })}
         </PublicKeyField>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <a href={admin.publicKeyURL(productId)} download="public_key.pem">
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              {t("updateSettings.downloadPem")}
-            </a>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => admin.downloadPublicKey(productId).catch((e: Error) => showToast(e.message, "error"))}
+          >
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            {t("updateSettings.downloadPem")}
           </Button>
           <Button variant="outline" size="sm" onClick={onRotate}>
             <RotateCw className="h-3.5 w-3.5 mr-1.5" />

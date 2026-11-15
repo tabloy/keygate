@@ -75,6 +75,7 @@ const en = {
   "nav.menu": "Menu",
   "nav.portal": "User Portal",
   "nav.logout": "Logout",
+  "nav.logoutFailed": "Could not log out. Please try again.",
 
   // Dashboard
   "dashboard.title": "Dashboard",
@@ -571,6 +572,7 @@ const en = {
   "settings.updateAvailable": "Version {version} is available!",
   "settings.viewRelease": "View Release",
   "settings.upToDate": "You're up to date",
+  "settings.updateCheckFailed": "Could not check for updates. Try again later.",
   "settings.changelog": "What's New",
   "settings.saved": "Settings saved successfully.",
   "settings.saveError": "Failed to save settings.",

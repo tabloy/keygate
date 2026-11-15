@@ -94,13 +94,6 @@ func (bf *BruteForceProtection) RecordFailure(key string) {
 	}
 }
 
-// RecordSuccess clears the failure record for a key.
-func (bf *BruteForceProtection) RecordSuccess(key string) {
-	bf.mu.Lock()
-	defer bf.mu.Unlock()
-	delete(bf.attempts, key)
-}
-
 // IsBlocked checks if a key is currently locked out.
 func (bf *BruteForceProtection) IsBlocked(key string) (bool, time.Duration) {
 	bf.mu.RLock()

@@ -970,13 +970,17 @@ function PlanDialog({
         {plan && (
           <>
             <Separator />
-            <EntitlementSection planId={plan.id} entitlements={plan.entitlements || []} />
+            <EntitlementSection planId={plan.id} entitlements={plan.entitlements ?? NO_ENTITLEMENTS} />
           </>
         )}
       </DialogContent>
     </Dialog>
   )
 }
+
+// One shared empty list: a fresh [] on every render would re-run the
+// section's sync effect each time and wipe what it holds.
+const NO_ENTITLEMENTS: Entitlement[] = []
 
 function EntitlementSection({ planId, entitlements: initial }: { planId: string; entitlements: Entitlement[] }) {
   const { t } = useI18n()
@@ -1023,7 +1027,10 @@ function EntitlementSection({ planId, entitlements: initial }: { planId: string;
         value_type: string
         value: string
       }),
-    onSuccess: () => {
+    // The editor holds the plan as it was opened, so the list is kept
+    // here from what each write returns; the refetch is for the table.
+    onSuccess: (created) => {
+      setEntitlements((cur) => [...cur.filter((e) => e.id !== created.id), created])
       qc.invalidateQueries({ queryKey: ["admin", "plans"] })
       setAdding(false)
       setNewEnt({
@@ -1040,7 +1047,8 @@ function EntitlementSection({ planId, entitlements: initial }: { planId: string;
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => admin.deleteEntitlement(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      setEntitlements((cur) => cur.filter((e) => e.id !== id))
       qc.invalidateQueries({ queryKey: ["admin", "plans"] })
       setConfirmDelete(null)
     },

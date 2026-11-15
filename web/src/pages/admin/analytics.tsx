@@ -78,13 +78,17 @@ function snapshotPeriod(s: AnalyticsSnapshot | AggregatedSnapshot, granularity: 
   const d = new Date(raw)
   if (Number.isNaN(d.getTime())) return raw
   const locale = dateLocale()
+  // A bucket is a calendar day (or the week or month it starts), sent as
+  // UTC midnight: read in the browser's zone, anyone west of Greenwich
+  // would see the day before.
+  const timeZone = "UTC"
   switch (granularity) {
     case "monthly":
-      return d.toLocaleDateString(locale, { year: "numeric", month: "2-digit" })
+      return d.toLocaleDateString(locale, { timeZone, year: "numeric", month: "2-digit" })
     case "weekly":
-      return d.toLocaleDateString(locale, { year: "numeric", month: "2-digit", day: "2-digit" })
+      return d.toLocaleDateString(locale, { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
     default:
-      return d.toLocaleDateString(locale, { month: "2-digit", day: "2-digit" })
+      return d.toLocaleDateString(locale, { timeZone, month: "2-digit", day: "2-digit" })
   }
 }
 

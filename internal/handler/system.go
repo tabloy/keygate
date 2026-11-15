@@ -57,12 +57,29 @@ func (h *SystemHandler) GetVersion(c *gin.Context) {
 	})
 }
 
-// CheckUpdate checks GitHub for a newer release. Results are cached for 1 hour.
+// A successful check is kept for an hour. A failed one only for a few
+// minutes: long enough that an install with no way out to GitHub does
+// not ask again on every dashboard load, short enough that "Check for
+// Updates" after the network is back gets a fresh answer.
+const (
+	updateCheckTTL       = time.Hour
+	failedUpdateCheckTTL = 5 * time.Minute
+)
+
+func (u *updateInfo) fresh(checked time.Time) bool {
+	ttl := updateCheckTTL
+	if u.Error != "" {
+		ttl = failedUpdateCheckTTL
+	}
+	return time.Since(checked) < ttl
+}
+
+// CheckUpdate checks GitHub for a newer release, cached as above.
 // On startup, the background checker calls this periodically so the dashboard
 // always shows fresh update status without the admin clicking anything.
 func (h *SystemHandler) CheckUpdate(c *gin.Context) {
 	h.cacheMu.RLock()
-	if h.updateCache != nil && time.Since(h.cacheTime) < time.Hour {
+	if h.updateCache != nil && h.updateCache.fresh(h.cacheTime) {
 		h.cacheMu.RUnlock()
 		response.OK(c, h.updateCache)
 		return
@@ -120,6 +137,7 @@ func (h *SystemHandler) fetchLatestRelease() *updateInfo {
 	url := "https://api.github.com/repos/" + h.RepoOwner + "/" + h.RepoName + "/releases/latest"
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
+		info.Error = "failed to build the GitHub request"
 		return info
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")

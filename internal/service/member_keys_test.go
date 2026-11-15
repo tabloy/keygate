@@ -276,7 +276,7 @@ func TestMemberKeyFloatingThroughTheSDK(t *testing.T) {
 	}
 	alice, aliceKey := member("alice")
 	_, bobKey := member("bob")
-	fs := NewFloatingService(s, slog.Default())
+	fs := NewFloatingService(s, slog.Default(), nil)
 	code := func(err error) string {
 		var ae *apperr.AppError
 		if errors.As(err, &ae) {

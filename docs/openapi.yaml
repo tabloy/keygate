@@ -146,15 +146,18 @@ info:
     seconds: 60 for the per minute buckets, 3600 for the hourly
     code-sending bucket.
 
-    Failed `/license/activate`, `/license/verify` and
-    `/license/deactivate` calls (an unknown key, and for verify an
-    unusable license) are counted per IP. After `BF_MAX_FAILS` failures
-    (default 5) within 5 minutes the IP is locked out of all of
-    `/license/*` for `BF_LOCKOUT_SECONDS` (default 30), doubling on each
-    further lockout up to 30 minutes. The doubling is remembered until
-    30 minutes after the last lockout ends; a successful call from the
-    IP clears it. A locked out request answers `429 LOCKED_OUT` with
-    `Retry-After` and `details.retry_after` in seconds.
+    Failed `/license/activate`, `/license/verify`,
+    `/license/deactivate` and `/license/floating/checkout` calls (an
+    unknown key, and for verify and floating checkout any license
+    answered as `LICENSE_NOT_FOUND`) are counted per IP. The polling
+    endpoints are not counted. After `BF_MAX_FAILS` failures (default
+    5) within 5 minutes the IP is locked out of all of `/license/*` for
+    `BF_LOCKOUT_SECONDS` (default 30), doubling on each further lockout
+    up to 30 minutes. The doubling is remembered until 30 minutes after
+    the last lockout ends. A successful call does not clear the count:
+    failures only age out. A locked out request answers
+    `429 LOCKED_OUT` with `Retry-After` and `details.retry_after` in
+    seconds.
 
     ## Existence-oracle hardening
 

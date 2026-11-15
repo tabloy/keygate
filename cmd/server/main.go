@@ -288,7 +288,7 @@ func main() {
 	usageSvc := service.NewUsageService(db, webhookSvc, emailSvc, logger, cfg.QuotaWarningThreshold)
 	seatSvc := service.NewSeatService(db, webhookSvc, emailSvc, logger, cfg.BaseURL)
 	entitlementSvc := service.NewEntitlementService(db, logger)
-	floatingSvc := service.NewFloatingService(db, logger)
+	floatingSvc := service.NewFloatingService(db, logger, bf)
 
 	// ─── Release subsystem (storage + service) ───
 	// When STORAGE_* env vars aren't configured we fall back to a Disabled
@@ -779,7 +779,9 @@ func main() {
 	// product's data.
 	//
 	// Defenses kept:
-	//   - LicenseBruteForceGuard — per-IP throttle on failed verifies
+	//   - LicenseBruteForceGuard — locks an IP out of /license/* after
+	//     repeated failed activate / verify / deactivate / floating
+	//     checkout calls
 	//   - RateLimitByIPScoped — per-route-family request cap (raised
 	//     because legitimate SDK clients poll on a timer). Every family
 	//     has its own bucket: SDK polling from an office NAT must not

@@ -18,9 +18,12 @@ import (
 )
 
 // FailureTracker tracks failed authentication attempts for brute-force protection.
+//
+// Failures are counted per address and only age out with the window: a
+// success does not clear them. A caller holding one valid key could
+// otherwise verify it between guesses and never be locked out.
 type FailureTracker interface {
 	RecordFailure(key string)
-	RecordSuccess(key string)
 	IsBlocked(key string) (bool, time.Duration)
 }
 
@@ -195,10 +198,6 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 		Changes: map[string]any{"identifier": in.Identifier, "type": in.IdentifierType, "label": in.Label},
 	})
 
-	if s.failures != nil {
-		s.failures.RecordSuccess(middleware.FailureKeyIP(in.IPAddress))
-	}
-
 	s.logger.Info("license activated",
 		"license_id", lic.ID, "identifier", in.Identifier, "type", in.IdentifierType)
 
@@ -228,12 +227,16 @@ func (s *LicenseService) Activate(ctx context.Context, in ActivateInput) (*Activ
 // answered from here — and a plain 404 tells a client nothing about
 // the wall it has just walked into, so it comes straight back.
 func (s *LicenseService) recordFailure(ip string) *apperr.AppError {
-	if s.failures == nil {
+	return recordAddressFailure(s.failures, ip)
+}
+
+func recordAddressFailure(failures FailureTracker, ip string) *apperr.AppError {
+	if failures == nil {
 		return nil
 	}
 	key := middleware.FailureKeyIP(ip)
-	s.failures.RecordFailure(key)
-	if blocked, retryAfter := s.failures.IsBlocked(key); blocked {
+	failures.RecordFailure(key)
+	if blocked, retryAfter := failures.IsBlocked(key); blocked {
 		return lockedOut(retryAfter)
 	}
 	return nil
@@ -347,10 +350,6 @@ func (s *LicenseService) Verify(ctx context.Context, in VerifyInput) (*VerifyRes
 	}
 	_ = s.store.TouchActivation(ctx, act.ID)
 
-	if s.failures != nil {
-		s.failures.RecordSuccess(middleware.FailureKeyIP(in.IPAddress))
-	}
-
 	planName := ""
 	if lic.Plan != nil {
 		planName = lic.Plan.Name
@@ -449,10 +448,6 @@ func (s *LicenseService) Deactivate(ctx context.Context, in DeactivateInput) err
 			return licenseNotFound()
 		}
 		return apperr.Internal(err)
-	}
-
-	if s.failures != nil {
-		s.failures.RecordSuccess(middleware.FailureKeyIP(in.IPAddress))
 	}
 
 	s.store.Audit(ctx, &model.AuditLog{

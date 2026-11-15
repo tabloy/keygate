@@ -65,9 +65,12 @@ type Config struct {
 	// sign-ups are open.
 	RateLimitOTPSend int
 
-	// Brute-force protection on /license/* — caps repeated bad license
-	// keys per IP. In tests these defaults are too tight, so they're
-	// configurable via env: BF_MAX_FAILS=5 / BF_LOCKOUT_SECONDS=30.
+	// Brute-force protection — caps repeated bad license keys per IP.
+	// Failures are counted on activate, verify, deactivate and floating
+	// checkout (not on the polling endpoints); a lockout turns the IP
+	// away from all of /license/*. In tests these defaults are too
+	// tight, so they're configurable via env: BF_MAX_FAILS=5 /
+	// BF_LOCKOUT_SECONDS=30.
 	BFMaxFails       int
 	BFLockoutSeconds int
 

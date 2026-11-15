@@ -58,8 +58,8 @@ func (s *UsageService) RecordUsage(ctx context.Context, in RecordUsageInput) (*R
 
 	// Public SDK endpoint: collapse every "license unavailable"
 	// condition into 404 LICENSE_NOT_FOUND. A leaked "exists but
-	// suspended" would let attackers probe key validity without
-	// burning the activation rate limit.
+	// suspended" would let attackers probe key validity on an endpoint
+	// that, being polled, does not count failed keys.
 	lic, err := loadLicenseForSDK(ctx, s.store, in.LicenseKey, in.ProductID, "", true)
 	if err != nil {
 		return nil, err

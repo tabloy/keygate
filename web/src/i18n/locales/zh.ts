@@ -74,6 +74,7 @@ const zh = {
   "nav.menu": "菜单",
   "nav.portal": "用户门户",
   "nav.logout": "退出登录",
+  "nav.logoutFailed": "退出登录失败，请重试。",
 
   // Dashboard
   "dashboard.title": "仪表盘",
@@ -547,6 +548,7 @@ const zh = {
   "settings.updateAvailable": "版本 {version} 可用！",
   "settings.viewRelease": "查看发布",
   "settings.upToDate": "已是最新版本",
+  "settings.updateCheckFailed": "无法检查更新，请稍后重试。",
   "settings.changelog": "更新内容",
   "settings.saved": "设置已保存。",
   "settings.saveError": "保存设置失败。",
