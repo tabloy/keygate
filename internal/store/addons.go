@@ -41,7 +41,8 @@ func (s *Store) ListAddons(ctx context.Context, productID, search string, p Page
 		q = q.Where("addon.product_id = ?", productID)
 	}
 	if search != "" {
-		q = q.Where("addon.name ILIKE ? OR addon.feature ILIKE ?", "%"+search+"%", "%"+search+"%")
+		term := "%" + escapeLike(search) + "%"
+		q = q.Where(`addon.name ILIKE ? ESCAPE '\' OR addon.feature ILIKE ? ESCAPE '\'`, term, term)
 	}
 	total, err := scanPage(ctx, q, p)
 	if err != nil {
