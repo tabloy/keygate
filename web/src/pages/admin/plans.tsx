@@ -714,7 +714,7 @@ function PlanDialog({
                   </Label>
                   <Input
                     type="number"
-                    min={1}
+                    min={plan ? 0 : 1}
                     max={10000}
                     value={form.max_activations}
                     onChange={(e) => set("max_activations", Number(e.target.value))}
