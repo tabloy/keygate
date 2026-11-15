@@ -132,7 +132,7 @@ export default function ProductsPage() {
                   </DataTableRow>
                 </DataTableHeader>
                 <DataTableBody>
-                  {products.length === 0 && <DataTableEmpty colSpan={5} message={t("products.empty")} />}
+                  {products.length === 0 && <DataTableEmpty colSpan={6} message={t("products.empty")} />}
                   {products.map((p) => (
                     <DataTableRow key={p.id}>
                       <DataTableCell className="font-medium">{p.name}</DataTableCell>
