@@ -36,6 +36,7 @@ import {
   DataTableHeader,
   DataTablePagination,
   DataTableRow,
+  useServerPagination,
 } from "@/components/ui/data-table"
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
@@ -68,7 +69,7 @@ export default function ReleasesPage() {
   const [productFilter, setProductFilter] = useState("")
   const [channelFilter, setChannelFilter] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
-  const [page, setPage] = useState(0)
+  const pg = useServerPagination(PAGE_SIZE, [productFilter, channelFilter, statusFilter])
   const [creating, setCreating] = useState(false)
   const [yanking, setYanking] = useState<Release | null>(null)
   const [unyanking, setUnyanking] = useState<Release | null>(null)
@@ -107,19 +108,16 @@ export default function ReleasesPage() {
   const anyProductCount = anyProductsData?.total ?? 0
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "releases", productFilter, channelFilter, statusFilter, page],
+    queryKey: ["admin", "releases", productFilter, channelFilter, statusFilter, pg.page, pg.pageSize],
     queryFn: () =>
       admin.listReleases({
         product_id: productFilter || undefined,
         channel: channelFilter || undefined,
         status: statusFilter || undefined,
-        limit: PAGE_SIZE,
-        offset: page * PAGE_SIZE,
+        ...pg.params,
       }),
   })
-  const releases = data?.releases || []
-  const total = data?.total || 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const { items: releases, total, totalPages } = pg.from(data, data?.releases)
   // From the server's list of what is published, not this page: a draft
   // is warned against the newest release whatever filter or page shows it.
   const latestByBucket = computeLatestVersions(data?.latest_published || [])
@@ -378,11 +376,12 @@ export default function ReleasesPage() {
       </DataTable>
 
       <DataTablePagination
-        page={page}
+        page={pg.page}
         totalPages={totalPages}
         total={total}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
+        pageSize={pg.pageSize}
+        onPageChange={pg.setPage}
+        onPageSizeChange={pg.setPageSize}
       />
 
       {creating && (
