@@ -256,6 +256,9 @@ func TestWebhookEditsKeepEachOther(t *testing.T) {
 	if err := s.DeleteWebhook(ctx, w.ID); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.DeleteWebhook(ctx, w.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("deleting an already-deleted webhook = %v, want sql.ErrNoRows", err)
+	}
 	if err := s.UpdateWebhook(ctx, a, "active"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("editing a deleted webhook = %v, want sql.ErrNoRows", err)
 	}
