@@ -54,8 +54,7 @@ func (s *Store) UpdateWebhook(ctx context.Context, w *model.Webhook, columns ...
 }
 
 func (s *Store) DeleteWebhook(ctx context.Context, id string) error {
-	_, err := s.DB.NewDelete().Model((*model.Webhook)(nil)).Where("id = ?", id).Exec(ctx)
-	return err
+	return deletedOne(s.DB.NewDelete().Model((*model.Webhook)(nil)).Where("id = ?", id).Exec(ctx))
 }
 
 func (s *Store) FindWebhooksForEvent(ctx context.Context, productID, event string) ([]*model.Webhook, error) {

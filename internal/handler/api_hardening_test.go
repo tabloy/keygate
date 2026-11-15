@@ -297,6 +297,15 @@ func TestWebhookSubscriptionValidated(t *testing.T) {
 	if code, out := f.call(h.UpdateWebhook, http.MethodPut, "/", `{"events":["bogus"]}`, nil, gin.Param{Key: "id", Value: whID}); code != http.StatusBadRequest {
 		t.Errorf("update to unknown event = %d %v, want 400", code, out)
 	}
+	if code, _ := f.call(h.DeleteWebhook, http.MethodDelete, "/", "", nil, gin.Param{Key: "id", Value: whID}); code != http.StatusNoContent {
+		t.Errorf("delete webhook = %d, want 204", code)
+	}
+	if code, _ := f.call(h.DeleteWebhook, http.MethodDelete, "/", "", nil, gin.Param{Key: "id", Value: whID}); code != http.StatusNotFound {
+		t.Errorf("delete missing webhook = %d, want 404", code)
+	}
+	if code, _ := f.call(h.DeleteWebhook, http.MethodDelete, "/", "", nil, gin.Param{Key: "id", Value: "no-such-webhook"}); code != http.StatusNotFound {
+		t.Errorf("delete unknown webhook = %d, want 404", code)
+	}
 }
 
 // The SDK endpoints refuse input that used to reach the database: an
