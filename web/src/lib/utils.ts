@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import type { TranslationKeys } from "@/i18n"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -28,6 +29,14 @@ export function formatDate(
     minute: "2-digit",
     timeZone: tz,
   })
+}
+
+export function formatLicenseExpiry(
+  validUntil: string | Date | null | undefined,
+  t: (key: TranslationKeys) => string,
+  options?: { locale?: string; timezone?: string },
+): string {
+  return validUntil ? formatDate(validUntil, options) : t("licenses.perpetual")
 }
 
 export function boolColor(active: boolean): string {
