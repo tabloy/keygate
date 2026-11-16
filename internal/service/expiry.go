@@ -304,7 +304,7 @@ func (c *ExpiryChecker) SendUpdatesEndingReminders(ctx context.Context) {
 		// the next period end gets its own reminder.
 		// Claim before sending: every replica runs this loop, and the
 		// unique (license, tag) row is what keeps one mail per period.
-		tag := "updates_14d_" + lic.UpdatesUntil.Format("2006-01-02")
+		tag := "updates_14d_" + utcDate(*lic.UpdatesUntil)
 		token, err := c.store.ClaimNotification(ctx, lic.ID, tag)
 		if err != nil {
 			c.logger.Error("updates ending reminder claim failed", "license_id", lic.ID, "error", err)
@@ -323,7 +323,7 @@ func (c *ExpiryChecker) SendUpdatesEndingReminders(ctx context.Context) {
 		// queued mail whose lease later expires and queues a second
 		// copy. Failing to queue hands the claim back for the next
 		// run; losing the claim means another pass already owns it.
-		subject, body := c.email.RenderUpdatesEnding(productName, c.store.DecryptLicenseKey(lic), lic.UpdatesUntil.UTC().Format("2006-01-02"))
+		subject, body := c.email.RenderUpdatesEnding(productName, c.store.DecryptLicenseKey(lic), utcDate(*lic.UpdatesUntil))
 		switch err := c.store.EnqueueEmailAndCloseNotification(ctx, lic.Email, subject, body, token); {
 		case err == nil:
 			c.logger.Info("updates ending reminder queued", "license_id", lic.ID)
