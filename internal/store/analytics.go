@@ -438,30 +438,62 @@ func (s *Store) GetActivationTrend(ctx context.Context, productID string, from, 
 	return out, err
 }
 
+// TakeSnapshot saves the day's counts for a product. A day is taken
+// once (TakeMissingSnapshots skips a day that has a snapshot), so a
+// count that fails must not be saved as a zero: it would stand as that
+// day's figure for good. On any error nothing is saved, and the next
+// hourly run takes the day again.
 func (s *Store) TakeSnapshot(ctx context.Context, productID string, date time.Time) error {
 	dateOnly := date.Truncate(24 * time.Hour)
 	nextDay := dateOnly.Add(24 * time.Hour)
 
-	total, _ := s.DB.NewSelect().Model((*model.License)(nil)).
-		Where("product_id = ?", productID).Count(ctx)
-	active, _ := s.DB.NewSelect().Model((*model.License)(nil)).
-		Where("product_id = ? AND status = 'active'", productID).Count(ctx)
-	newLic, _ := s.DB.NewSelect().Model((*model.License)(nil)).
-		Where("product_id = ? AND created_at >= ? AND created_at < ?", productID, dateOnly, nextDay).Count(ctx)
-	churned, _ := s.DB.NewSelect().Model((*model.License)(nil)).
-		Where("product_id = ? AND status IN ('canceled','expired') AND updated_at >= ? AND updated_at < ?", productID, dateOnly, nextDay).Count(ctx)
-	activations, _ := s.DB.NewSelect().Model((*model.Activation)(nil)).
-		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?)", productID).Count(ctx)
-	seats, _ := s.DB.NewSelect().Model((*model.Seat)(nil)).
-		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?) AND removed_at IS NULL", productID).Count(ctx)
+	count := func(what string, q *bun.SelectQuery) (int, error) {
+		n, err := q.Count(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("snapshot %s for product %s: %w", what, productID, err)
+		}
+		return n, nil
+	}
+	total, err := count("licenses", s.DB.NewSelect().Model((*model.License)(nil)).
+		Where("product_id = ?", productID))
+	if err != nil {
+		return err
+	}
+	active, err := count("active licenses", s.DB.NewSelect().Model((*model.License)(nil)).
+		Where("product_id = ? AND status = 'active'", productID))
+	if err != nil {
+		return err
+	}
+	newLic, err := count("new licenses", s.DB.NewSelect().Model((*model.License)(nil)).
+		Where("product_id = ? AND created_at >= ? AND created_at < ?", productID, dateOnly, nextDay))
+	if err != nil {
+		return err
+	}
+	churned, err := count("churned licenses", s.DB.NewSelect().Model((*model.License)(nil)).
+		Where("product_id = ? AND status IN ('canceled','expired') AND updated_at >= ? AND updated_at < ?", productID, dateOnly, nextDay))
+	if err != nil {
+		return err
+	}
+	activations, err := count("activations", s.DB.NewSelect().Model((*model.Activation)(nil)).
+		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?)", productID))
+	if err != nil {
+		return err
+	}
+	seats, err := count("seats", s.DB.NewSelect().Model((*model.Seat)(nil)).
+		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?) AND removed_at IS NULL", productID))
+	if err != nil {
+		return err
+	}
 
 	var usageResult struct {
 		Total int64 `bun:"total"`
 	}
-	_ = s.DB.NewSelect().Model((*model.UsageEvent)(nil)).
+	if err := s.DB.NewSelect().Model((*model.UsageEvent)(nil)).
 		ColumnExpr("COALESCE(SUM(quantity), 0) AS total").
 		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?) AND recorded_at >= ? AND recorded_at < ?", productID, dateOnly, nextDay).
-		Scan(ctx, &usageResult)
+		Scan(ctx, &usageResult); err != nil {
+		return fmt.Errorf("snapshot usage for product %s: %w", productID, err)
+	}
 
 	snap := &model.AnalyticsSnapshot{
 		Date:             dateOnly,
