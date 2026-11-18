@@ -824,11 +824,10 @@ func (s *Store) GetUserDetail(ctx context.Context, userID string) (*UserDetail, 
 		detail.Activations = activations
 	}
 
-	sq := s.DB.NewSelect().TableExpr("seats").
-		Where("(user_id = ? OR lower(email) = ?)", userID, normalizeEmail(user.Email)).
-		Where("removed_at IS NULL")
-	activeSeats, _ := sq.Count(ctx)
-	detail.ActiveSeats = activeSeats
+	// The seats they hold are those memberships. Counting every seat at
+	// their address took in invitations not yet accepted, and a seat on
+	// a licence that is theirs.
+	detail.ActiveSeats = len(memberships)
 
 	var auditLogs []*model.AuditLog
 	_ = s.DB.NewSelect().Model(&auditLogs).
