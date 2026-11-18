@@ -267,3 +267,50 @@ func TestAdminFindsMembers(t *testing.T) {
 		}
 	}
 }
+
+// A customer's active seats are the memberships their detail lists: an
+// invitation they have not accepted gives no access, and a seat at the
+// licence's own address is the owner's, not a membership.
+func TestCustomerActiveSeatsAreTheirMemberships(t *testing.T) {
+	p := newPortalTeam(t)
+	f, lic := p.f, p.f.licA
+	h := &AdminHandler{Store: f.s}
+
+	seats := func(email string) (float64, int) {
+		t.Helper()
+		u, err := f.s.FindUserByEmail(f.ctx, email)
+		if err != nil {
+			t.Fatalf("account for %s: %v", email, err)
+		}
+		code, out := f.call(h.GetUserDetail, http.MethodGet, "/admin/users/"+u.ID, "", nil, gin.Param{Key: "id", Value: u.ID})
+		d, _ := out["data"].(map[string]any)
+		if code != http.StatusOK {
+			t.Fatalf("detail = %d %v", code, out)
+		}
+		n, _ := d["active_seats"].(float64)
+		ms, _ := d["memberships"].([]any)
+		return n, len(ms)
+	}
+
+	// The invitee already has an account, from a licence of their own.
+	if err := f.s.UpsertUser(f.ctx, &model.User{Email: p.pending.Email, Name: "Pending"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		who  string
+		want float64
+	}{{p.alice.Email, 1}, {p.pending.Email, 0}} {
+		if n, ms := seats(c.who); n != c.want || ms != int(c.want) {
+			t.Fatalf("%s: active seats %v, memberships %d; want %v of each", c.who, n, ms, c.want)
+		}
+	}
+
+	// The licence's address becomes alice's: she owns it, and her seat
+	// there is no membership.
+	if _, err := f.s.DB.NewRaw("UPDATE licenses SET email = ? WHERE id = ?", p.alice.Email, lic.ID).Exec(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n, ms := seats(p.alice.Email); n != 0 || ms != 0 {
+		t.Fatalf("alice as the owner: active seats %v, memberships %d; want 0 of each", n, ms)
+	}
+}
