@@ -3655,6 +3655,29 @@ func (h *AdminHandler) UnlinkStripeSubscription(c *gin.Context) {
 	response.OK(c, gin.H{"status": "unlinked"})
 }
 
+func (h *AdminHandler) ListLicenseActivations(c *gin.Context) {
+	licenseID := c.Param("id")
+	productID, err := h.Store.GetLicenseProductID(c, licenseID)
+	if err != nil {
+		response.NotFound(c, "license not found")
+		return
+	}
+	if !requireKeyProductScope(c, productID) {
+		return
+	}
+
+	activations, err := h.Store.ListActivations(c.Request.Context(), licenseID)
+	if err != nil {
+		response.Internal(c, err)
+		return
+	}
+	if err := h.Store.FillMemberEmails(c.Request.Context(), activations); err != nil {
+		response.Internal(c, err)
+		return
+	}
+	response.OK(c, gin.H{"activations": response.Array(activations)})
+}
+
 func (h *AdminHandler) DeleteActivation(c *gin.Context) {
 	id := c.Param("id")
 	pid, err := h.Store.GetActivationProductID(c, id)
