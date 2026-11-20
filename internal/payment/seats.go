@@ -229,9 +229,26 @@ func changeOnly(inv *stripe.Invoice) bool {
 		return false
 	}
 	for _, l := range inv.Lines.Data {
-		if l == nil || l.Parent == nil || l.Parent.SubscriptionItemDetails == nil || !l.Parent.SubscriptionItemDetails.Proration {
+		if !prorationLine(l) {
 			return false
 		}
 	}
 	return true
+}
+
+// prorationLine reports whether a line is a proration, in either shape
+// Stripe raises one in: on the subscription item itself, and as the
+// pending proration invoice item a change to the subscription raises.
+// invoiceLine.billsSubscription reads both; reading only the first here
+// takes a refunded change for a refunded subscription, which revokes the
+// licence and cancels what pays for it.
+func prorationLine(l *stripe.InvoiceLineItem) bool {
+	if l == nil || l.Parent == nil {
+		return false
+	}
+	if d := l.Parent.SubscriptionItemDetails; d != nil && d.Proration {
+		return true
+	}
+	d := l.Parent.InvoiceItemDetails
+	return d != nil && d.Proration
 }
