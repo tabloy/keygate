@@ -120,6 +120,13 @@ function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense
   // seat it is the seats bought, not the plan's max_seats.
   const seatCap = lic.seat_limit ?? lic.plan?.max_seats ?? 0
   const activationCap = lic.activation_limit ?? lic.plan?.max_activations ?? 0
+  // What "in use" counts depends on the plan, as in the admin list. A
+  // floating plan holds its seats in its own table, so reading
+  // activations there reports an empty licence however full it is.
+  const devicesInUse =
+    lic.plan?.license_model === "floating"
+      ? (lic.active_session_count ?? 0)
+      : (lic.activation_count ?? lic.activations?.length ?? 0)
   const perSeat = !!lic.plan?.per_seat
   const hasMembers = (lic.seats ?? []).some((s) => !s.removed_at && s.email.toLowerCase() !== lic.email?.toLowerCase())
   const showSeats = (productType === "saas" || productType === "hybrid") && (seatCap !== 1 || hasMembers || perSeat)
@@ -233,7 +240,7 @@ function LicenseCard({ license: lic, renewalsEnabled }: { license: PortalLicense
           <div>
             <p className="text-muted-foreground">{t(isOwner ? "portal.devices" : "portal.teamDevices")}</p>
             <p className="font-medium">
-              {lic.activation_count ?? lic.activations?.length ?? 0} / {activationCap || "-"}
+              {devicesInUse} / {activationCap || "-"}
             </p>
           </div>
           {/* A member sees who has joined, not pending invitations, so
