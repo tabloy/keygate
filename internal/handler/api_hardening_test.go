@@ -140,6 +140,46 @@ func TestExportLicensesHonoursKeyBinding(t *testing.T) {
 	}
 }
 
+func TestListLicenseActivations(t *testing.T) {
+	f := newAPIFixture(t)
+	h := &AdminHandler{Store: f.s}
+	for _, activation := range []*model.Activation{
+		{LicenseID: f.licA.ID, Identifier: "device-a", IdentifierType: "device"},
+		{LicenseID: f.licB.ID, Identifier: "device-b", IdentifierType: "device"},
+	} {
+		if err := f.s.CreateActivation(f.ctx, activation); err != nil {
+			t.Fatalf("create activation: %v", err)
+		}
+	}
+
+	list := func(licenseID string, key *model.APIKey) (int, map[string]any) {
+		return f.call(h.ListLicenseActivations, http.MethodGet,
+			"/admin/licenses/"+licenseID+"/activations", "", key,
+			gin.Param{Key: "id", Value: licenseID})
+	}
+	code, out := list(f.licA.ID, nil)
+	if code != http.StatusOK {
+		t.Fatalf("list activations = %d %v", code, out)
+	}
+	data, _ := out["data"].(map[string]any)
+	rows, _ := data["activations"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("activation count = %d, want 1: %v", len(rows), rows)
+	}
+	row, _ := rows[0].(map[string]any)
+	if row["identifier"] != "device-a" || row["license_id"] != f.licA.ID {
+		t.Fatalf("listed activation = %v", row)
+	}
+
+	if code, out = list("missing-license", nil); code != http.StatusNotFound {
+		t.Fatalf("missing license = %d %v, want 404", code, out)
+	}
+	bound := &model.APIKey{ProductID: f.prodA.ID, Scopes: []string{model.ScopeLicensesWrite}}
+	if code, out = list(f.licB.ID, bound); code != http.StatusForbidden || errCode(out) != "PRODUCT_SCOPE_MISMATCH" {
+		t.Fatalf("another product's activations = %d %v, want 403 PRODUCT_SCOPE_MISMATCH", code, out)
+	}
+}
+
 // An admin key reaches every product, so it cannot be bound to one;
 // the narrow scopes still can.
 func TestAdminKeyCannotBeBound(t *testing.T) {
