@@ -86,6 +86,26 @@ func TestSecondRemovalFindsItGone(t *testing.T) {
 		}
 	}
 
+	whProd := &model.Product{Name: "Gone Hooks " + suffix, Slug: "gone-hooks-" + suffix, Type: "desktop"}
+	if err := s.CreateProduct(ctx, whProd); err != nil {
+		t.Fatal(err)
+	}
+	wh := &model.Webhook{ProductID: whProd.ID, URL: "https://gone.example.com/hook", Secret: "s",
+		Events: []string{"license.created"}, Active: true}
+	if err := s.CreateWebhook(ctx, wh); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteWebhook(ctx, wh.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Regression: a second delete of the same webhook (the loser of a
+	// concurrent-delete race) used to report success with no error,
+	// which let the handler write a second "deleted" audit log entry
+	// for a delete that never happened.
+	if err := s.DeleteWebhook(ctx, wh.ID); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("deleting a webhook twice = %v, want sql.ErrNoRows", err)
+	}
+
 	raw := store.GenerateRawAPIKey()
 	ak := &model.APIKey{Name: "gone-" + suffix, Prefix: raw[:12], Scopes: []string{"admin"}}
 	if err := s.CreateAPIKey(ctx, ak, raw); err != nil {
