@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -688,12 +689,22 @@ func (s *WebhookService) ProcessRetries(ctx context.Context) {
 	}
 	for _, d := range deliveries {
 		wh, err := s.store.FindWebhookByID(ctx, d.WebhookID)
-		if err != nil || !wh.Active {
-			// Webhook gone or disabled: nothing will ever accept this
-			// delivery, so stop re-listing it every tick.
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && !wh.Active) {
+			// Webhook actually gone or disabled: nothing will ever
+			// accept this delivery, so stop re-listing it every tick.
 			d.Status = "failed"
 			d.NextRetry = nil
 			s.finish(ctx, d)
+			continue
+		}
+		if err != nil {
+			// Some other error reading the webhook (a DB hiccup, say) -
+			// not evidence the webhook is gone. Leave this delivery
+			// claimed rather than finishing it: its lease expires on
+			// its own and ClaimPendingDeliveries picks it up again next
+			// tick, instead of it being marked permanently failed over
+			// what might be a transient read failure.
+			s.logger.Error("webhook lookup failed while processing retry", "delivery_id", d.ID, "webhook_id", d.WebhookID, "error", err)
 			continue
 		}
 		go func(wh *model.Webhook, d *model.WebhookDelivery) {

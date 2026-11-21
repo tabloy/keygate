@@ -225,3 +225,27 @@ func TestFailedRetryIsReleasedWithBackoff(t *testing.T) {
 		t.Fatalf("sent %d times, want once", n)
 	}
 }
+
+// A delivery for a webhook that was switched off is failed outright,
+// not retried forever: a disabled receiver is just as unreachable as a
+// gone one. (A deleted webhook cascade-deletes its own pending
+// deliveries, so that case can't leave one of these behind to check;
+// disabling one is the reachable version of "nothing will ever accept
+// this delivery.")
+func TestRetryOfADisabledWebhookIsFailedOutright(t *testing.T) {
+	f := newRetryFixture(t, http.StatusOK)
+	d := f.due()
+	f.wh.Active = false
+	if err := f.s.UpdateWebhook(f.ctx, f.wh, "active"); err != nil {
+		t.Fatal(err)
+	}
+	NewWebhookService(f.s, slog.Default(), 2*time.Second, 5, true).ProcessRetries(f.ctx)
+
+	got := f.load(d.ID)
+	if got.Status != "failed" || got.NextRetry != nil {
+		t.Fatalf("status %q next_retry %v, want failed with no next retry", got.Status, got.NextRetry)
+	}
+	if n := f.rcv.count(d.ID); n != 0 {
+		t.Fatalf("a disabled webhook's delivery was sent %d times, want never", n)
+	}
+}
