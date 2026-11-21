@@ -442,26 +442,46 @@ func (s *Store) TakeSnapshot(ctx context.Context, productID string, date time.Ti
 	dateOnly := date.Truncate(24 * time.Hour)
 	nextDay := dateOnly.Add(24 * time.Hour)
 
-	total, _ := s.DB.NewSelect().Model((*model.License)(nil)).
+	total, err := s.DB.NewSelect().Model((*model.License)(nil)).
 		Where("product_id = ?", productID).Count(ctx)
-	active, _ := s.DB.NewSelect().Model((*model.License)(nil)).
+	if err != nil {
+		return fmt.Errorf("count total licenses: %w", err)
+	}
+	active, err := s.DB.NewSelect().Model((*model.License)(nil)).
 		Where("product_id = ? AND status = 'active'", productID).Count(ctx)
-	newLic, _ := s.DB.NewSelect().Model((*model.License)(nil)).
+	if err != nil {
+		return fmt.Errorf("count active licenses: %w", err)
+	}
+	newLic, err := s.DB.NewSelect().Model((*model.License)(nil)).
 		Where("product_id = ? AND created_at >= ? AND created_at < ?", productID, dateOnly, nextDay).Count(ctx)
-	churned, _ := s.DB.NewSelect().Model((*model.License)(nil)).
+	if err != nil {
+		return fmt.Errorf("count new licenses: %w", err)
+	}
+	churned, err := s.DB.NewSelect().Model((*model.License)(nil)).
 		Where("product_id = ? AND status IN ('canceled','expired') AND updated_at >= ? AND updated_at < ?", productID, dateOnly, nextDay).Count(ctx)
-	activations, _ := s.DB.NewSelect().Model((*model.Activation)(nil)).
+	if err != nil {
+		return fmt.Errorf("count churned licenses: %w", err)
+	}
+	activations, err := s.DB.NewSelect().Model((*model.Activation)(nil)).
 		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?)", productID).Count(ctx)
-	seats, _ := s.DB.NewSelect().Model((*model.Seat)(nil)).
+	if err != nil {
+		return fmt.Errorf("count activations: %w", err)
+	}
+	seats, err := s.DB.NewSelect().Model((*model.Seat)(nil)).
 		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?) AND removed_at IS NULL", productID).Count(ctx)
+	if err != nil {
+		return fmt.Errorf("count seats: %w", err)
+	}
 
 	var usageResult struct {
 		Total int64 `bun:"total"`
 	}
-	_ = s.DB.NewSelect().Model((*model.UsageEvent)(nil)).
+	if err := s.DB.NewSelect().Model((*model.UsageEvent)(nil)).
 		ColumnExpr("COALESCE(SUM(quantity), 0) AS total").
 		Where("license_id IN (SELECT id FROM licenses WHERE product_id = ?) AND recorded_at >= ? AND recorded_at < ?", productID, dateOnly, nextDay).
-		Scan(ctx, &usageResult)
+		Scan(ctx, &usageResult); err != nil {
+		return fmt.Errorf("sum usage: %w", err)
+	}
 
 	snap := &model.AnalyticsSnapshot{
 		Date:             dateOnly,
