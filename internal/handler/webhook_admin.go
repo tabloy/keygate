@@ -175,6 +175,13 @@ func (h *WebhookAdminHandler) DeleteWebhook(c *gin.Context) {
 		return
 	}
 	if err := h.Store.DeleteWebhook(c, c.Param("id")); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Already gone, most likely a concurrent delete that won the
+			// race between our scope check and this call. Don't log a
+			// second "deleted" audit entry for the same webhook.
+			response.NotFound(c, "webhook not found")
+			return
+		}
 		response.Internal(c, err)
 		return
 	}
