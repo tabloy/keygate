@@ -2,6 +2,9 @@ package store_test
 
 import (
 	"context"
+	"net/url"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,6 +133,102 @@ func TestTakeMissingSnapshots(t *testing.T) {
 	}
 	if rows != 1 || total != 42 {
 		t.Fatalf("snapshots = %d (total %d), want the one taken first, left alone", rows, total)
+	}
+}
+
+// A snapshot that fails partway through (one of its counts errors, the
+// rest would have succeeded) writes nothing at all, rather than a
+// zeroed row that would then look like the day was already taken: the
+// next run still sees it missing and actually takes it.
+//
+// To fail exactly one count and nothing else, this runs TakeSnapshot
+// as a second Postgres role with SELECT revoked on just the seats
+// table - a real permission error on one query, with every other query
+// (including the final insert) still able to succeed, so a test that
+// instead failed everything at once (e.g. a canceled context) couldn't
+// tell this fix apart from the bug it fixes.
+func TestTakeSnapshotWritesNothingIfACountFails(t *testing.T) {
+	s := setupTestDB(t)
+	defer s.Close()
+	ctx := context.Background()
+	suffix := strings.ReplaceAll(time.Now().Format("150405.000000000"), ".", "")
+	prod := &model.Product{Name: "Snap Fail " + suffix, Slug: "snap-fail-" + suffix, Type: "saas"}
+	if err := s.CreateProduct(ctx, prod); err != nil {
+		t.Fatal(err)
+	}
+	day := time.Now().Add(-24 * time.Hour)
+
+	rowCount := func() int {
+		t.Helper()
+		var n int
+		if err := s.DB.NewRaw("SELECT count(*) FROM analytics_snapshots WHERE product_id = ?", prod.ID).Scan(ctx, &n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := "snap_fail_" + suffix
+	pass := "snap_fail_pw"
+	if _, err := s.DB.ExecContext(ctx, `CREATE ROLE "`+role+`" LOGIN PASSWORD '`+pass+`'`); err != nil {
+		t.Fatal(err)
+	}
+	// Runs before the outer `defer s.Close()`, and after `defer
+	// restricted.Close()` below (registered later, so it unwinds
+	// first): the restricted connection closes, then the role it used
+	// is dropped, then the main store closes.
+	defer func() {
+		if _, err := s.DB.ExecContext(ctx, `DROP OWNED BY "`+role+`"`); err != nil {
+			t.Errorf("drop owned by role: %v", err)
+		}
+		if _, err := s.DB.ExecContext(ctx, `DROP ROLE "`+role+`"`); err != nil {
+			t.Errorf("drop role: %v", err)
+		}
+	}()
+	grants := []string{
+		`GRANT CONNECT ON DATABASE ` + strings.TrimPrefix(u.Path, "/") + ` TO "` + role + `"`,
+		`GRANT USAGE ON SCHEMA public TO "` + role + `"`,
+		`GRANT SELECT ON licenses, activations, usage_events TO "` + role + `"`,
+		// UPDATE too: CreateAnalyticsSnapshot's ON CONFLICT DO UPDATE
+		// needs it even on the insert path, or every insert attempt
+		// fails here for an unrelated reason and the test can't tell
+		// this fix apart from the bug it fixes.
+		`GRANT SELECT, INSERT, UPDATE ON analytics_snapshots TO "` + role + `"`,
+	}
+	for _, g := range grants {
+		if _, err := s.DB.ExecContext(ctx, g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Deliberately no SELECT on seats: that is the one count this role
+	// cannot take.
+
+	restrictedURL := *u
+	restrictedURL.User = url.UserPassword(role, pass)
+	restricted, err := store.New(restrictedURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restricted.Close()
+
+	if err := restricted.TakeSnapshot(ctx, prod.ID, day); err == nil {
+		t.Fatal("TakeSnapshot without SELECT on seats = nil error, want a permission error")
+	}
+	if n := rowCount(); n != 0 {
+		t.Fatalf("snapshots after a failed take = %d, want 0 (no zeroed row left behind)", n)
+	}
+
+	// Nothing marked the day done, so a later, successful pass (back
+	// on the unrestricted store) still takes it.
+	if err := s.TakeMissingSnapshots(ctx, day); err != nil {
+		t.Fatal(err)
+	}
+	if n := rowCount(); n != 1 {
+		t.Fatalf("snapshots after a successful retry = %d, want 1", n)
 	}
 }
 
