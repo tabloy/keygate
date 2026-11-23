@@ -67,7 +67,8 @@ func TestValidateSlug(t *testing.T) {
 		{"my-app", true},
 		{"app123", true},
 		{"ab", true},
-		{string(make([]byte, 100)), false}, // 100 'a's but wait - need valid chars
+		{strings.Repeat("a", 100), true},  // exactly 100 chars, the maximum allowed
+		{strings.Repeat("a", 101), false}, // 101 chars, exceeds maximum
 		{"", false},
 		{"x", false}, // too short
 		{"UpperCase", false},
