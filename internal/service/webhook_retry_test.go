@@ -225,3 +225,50 @@ func TestFailedRetryIsReleasedWithBackoff(t *testing.T) {
 		t.Fatalf("sent %d times, want once", n)
 	}
 }
+
+// A retry gives up only on a webhook that is gone or disabled. If the
+// webhook cannot be read, nobody knows which it is, so the delivery
+// waits for its claim to lapse and is sent on a later pass.
+func TestRetryWaitsWhenItsWebhookCannotBeRead(t *testing.T) {
+	f := newRetryFixture(t, http.StatusOK)
+	d := f.due()
+	svc := NewWebhookService(f.s, slog.Default(), 2*time.Second, 5, true)
+
+	// The claim reads webhook_deliveries; finding the webhook does not.
+	if _, err := f.s.DB.NewRaw("ALTER TABLE webhooks RENAME TO webhooks_held").Exec(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	restore := func() {
+		if _, err := f.s.DB.NewRaw("ALTER TABLE IF EXISTS webhooks_held RENAME TO webhooks").Exec(context.Background()); err != nil {
+			t.Errorf("restore webhooks: %v", err)
+		}
+	}
+	t.Cleanup(restore)
+	svc.ProcessRetries(f.ctx)
+	restore()
+
+	if got := f.load(d.ID); got.Status != "pending" || got.Attempts != 1 {
+		t.Fatalf("the webhook could not be read: status %q attempts %d, want it still pending", got.Status, got.Attempts)
+	}
+
+	// The claim lapses, and the next pass sends it.
+	if _, err := f.s.DB.NewRaw("UPDATE webhook_deliveries SET next_retry = now() - interval '1 minute' WHERE id = ?", d.ID).Exec(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	svc.ProcessRetries(f.ctx)
+	f.settled([]string{d.ID})
+	if got := f.load(d.ID); got.Status != "delivered" || f.rcv.count(d.ID) != 1 {
+		t.Fatalf("after the lapse: status %q, sent %d times; want delivered once", got.Status, f.rcv.count(d.ID))
+	}
+
+	// A disabled webhook's delivery is still given up.
+	f.wh.Active = false
+	if err := f.s.UpdateWebhook(f.ctx, f.wh, "active"); err != nil {
+		t.Fatal(err)
+	}
+	off := f.due()
+	svc.ProcessRetries(f.ctx)
+	if got := f.load(off.ID); got.Status != "failed" || f.rcv.count(off.ID) != 0 {
+		t.Fatalf("disabled webhook: status %q, sent %d times; want failed and unsent", got.Status, f.rcv.count(off.ID))
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -688,6 +689,13 @@ func (s *WebhookService) ProcessRetries(ctx context.Context) {
 	}
 	for _, d := range deliveries {
 		wh, err := s.store.FindWebhookByID(ctx, d.WebhookID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			// Unknown whether it is still there and enabled. Nothing is
+			// lost by waiting: the claim lapses and a later pass tries
+			// it again.
+			s.logger.Error("webhook retry: could not load the webhook; leaving it for later", "delivery_id", d.ID, "error", err)
+			continue
+		}
 		if err != nil || !wh.Active {
 			// Webhook gone or disabled: nothing will ever accept this
 			// delivery, so stop re-listing it every tick.
