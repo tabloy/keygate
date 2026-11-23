@@ -260,7 +260,7 @@ export default function PlansPage() {
                           )}
                         </DataTableCell>
                         <DataTableCell>
-                          {p.per_seat && supportsSeats ? (
+                          {p.per_seat ? (
                             t("plans.perSeatRange", { min: p.min_quantity ?? 1, max: p.max_quantity ?? 100 })
                           ) : supportsSeats ? (
                             p.max_seats || 0
