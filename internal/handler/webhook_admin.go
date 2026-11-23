@@ -175,6 +175,10 @@ func (h *WebhookAdminHandler) DeleteWebhook(c *gin.Context) {
 		return
 	}
 	if err := h.Store.DeleteWebhook(c, c.Param("id")); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			response.NotFound(c, "webhook not found")
+			return
+		}
 		response.Internal(c, err)
 		return
 	}
