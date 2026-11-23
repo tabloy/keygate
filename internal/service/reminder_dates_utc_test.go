@@ -90,6 +90,95 @@ func TestExpiryReminder_DateIsUTCWhateverTheSessionZone(t *testing.T) {
 	}
 }
 
+// The updates-ending reminder claims its notification tag and prints the
+// period end date in UTC, even when the database session is in a non-UTC
+// time zone, so replicas with different session zones share one claim tag.
+func TestUpdatesEndingReminder_TagAndDateAreUTCWhateverTheSessionZone(t *testing.T) {
+	f := newReminderFixture(t)
+	ctx := context.Background()
+	setNotify(t, f.s, "updates_ending", "")
+	nz := openAucklandStore(t)
+
+	suffix := time.Now().Format("150405.000000")
+	prod := &model.Product{Name: "Remind", Slug: "remind-utc-" + suffix, Type: "desktop", FeedLicenseRequired: true}
+	if err := f.s.CreateProduct(ctx, prod); err != nil {
+		t.Fatal(err)
+	}
+	plan := &model.Plan{
+		ProductID:            prod.ID,
+		Name:                 "Perp",
+		Slug:                 "perp-utc-" + suffix,
+		LicenseType:          "perpetual",
+		LicenseModel:         "standard",
+		RenewalDays:          365,
+		StripeRenewalPriceID: "price_utc_" + suffix,
+	}
+	if err := f.s.CreatePlan(ctx, plan); err != nil {
+		t.Fatal(err)
+	}
+
+	// Updates end 23:30 UTC five days from now: already the next calendar
+	// day in Auckland.
+	now := time.Now().UTC()
+	target := time.Date(now.Year(), now.Month(), now.Day()+5, 23, 30, 0, 0, time.UTC)
+	email := "updates-utc-" + suffix + "@example.com"
+	lic := &model.License{
+		ProductID:    prod.ID,
+		PlanID:       plan.ID,
+		Email:        email,
+		LicenseKey:   "KEY-upd-utc-" + suffix,
+		Status:       model.StatusActive,
+		UpdatesUntil: &target,
+	}
+	if err := f.s.CreateLicense(ctx, lic); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = f.s.DB.NewRaw("DELETE FROM email_queue WHERE to_addr = ?", email).Exec(ctx)
+	})
+
+	fresh, err := nz.FindLicenseByID(ctx, lic.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDay := target.Format("2006-01-02")
+	wrongDay := fresh.UpdatesUntil.Format("2006-01-02")
+	if wantDay == wrongDay {
+		t.Fatalf("test setup: the session zone should name a different day than UTC, both say %s", wantDay)
+	}
+
+	nzChecker := NewExpiryChecker(nz, f.c.email, nil, slog.Default())
+	nzChecker.SendUpdatesEndingReminders(ctx)
+
+	wantTag := "updates_14d_" + wantDay
+	var sent bool
+	if err := f.s.DB.NewRaw("SELECT sent_at IS NOT NULL FROM notifications WHERE license_id = ? AND tag = ?", lic.ID, wantTag).Scan(ctx, &sent); err != nil || !sent {
+		t.Fatalf("notification should be recorded under UTC tag %s: sent=%v err=%v", wantTag, sent, err)
+	}
+
+	var subject, body string
+	if err := f.s.DB.NewRaw("SELECT subject, body FROM email_queue WHERE to_addr = ?", email).Scan(ctx, &subject, &body); err != nil {
+		t.Fatal(err)
+	}
+	if wantSubject := prod.Name + " updates ending soon"; subject != wantSubject {
+		t.Fatalf("subject = %q, want %q", subject, wantSubject)
+	}
+	if !strings.Contains(body, wantDay) || strings.Contains(body, wrongDay) {
+		t.Fatalf("mail should say updates end on %s (UTC), not %s:\n%s", wantDay, wrongDay, body)
+	}
+
+	// A second replica running on the UTC store must see the same claim tag
+	// and not queue a duplicate email.
+	f.c.SendUpdatesEndingReminders(ctx)
+	var count int
+	if err := f.s.DB.NewRaw("SELECT count(*) FROM email_queue WHERE to_addr = ?", email).Scan(ctx, &count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 queued reminder across replicas, got %d", count)
+	}
+}
+
 // The UPDATES_EXPIRED error names the day the update period ended; it must
 // be the UTC day too.
 func TestGenerateDownload_UpdatesExpiredNamesUTCDate(t *testing.T) {
