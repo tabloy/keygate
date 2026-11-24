@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 
@@ -73,7 +74,13 @@ func (s *UsageService) RecordUsage(ctx context.Context, in RecordUsageInput) (*R
 		return nil, apperr.New(400, "NO_QUOTA", "no quota entitlement found for feature: "+in.Feature)
 	}
 
-	limit, _ := strconv.ParseInt(quota.Value, 10, 64)
+	limit, err := strconv.ParseInt(quota.Value, 10, 64)
+	if err != nil {
+		// A quota's value is validated as a non-negative integer when
+		// written; a value that no longer parses is corrupt, not
+		// "unlimited" (limit 0 means unlimited to quotaRemaining).
+		return nil, apperr.Internal(fmt.Errorf("quota value for feature %q: %w", in.Feature, err))
+	}
 	period := quota.QuotaPeriod
 	if period == "" {
 		period = "monthly"
@@ -210,7 +217,12 @@ func (s *UsageService) GetQuotaStatus(ctx context.Context, licenseKey, feature, 
 		return nil, apperr.NotFound("QUOTA", feature)
 	}
 
-	limit, _ := strconv.ParseInt(quota.Value, 10, 64)
+	limit, err := strconv.ParseInt(quota.Value, 10, 64)
+	if err != nil {
+		// See RecordUsage: a corrupt quota value must not be read as
+		// "unlimited" (limit 0 means unlimited to quotaRemaining).
+		return nil, apperr.Internal(fmt.Errorf("quota value for feature %q: %w", feature, err))
+	}
 	period := quota.QuotaPeriod
 	if period == "" {
 		period = "monthly"
