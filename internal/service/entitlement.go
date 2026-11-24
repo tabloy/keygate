@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -94,7 +95,14 @@ func (s *EntitlementService) Check(ctx context.Context, in CheckInput) (*CheckRe
 		case "bool", "flag":
 			fs.Enabled = featureEnabled(e)
 		case "quota":
-			limit, _ := strconv.ParseInt(e.Value, 10, 64)
+			limit, err := strconv.ParseInt(e.Value, 10, 64)
+			if err != nil {
+				// A quota's value is validated as a non-negative
+				// integer when written; a value that no longer
+				// parses is corrupt, not "unlimited" (limit 0 means
+				// unlimited to quotaRemaining).
+				return nil, fmt.Errorf("quota value for feature %q: %w", e.Feature, err)
+			}
 			period := e.QuotaPeriod
 			if period == "" {
 				period = "monthly"
