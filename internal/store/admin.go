@@ -1001,30 +1001,49 @@ type Stats struct {
 func (s *Store) GetStats(ctx context.Context) (*Stats, error) {
 	stats := &Stats{ByStatus: make(map[string]int)}
 
-	stats.TotalLicenses, _ = s.DB.NewSelect().Model((*model.License)(nil)).Count(ctx)
-	stats.ActiveLicenses, _ = s.DB.NewSelect().Model((*model.License)(nil)).Where("status = 'active'").Count(ctx)
-	stats.TotalActivations, _ = s.DB.NewSelect().Model((*model.Activation)(nil)).Count(ctx)
-	stats.TotalProducts, _ = s.DB.NewSelect().Model((*model.Product)(nil)).Count(ctx)
-	stats.TotalSeats, _ = s.DB.NewSelect().Model((*model.Seat)(nil)).Where("removed_at IS NULL").Count(ctx)
-	stats.TotalUsageEvents, _ = s.DB.NewSelect().Model((*model.UsageEvent)(nil)).Count(ctx)
-	stats.TotalWebhooks, _ = s.DB.NewSelect().Model((*model.Webhook)(nil)).Where("active = true").Count(ctx)
+	var err error
+	if stats.TotalLicenses, err = s.DB.NewSelect().Model((*model.License)(nil)).Count(ctx); err != nil {
+		return nil, fmt.Errorf("count licenses: %w", err)
+	}
+	if stats.ActiveLicenses, err = s.DB.NewSelect().Model((*model.License)(nil)).Where("status = 'active'").Count(ctx); err != nil {
+		return nil, fmt.Errorf("count active licenses: %w", err)
+	}
+	if stats.TotalActivations, err = s.DB.NewSelect().Model((*model.Activation)(nil)).Count(ctx); err != nil {
+		return nil, fmt.Errorf("count activations: %w", err)
+	}
+	if stats.TotalProducts, err = s.DB.NewSelect().Model((*model.Product)(nil)).Count(ctx); err != nil {
+		return nil, fmt.Errorf("count products: %w", err)
+	}
+	if stats.TotalSeats, err = s.DB.NewSelect().Model((*model.Seat)(nil)).Where("removed_at IS NULL").Count(ctx); err != nil {
+		return nil, fmt.Errorf("count seats: %w", err)
+	}
+	if stats.TotalUsageEvents, err = s.DB.NewSelect().Model((*model.UsageEvent)(nil)).Count(ctx); err != nil {
+		return nil, fmt.Errorf("count usage events: %w", err)
+	}
+	if stats.TotalWebhooks, err = s.DB.NewSelect().Model((*model.Webhook)(nil)).Where("active = true").Count(ctx); err != nil {
+		return nil, fmt.Errorf("count webhooks: %w", err)
+	}
 
 	type statusCount struct {
 		Status string `bun:"status"`
 		Count  int    `bun:"count"`
 	}
 	var counts []statusCount
-	_ = s.DB.NewSelect().Model((*model.License)(nil)).
+	if err := s.DB.NewSelect().Model((*model.License)(nil)).
 		ColumnExpr("status, count(*) as count").
-		Group("status").Scan(ctx, &counts)
+		Group("status").Scan(ctx, &counts); err != nil {
+		return nil, fmt.Errorf("count licenses by status: %w", err)
+	}
 	for _, c := range counts {
 		stats.ByStatus[c.Status] = c.Count
 	}
 
 	var recent []*model.License
-	_ = s.DB.NewSelect().Model(&recent).
+	if err := s.DB.NewSelect().Model(&recent).
 		Relation("Product").Relation("Plan").
-		OrderExpr("license.created_at DESC").Limit(10).Scan(ctx)
+		OrderExpr("license.created_at DESC").Limit(10).Scan(ctx); err != nil {
+		return nil, fmt.Errorf("list recent licenses: %w", err)
+	}
 	stats.RecentLicenses = recent
 
 	return stats, nil
