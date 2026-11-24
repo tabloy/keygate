@@ -6364,7 +6364,10 @@ components:
       in: header
       name: X-Keygate-Delivery
       required: true
-      description: The delivery id. Retries of a delivery keep it; a manual resend gets a new one.
+      description: |
+        The delivery attempt id. Retries of a delivery keep it; a manual
+        resend gets a new one even though it replays the same event, so
+        dedupe on the body's `id` instead of this header.
       schema: { type: string, format: uuid }
 
   responses:
@@ -7108,10 +7111,22 @@ components:
         `WEBHOOK_MAX_ATTEMPTS` attempts (default 5) have been made; then
         it is marked `failed`. Redirects are followed up to 10 hops,
         each checked against the private address rules. Deliveries are
-        sent concurrently, so their order is not guaranteed. Retries keep
-        the `X-Keygate-Delivery` id; use it to deduplicate.
-      required: [event, timestamp, data]
+        sent concurrently, so their order is not guaranteed. Retries of
+        one delivery keep both the `X-Keygate-Delivery` header and this
+        body's `id`. A manual resend gets a new `X-Keygate-Delivery`
+        header (it is tracked as its own delivery, with its own retries
+        and response) but replays the SAME body, `id` included: dedupe
+        on the body's `id`, not the header, to also catch a resend of
+        something you already processed.
+      required: [id, event, timestamp, data]
       properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            Identifies this event occurrence, not this delivery attempt.
+            Stays the same across retries and across a manual resend of
+            the same event; dedupe on this, not `X-Keygate-Delivery`.
         event: { type: string, example: license.created }
         timestamp:
           type: string
@@ -7121,6 +7136,7 @@ components:
           type: object
           description: Event-specific fields; see each event
       example:
+        id: 7b3b5e0a-1c2d-4e6f-8a9b-0c1d2e3f4a5b
         event: license.created
         timestamp: "2026-10-23T08:15:00Z"
         data:
