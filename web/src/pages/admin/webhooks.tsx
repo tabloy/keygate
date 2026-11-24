@@ -15,7 +15,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react"
-import { Fragment, useState } from "react"
+import { Fragment, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
@@ -110,6 +110,10 @@ export default function WebhooksPage() {
   const products = productsData?.products || []
   const { items: paginatedWebhooks, total: wTotal, totalPages: wTotalPages } = pg.from(data, data?.webhooks)
 
+  // Set as the form is submitted, before the mutation is pending, so a
+  // double click or double Enter creates one webhook, not two - each
+  // with its own secret, of which only the second would ever be shown.
+  const creatingLock = useRef(false)
   const createMut = useMutation({
     mutationFn: admin.createWebhook,
     onSuccess: (data) => {
@@ -119,6 +123,9 @@ export default function WebhooksPage() {
       showToast(t("toast.webhookCreated"), "success")
     },
     onError: (e: Error) => showToast(e.message, "error"),
+    onSettled: () => {
+      creatingLock.current = false
+    },
   })
   const toggleMut = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => admin.updateWebhook(id, { active }),
@@ -302,7 +309,11 @@ export default function WebhooksPage() {
           open
           onClose={() => setCreating(false)}
           products={products}
-          onSubmit={(d) => createMut.mutate(d)}
+          onSubmit={(d) => {
+            if (creatingLock.current) return
+            creatingLock.current = true
+            createMut.mutate(d)
+          }}
           loading={createMut.isPending}
         />
       )}

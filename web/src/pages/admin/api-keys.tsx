@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Copy, Eye, EyeOff, Package, Plus, RefreshCw, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { ProductSelect } from "@/components/product-select"
 import { showToast } from "@/components/toast"
@@ -67,6 +67,11 @@ export default function APIKeysPage() {
   const products = productsData?.products || []
   const { items: keys, total, totalPages } = pg.from(data, data?.api_keys)
 
+  // Set as the form is submitted, before the mutation is pending, so a
+  // double click or double Enter creates one key, not two - the
+  // second a live, full-scope credential whose raw value is never
+  // shown to anyone.
+  const creatingLock = useRef(false)
   const createMut = useMutation({
     mutationFn: admin.createAPIKey,
     onSuccess: (data) => {
@@ -76,6 +81,9 @@ export default function APIKeysPage() {
       showToast(t("toast.apiKeyCreated"), "success")
     },
     onError: (e: Error) => showToast(e.message, "error"),
+    onSettled: () => {
+      creatingLock.current = false
+    },
   })
   const deleteMut = useMutation({
     mutationFn: (id: string) => admin.deleteAPIKey(id),
@@ -234,7 +242,11 @@ export default function APIKeysPage() {
           open
           onClose={() => setCreating(false)}
           products={products}
-          onSubmit={(d) => createMut.mutate(d)}
+          onSubmit={(d) => {
+            if (creatingLock.current) return
+            creatingLock.current = true
+            createMut.mutate(d)
+          }}
           loading={createMut.isPending}
         />
       )}
