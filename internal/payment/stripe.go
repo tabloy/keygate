@@ -3568,10 +3568,17 @@ func (h *StripeHandler) onPaymentActionRequired(ctx context.Context, raw json.Ra
 	if err != nil {
 		return err
 	}
-	// Notify user to complete 3DS/SCA authentication
+	// Notify user to complete 3DS/SCA authentication. Queued, not sent
+	// directly: this is the only mail carrying the link the customer
+	// needs, so losing it to an SMTP hiccup would leave them with no
+	// way to find it again before the subscription goes past due.
 	productName := h.productName(ctx, lic.ProductID)
 	if h.Email != nil {
-		h.Email.SendPaymentActionRequired(lic.Email, productName, data.HostedInvoiceURL)
+		if subject, body, skip := h.Email.RenderPaymentActionRequired(lic.Email, productName, data.HostedInvoiceURL); !skip {
+			if err := h.Store.EnqueueEmail(ctx, lic.Email, subject, body); err != nil {
+				return fmt.Errorf("queue payment action required email: %w", err)
+			}
+		}
 	}
 	h.Store.Audit(ctx, &model.AuditLog{
 		Entity: "license", EntityID: lic.ID, Action: "payment_action_required",
