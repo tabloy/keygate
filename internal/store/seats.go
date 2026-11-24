@@ -545,8 +545,16 @@ func (s *Store) ListSeats(ctx context.Context, licenseID string, p Page) ([]*mod
 // are refused, but the license email can change afterwards (a Stripe
 // customer's new address) to that of an existing member, who would
 // otherwise count twice, once as the owner and once as a member.
+//
+// An invite that expired without being accepted holds nothing: nothing
+// ever sweeps those rows away (removed_at stays NULL), so counting them
+// here would let a handful of unanswered invites permanently occupy a
+// license's seats, refusing new invites the owner has every right to
+// send. Only a *pending* invite still within its window, or an already
+// accepted seat, counts.
 const memberSeatsSQL = `SELECT COUNT(*) FROM seats s JOIN licenses l ON l.id = s.license_id
-	WHERE s.license_id = ? AND s.removed_at IS NULL AND lower(s.email) <> lower(l.email)`
+	WHERE s.license_id = ? AND s.removed_at IS NULL AND lower(s.email) <> lower(l.email)
+		AND (s.accepted_at IS NOT NULL OR s.invite_expires_at IS NULL OR s.invite_expires_at > now())`
 
 // CountLicensesOverSeatLimit returns how many licenses on the plan have
 // more people joined, the owner included, than maxSeats would allow:
