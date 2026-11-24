@@ -63,10 +63,8 @@ func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
 		response.Internal(c, err)
 		return
 	}
-	if count >= 3 {
-		// The window is ten minutes; waiting that long always clears it.
-		c.Header("Retry-After", "600")
-		response.Err(c, 429, "RATE_LIMITED", "too many code requests, try again later")
+	if count >= store.OTPCodesPerWindow {
+		h.otpRateLimited(c)
 		return
 	}
 
@@ -91,8 +89,16 @@ func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
 		CodeHash:  codeHash,
 		ExpiresAt: time.Now().Add(10 * time.Minute),
 	}
-	if err := h.Store.CreateOTPCode(c, otp); err != nil {
+	// The count above only spares the work for an address already over
+	// the limit. Parallel requests all pass it, so storing the code
+	// checks the limit again under a lock.
+	stored, err := h.Store.CreateOTPCodeWithinLimit(c, otp)
+	if err != nil {
 		response.Internal(c, err)
+		return
+	}
+	if !stored {
+		h.otpRateLimited(c)
 		return
 	}
 
@@ -117,6 +123,13 @@ func (h *AuthHandler) sendCode(c *gin.Context, email string, gated bool) {
 	}
 
 	response.OK(c, gin.H{"status": "sent"})
+}
+
+// otpRateLimited writes the 429 for an address that has used up its codes.
+func (h *AuthHandler) otpRateLimited(c *gin.Context) {
+	// The window is ten minutes; waiting that long always clears it.
+	c.Header("Retry-After", "600")
+	response.Err(c, 429, "RATE_LIMITED", "too many code requests, try again later")
 }
 
 // OTPVerify handles POST /api/v1/auth/otp/verify

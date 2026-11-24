@@ -2305,6 +2305,42 @@ func (s *Store) CreateOTPCode(ctx context.Context, otp *model.OTPCode) error {
 	return err
 }
 
+// OTPCodesPerWindow is how many login codes one address may be sent in
+// the ten-minute window.
+const OTPCodesPerWindow = 3
+
+// CreateOTPCodeWithinLimit stores the code unless the address already has
+// OTPCodesPerWindow codes from the last ten minutes, and reports whether
+// it was stored. The count and the insert run under one per-address lock:
+// counted first and stored in a separate statement, a burst of parallel
+// requests all read a count under the limit and each stored a code.
+func (s *Store) CreateOTPCodeWithinLimit(ctx context.Context, otp *model.OTPCode) (bool, error) {
+	if otp.ID == "" {
+		otp.ID = newID()
+	}
+	stored := false
+	err := RunInTx(ctx, s.DB, func(ctx context.Context, tx bun.Tx) error {
+		if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "otp_send:"+otp.Email); err != nil {
+			return err
+		}
+		count, err := tx.NewSelect().Model((*model.OTPCode)(nil)).
+			Where("email = ? AND created_at > now() - interval '10 minutes'", otp.Email).
+			Count(ctx)
+		if err != nil {
+			return err
+		}
+		if count >= OTPCodesPerWindow {
+			return nil
+		}
+		if _, err := tx.NewInsert().Model(otp).Exec(ctx); err != nil {
+			return err
+		}
+		stored = true
+		return nil
+	})
+	return stored, err
+}
+
 func (s *Store) CountRecentOTPCodes(ctx context.Context, email string) (int, error) {
 	count, err := s.DB.NewSelect().Model((*model.OTPCode)(nil)).
 		Where("email = ? AND created_at > now() - interval '10 minutes'", email).
