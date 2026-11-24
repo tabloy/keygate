@@ -167,19 +167,26 @@ func (m *MeteredBillingSyncer) TryRunOnce(ctx context.Context, limit int) (pushe
 			}
 			sent, err := m.syncOne(ctx, row)
 			if err != nil {
+				var refused *rowRefusedError
+				isRowRefusal := errors.As(err, &refused)
 				m.logger.Warn("metered: push failed",
 					"id", row.ID, "license_id", row.LicenseID,
 					"feature", row.Feature, "attempts", row.Attempts+1,
-					"error", err)
-				// Single source of attempts bump on failure. syncOne
-				// does NOT touch attempts; RecordMeteredSyncFailure
-				// owns it. Without this split the counter doubled.
-				_ = m.store.RecordMeteredSyncFailure(ctx, row.ID, err.Error())
-				var refused *rowRefusedError
-				if errors.As(err, &refused) {
-					// About this row alone: the next may well go through.
+					"row_refusal", isRowRefusal, "error", err)
+				if isRowRefusal {
+					// About this row alone: it owns the failure, so it
+					// spends one of its own retries. The next row may
+					// well go through.
+					_ = m.store.RecordMeteredSyncFailure(ctx, row.ID, err.Error())
 					continue
 				}
+				// Account-wide (Stripe unreachable, the key revoked):
+				// this row did nothing wrong, so don't spend one of
+				// its retries on a failure that belongs to the whole
+				// pass. Otherwise an outage burns every queued row's
+				// retry budget pass after pass, and rows permanently
+				// stop being retried long before the outage is over.
+				_ = m.store.RecordMeteredSyncAccountError(ctx, row.ID, err.Error())
 				if failedInARow++; failedInARow >= meteredFailuresEndPass {
 					m.logger.Warn("metered: pushes keep failing; ending this pass", "failed_in_a_row", failedInARow)
 					break

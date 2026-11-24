@@ -128,6 +128,24 @@ func (s *Store) RecordMeteredSyncFailure(ctx context.Context, id, reason string)
 	return err
 }
 
+// RecordMeteredSyncAccountError stamps the row with the failure
+// reason without bumping attempts. An account-wide failure (Stripe
+// unreachable, the API key revoked or rotated) says nothing about
+// this row in particular, so it must not spend the row's limited
+// retries - every row in the queue would otherwise have one of its
+// few attempts burned on every pass of an outage that has nothing to
+// do with any of them, until they permanently stop being retried.
+func (s *Store) RecordMeteredSyncAccountError(ctx context.Context, id, reason string) error {
+	const maxLastErr = 512
+	if len(reason) > maxLastErr {
+		reason = reason[:maxLastErr]
+	}
+	_, err := s.DB.NewUpdate().Model((*model.MeteredBilling)(nil)).
+		Set("last_error = ?", reason).
+		Where("id = ?", id).Exec(ctx)
+	return err
+}
+
 // MarkMeteredAttempted bumps attempts without changing synced state.
 // Called on every push regardless of outcome so retry budgets are
 // visible. Successful pushes also call MarkMeteredSynced which
