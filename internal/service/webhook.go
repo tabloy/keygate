@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/net/idna"
 
@@ -478,6 +479,11 @@ func (s *WebhookService) DispatchWithLog(ctx context.Context, productID, event s
 	}
 
 	payload := map[string]any{
+		// A stable id for this event occurrence, not this delivery
+		// attempt: Redispatch replays this same payload byte-for-byte
+		// under a new X-Keygate-Delivery, so "id" is what a receiver
+		// following our docs can actually dedupe a resend against.
+		"id":        uuid.NewString(),
 		"event":     event,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data":      data,
@@ -642,10 +648,11 @@ var ErrWebhookInactive = errors.New("webhook is disabled")
 
 // Redispatch fires a fresh delivery using the payload of an existing
 // one. Industry-standard "resend" behaviour: the receiver sees the
-// SAME `data` (so its idempotency dedup still works) but a new
-// `X-Keygate-Delivery` header and a new row in the deliveries table
-// — so retries, response codes, and timestamps are tracked
-// independently of the original attempt.
+// SAME payload, including its "id" (so its own dedup still works
+// against a resend, not only against two attempts of the one
+// delivery), but a new `X-Keygate-Delivery` header and a new row in
+// the deliveries table - so retries, response codes, and timestamps
+// are tracked independently of the original attempt.
 //
 // Returns the new delivery on success. Caller should audit-log the
 // admin action with both delivery IDs.
