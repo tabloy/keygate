@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 
@@ -19,6 +21,26 @@ func quotaRemaining(limit, used int64) int64 {
 		return -1
 	}
 	return max(limit-used, 0)
+}
+
+// usageCounterReader is the one store read periodUsage needs.
+type usageCounterReader interface {
+	GetUsageCounter(ctx context.Context, licenseID, feature, period, periodKey string) (*model.UsageCounter, error)
+}
+
+// periodUsage is how much of a quota a license has used in a period.
+// No counter row yet means nothing used. Any other read failure is
+// returned: reading it as zero would report the whole quota as still
+// available to a customer who may already have used it up.
+func periodUsage(ctx context.Context, r usageCounterReader, licenseID, feature, period, periodKey string) (int64, error) {
+	counter, err := r.GetUsageCounter(ctx, licenseID, feature, period, periodKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read usage counter for %q: %w", feature, err)
+	}
+	return counter.Used, nil
 }
 
 type UsageService struct {
@@ -217,10 +239,9 @@ func (s *UsageService) GetQuotaStatus(ctx context.Context, licenseKey, feature, 
 	}
 	periodKey := store.CurrentPeriodKey(period)
 
-	counter, _ := s.store.GetUsageCounter(ctx, lic.ID, feature, period, periodKey)
-	used := int64(0)
-	if counter != nil {
-		used = counter.Used
+	used, err := periodUsage(ctx, s.store, lic.ID, feature, period, periodKey)
+	if err != nil {
+		return nil, apperr.Internal(err)
 	}
 
 	remaining := quotaRemaining(limit, used)
