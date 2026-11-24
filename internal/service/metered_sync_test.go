@@ -597,3 +597,44 @@ func TestMeteredSync_DrainedRowsDoNotResetTheRun(t *testing.T) {
 		t.Fatalf("pushes tried with Stripe down = %d, want %d despite the drained rows between them", tries, meteredFailuresEndPass)
 	}
 }
+
+// An account-wide failure (Stripe unreachable, or the key revoked)
+// says nothing about any one row, so it must not spend a row's
+// limited retries: several passes through an outage must not push a
+// row toward maxAttempts and strand it once the outage ends.
+func TestMeteredSync_AccountWideFailureDoesNotSpendRowRetries(t *testing.T) {
+	tt, ctx := setupMeteredTest(t)
+	lic, ent := seedMeteredLicense(t, tt.store, ctx, "ev_outage", "cus_outage")
+	if err := tt.queue(ctx, lic, ent, "2026-05", 1); err != nil {
+		t.Fatal(err)
+	}
+	tt.syncer.dispatch = func(context.Context, stripeMeterEvent) (string, error) {
+		return "", &stripe.Error{HTTPStatusCode: http.StatusUnauthorized, Msg: "Invalid API Key provided"}
+	}
+
+	// tt.syncer.maxAttempts is 3: more passes than that would strand
+	// the row today, since every pass bumps attempts once.
+	for i := 0; i < 5; i++ {
+		tt.syncer.RunOnce(ctx, 10)
+	}
+
+	rows, err := tt.store.ListMeteredBilling(ctx, lic.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	if rows[0].Attempts != 0 {
+		t.Fatalf("attempts after 5 passes of an account-wide failure = %d, want 0: the row did nothing wrong", rows[0].Attempts)
+	}
+	if rows[0].LastError == "" {
+		t.Fatal("last_error should still record the failure, even though attempts is untouched")
+	}
+
+	// The outage ends: the row is still eligible and pushes normally.
+	tt.syncer.dispatch = tt.dispatch
+	if pushed := tt.syncer.RunOnce(ctx, 10); pushed != 1 {
+		t.Fatalf("pushed after the outage ends = %d, want 1: the row must not have been stranded", pushed)
+	}
+}
