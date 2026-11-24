@@ -1005,22 +1005,26 @@ func (s *EmailService) RenderRenewalReminder(productName, renewalDate string) (s
 	return productName + " renewal coming up", body
 }
 
-func (s *EmailService) SendPaymentActionRequired(to, productName, invoiceURL string) {
+// RenderPaymentActionRequired builds the 3DS/SCA notice: the only
+// mail that carries the link a customer needs to complete
+// authentication. Like the dunning ladder, the caller queues it
+// rather than sending it from the webhook handler directly - a mail
+// sent from there and lost to an SMTP hiccup would leave the customer
+// with no way to find that link again, and the subscription would go
+// past due and eventually get suspended with the customer never
+// having been told why.
+func (s *EmailService) RenderPaymentActionRequired(to, productName, invoiceURL string) (subject, body string, skip bool) {
 	if s.skipDisabled("payment_action_required", to) {
-		return
+		return "", "", true
 	}
-	body := `<!DOCTYPE html>
+	body = `<!DOCTYPE html>
 <html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
 <h2 style="color: #d97706;">Payment Authentication Required</h2>
 <p>Your payment for <strong>` + html.EscapeString(productName) + `</strong> requires additional authentication.</p>
 <p><a href="` + html.EscapeString(invoiceURL) + `" style="display:inline-block;background:#2563eb;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;">Complete Payment</a></p>
 <p style="color:#666;font-size:14px;">If you don't complete this step, your subscription may be interrupted.</p>
 </body></html>`
-	go func() {
-		if err := s.Send(to, productName+" — payment authentication required", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
-		}
-	}()
+	return productName + " — payment authentication required", body, false
 }
 
 func (s *EmailService) SendTrialEnding(to, productName, trialEnd string) {
