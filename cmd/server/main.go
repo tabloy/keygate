@@ -1151,6 +1151,7 @@ func main() {
 		admin.POST("/products", adminH.CreateProduct)
 		admin.PUT("/products/:id", adminH.UpdateProduct)
 		admin.DELETE("/products/:id", adminH.DeleteProduct)
+		admin.DELETE("/licenses/:id", adminH.DeleteLicense)
 
 		admin.GET("/plans", adminH.ListPlans)
 		admin.GET("/plans/:id", adminH.GetPlan)

@@ -1016,8 +1016,9 @@ func (h *AdminHandler) DeleteProduct(c *gin.Context) {
 	// foreign key the database refuses to break. Counting them here
 	// is what turns "an internal error occurred" — with the reason
 	// only in Postgres's log — into a sentence saying what to clear
-	// first. Licences are named first: they are the one thing an
-	// admin cannot simply delete.
+	// first. Licences are named first: only a revoked or expired one
+	// with no payment on record can be deleted (DeleteLicense); the rest
+	// are revoked and stay.
 	plans, licenses, releases, err := h.Store.ProductBlockers(c, id)
 	if err != nil {
 		response.Internal(c, err)
@@ -3028,6 +3029,56 @@ func (h *AdminHandler) RevokeLicense(c *gin.Context) {
 		}
 	}
 	response.OK(c, gin.H{"status": "revoked"})
+}
+
+// DeleteLicense deletes a licence for good, to clear away test and
+// hand-made licences that would otherwise linger as "revoked". Only a
+// licence already revoked or expired, and never one with a payment,
+// checkout or update period on record, can be deleted (see
+// store.DeleteLicense); the rest are revoked and stay.
+//
+// The route is admin-only, unlike the licence lifecycle actions that
+// licenses:write keys reach: those keys are for merchant backends, and a
+// leaked one must not be able to erase licences and their history.
+//
+// DELETE /admin/licenses/:id
+func (h *AdminHandler) DeleteLicense(c *gin.Context) {
+	id := c.Param("id")
+	if !h.checkLicenseScope(c, id) {
+		return
+	}
+	lic, err := h.Store.DeleteLicense(c, id)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrLicenseNotFound):
+			response.NotFound(c, err.Error())
+		case errors.Is(err, store.ErrLicenseNotRevoked):
+			response.Err(c, http.StatusConflict, "LICENSE_NOT_REVOKED", err.Error())
+		case errors.Is(err, store.ErrLicenseNotDeletable):
+			response.Err(c, http.StatusConflict, "LICENSE_NOT_DELETABLE", err.Error())
+		default:
+			response.Internal(c, err)
+		}
+		return
+	}
+	_, hint := h.licenseKeyHint(lic)
+	// ProductID is set here: the audit writer would look it up from the
+	// licence, which is gone.
+	h.Store.Audit(c, &model.AuditLog{
+		Entity: "license", EntityID: id, Action: "deleted",
+		ActorType: "admin", ActorID: adminID(c), ProductID: lic.ProductID, IPAddress: c.ClientIP(),
+		Changes: map[string]any{"email": lic.Email, "plan_id": lic.PlanID, "status": lic.Status, "key_hint": hint},
+	})
+	if h.Webhook != nil {
+		// The licence can no longer be fetched, so the payload carries
+		// what a receiver needs to match it.
+		h.Webhook.Dispatch(c, lic.ProductID, model.EventLicenseDeleted, map[string]any{
+			"license_id": id, "email": lic.Email, "product_id": lic.ProductID, "plan_id": lic.PlanID,
+			"status": lic.Status, "external_customer_id": lic.ExternalCustomerID,
+			"external_workspace_id": lic.ExternalWorkspaceID,
+		})
+	}
+	response.NoContent(c)
 }
 
 // RefundLicense is the dashboard's "cancel and revoke": it cancels the

@@ -241,6 +241,15 @@ const en = {
   "licenses.noProducts": "No products yet",
   "licenses.noProductsDesc": "Create a product and plan first before issuing licenses.",
   "licenses.detail": "License Detail",
+  "licenses.delete": "Delete license",
+  "licenses.deleteTitle": "Delete this license for good?",
+  "licenses.deleteDesc":
+    "The license and everything recorded under it (seats, add-ons, usage) are removed and cannot be brought back. The audit log keeps a record.",
+  "licenses.deleteTypeToConfirm": "Type DELETE to confirm.",
+  "licenses.deleteRevokeFirst": "Only a revoked or expired license can be deleted. Revoke it first.",
+  "licenses.deleteKeepsRecord":
+    "This license has a payment, checkout or update period on record, so it can only be revoked.",
+  "licenses.deleted": "License deleted",
   "licenses.activations": "Activations",
   "licenses.resendEmail": "Resend email",
   "licenses.resendEmailConfirm": "Send the license key to {email} again? Use this when the first email never arrived.",

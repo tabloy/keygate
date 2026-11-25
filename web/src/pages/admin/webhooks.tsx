@@ -72,6 +72,7 @@ const WEBHOOK_EVENTS = [
   "license.suspended",
   "license.reinstated",
   "license.revoked",
+  "license.deleted",
   "license.payment_failed",
   "license.payment_recovered",
   "license.quantity_changed",
