@@ -1108,6 +1108,7 @@ const (
 	EventLicenseSuspended        = "license.suspended"
 	EventLicenseReinstated       = "license.reinstated"
 	EventLicenseRevoked          = "license.revoked"
+	EventLicenseDeleted          = "license.deleted"
 	EventLicensePaymentFailed    = "license.payment_failed"
 	EventLicensePaymentRecovered = "license.payment_recovered"
 	EventLicenseQuantityChanged  = "license.quantity_changed"
@@ -1129,7 +1130,7 @@ var WebhookEvents = []string{
 	EventLicenseCreated, EventLicenseActivated, EventLicenseDeactivated,
 	EventLicenseExpiryChanged, EventLicenseUpdatesChanged, EventLicenseExpired,
 	EventLicenseCanceled, EventLicenseSuspended, EventLicenseReinstated,
-	EventLicenseRevoked, EventLicensePaymentFailed, EventLicensePaymentRecovered,
+	EventLicenseRevoked, EventLicenseDeleted, EventLicensePaymentFailed, EventLicensePaymentRecovered,
 	EventLicenseQuantityChanged, EventQuotaWarning, EventQuotaExceeded,
 	EventSeatAdded, EventSeatRemoved, EventPlanChanged, EventReleasePublished, EventReleaseYanked, EventReleaseUnyanked,
 }

@@ -457,6 +457,7 @@ export const admin = {
   setLicenseUpdatesUntil: (id: string, updatesUntil: string) =>
     post<License>(`/admin/licenses/${id}/updates-until`, { updates_until: updatesUntil }),
   revokeLicense: (id: string) => post(`/admin/licenses/${id}/revoke`),
+  deleteLicense: (id: string) => del(`/admin/licenses/${id}`),
   suspendLicense: (id: string) => post(`/admin/licenses/${id}/suspend`),
   reinstateLicense: (id: string) =>
     post<{ status: string; usable?: boolean; notice?: string }>(`/admin/licenses/${id}/reinstate`),
@@ -850,6 +851,9 @@ export interface License {
   // purchase has no subscription, so nothing to change, cancel, or
   // update a payment method for.
   stripe_subscription_id?: string
+  stripe_customer_id?: string
+  stripe_payment_intent_id?: string
+  stripe_checkout_session_id?: string
   status: string
   valid_from: string
   valid_until?: string

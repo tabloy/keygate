@@ -115,6 +115,7 @@ export default function LicensesPage() {
   })
 
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<License | null>(null)
   // The open license lives in the URL (?id=), so the dashboard's links
   // to a license, a reload and the back button all land on it.
   const [params, setParams] = useSearchParams()
@@ -306,6 +307,21 @@ export default function LicensesPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {/* Why the bin is off is said here, not after DELETE has been
+                          typed. The title sits on a wrapper: a disabled button
+                          gets no pointer events, so no tooltip. */}
+                        <span className="inline-block" title={t(deleteBlock(lic) ?? "licenses.delete")}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive"
+                            disabled={!!deleteBlock(lic)}
+                            aria-label={t("licenses.delete")}
+                            onClick={() => setDeleting(lic)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </span>
                       </DataTableCell>
                     </DataTableRow>
                   ))}
@@ -343,7 +359,125 @@ export default function LicensesPage() {
 
       {/* Detail */}
       {viewing && <LicenseDetail key={viewing} id={viewing} onClose={() => setViewing(null)} />}
+      {deleting && (
+        <DeleteLicenseDialog
+          license={deleting}
+          keyHint={maskKey(data?.license_key_hints?.[deleting.id], data?.license_key_prefixes?.[deleting.id])}
+          onClose={() => setDeleting(null)}
+          onDeleted={(id) => {
+            if (viewing === id) setViewing(null)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+// deleteBlock mirrors the server's rule (store.DeleteLicense) as far as
+// the list can see it, and names the reason the bin is off: a licence
+// still in use is revoked first; one with a payment, checkout or update
+// period on record stays revoked. The server also refuses one with an
+// upgrade or renewal checkout, which the list cannot see.
+function deleteBlock(l: License): TranslationKeys | null {
+  if (l.status !== "revoked" && l.status !== "expired") return "licenses.deleteRevokeFirst"
+  if (
+    l.payment_provider ||
+    l.stripe_customer_id ||
+    l.stripe_subscription_id ||
+    l.stripe_payment_intent_id ||
+    l.stripe_checkout_session_id ||
+    l.updates_until
+  ) {
+    return "licenses.deleteKeepsRecord"
+  }
+  return null
+}
+
+// DeleteLicenseDialog deletes a revoked licence for good. The Delete
+// button stays disabled until DELETE is typed exactly, so a misclick
+// cannot remove a licence.
+function DeleteLicenseDialog({
+  license,
+  keyHint,
+  onClose,
+  onDeleted,
+}: {
+  license: License
+  keyHint: string
+  onClose: () => void
+  onDeleted: (id: string) => void
+}) {
+  const { t } = useI18n()
+  const qc = useQueryClient()
+  const [typed, setTyped] = useState("")
+  const deleteMut = useMutation({
+    mutationFn: () => admin.deleteLicense(license.id),
+    meta: { ownErrors: true },
+    onSuccess: () => {
+      // The licence's own cached detail would otherwise reappear on a
+      // browser Forward to ?id=…
+      qc.removeQueries({ queryKey: ["admin", "license", license.id] })
+      qc.invalidateQueries({ queryKey: ["admin"] })
+      showToast(t("licenses.deleted"), "success")
+      onDeleted(license.id)
+      onClose()
+    },
+    onError: (e: Error) => {
+      const code = errorCode(e)
+      if (code === "NOT_FOUND") {
+        // Deleted elsewhere (another tab, the API): drop the stale row.
+        qc.invalidateQueries({ queryKey: ["admin"] })
+        onClose()
+      }
+      showToast(
+        code === "LICENSE_NOT_REVOKED"
+          ? t("licenses.deleteRevokeFirst")
+          : code === "LICENSE_NOT_DELETABLE"
+            ? t("licenses.deleteKeepsRecord")
+            : e.message,
+        "error",
+      )
+    },
+  })
+  return (
+    <AlertDialog open onOpenChange={(o) => !o && !deleteMut.isPending && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("licenses.deleteTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("licenses.deleteDesc")}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="rounded-lg border p-3 text-sm space-y-1">
+          <div className="font-medium break-all">{license.email}</div>
+          <div className="text-muted-foreground">
+            {license.product?.name || license.product_id} · {license.plan?.name || license.plan_id}
+          </div>
+          <div className="text-muted-foreground flex items-center gap-2">
+            <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{keyHint}</code>
+            <Badge className={statusColor(license.status)}>{t(`status.${license.status}` as TranslationKeys)}</Badge>
+          </div>
+        </div>
+        <label className="block text-sm" htmlFor="delete-license-confirm">
+          {t("licenses.deleteTypeToConfirm")}
+        </label>
+        <Input
+          id="delete-license-confirm"
+          autoComplete="off"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder="DELETE"
+        />
+        <div className="flex justify-end gap-2">
+          <AlertDialogCancel disabled={deleteMut.isPending}>{t("common.cancel")}</AlertDialogCancel>
+          <Button
+            variant="destructive"
+            disabled={typed !== "DELETE" || deleteMut.isPending}
+            onClick={() => deleteMut.mutate()}
+          >
+            {deleteMut.isPending ? t("common.loading") : t("licenses.delete")}
+          </Button>
+        </div>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -503,7 +637,8 @@ function CreateLicenseDialog({
   )
 }
 
-function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
+// LicenseDetail is also opened from a customer's page (customers.tsx).
+export function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { t } = useI18n()
   const qc = useQueryClient()
   const {

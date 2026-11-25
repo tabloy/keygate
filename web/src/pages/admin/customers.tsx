@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Eye, Search } from "lucide-react"
 import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +21,7 @@ import { type TranslationKeys, useI18n } from "@/i18n"
 import type { UserDetail } from "@/lib/api"
 import { admin } from "@/lib/api"
 import { formatDate, formatLicenseExpiry, maskKey, statusColor } from "@/lib/utils"
+import { LicenseDetail } from "@/pages/admin/licenses"
 
 export default function CustomersPage() {
   const { t } = useI18n()
@@ -151,8 +152,31 @@ function CustomerDetailDialog({
 
   const detail: UserDetail | undefined = data
 
+  // A licence opened from this customer's list, shown over the customer
+  // (inside this dialog, so Escape closes only the licence).
+  const qc = useQueryClient()
+  const [openLicense, setOpenLicense] = useState<string | null>(null)
+  // A row click that ends a text selection (copying an email or id) is
+  // not a request to open the licence.
+  const openFromRow = (id: string) => {
+    if (window.getSelection()?.toString()) return
+    setOpenLicense(id)
+  }
+  const closeLicense = () => {
+    setOpenLicense(null)
+    // Key rotation and seat changes don't refresh this customer's query
+    // themselves; the key hint and roles here must not go stale.
+    qc.invalidateQueries({ queryKey: ["admin", "user-detail", userId] })
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setOpenLicense(null)
+        onOpenChange(o)
+      }}
+    >
       <DialogContent className="max-w-3xl h-[min(760px,85vh)]">
         <DialogHeader>
           <DialogTitle>{t("customers.detail")}</DialogTitle>
@@ -246,11 +270,12 @@ function CustomerDetailDialog({
                         <DataTableHead>{t("licenses.licenseKey")}</DataTableHead>
                         <DataTableHead>{t("licenses.validUntil")}</DataTableHead>
                         <DataTableHead>{t("common.created")}</DataTableHead>
+                        <DataTableHead className="text-right">{t("common.actions")}</DataTableHead>
                       </DataTableRow>
                     </DataTableHeader>
                     <DataTableBody>
                       {detail.licenses.map((l) => (
-                        <DataTableRow key={l.id}>
+                        <DataTableRow key={l.id} className="cursor-pointer" onClick={() => openFromRow(l.id)}>
                           <DataTableCell className="font-medium">{l.product?.name || l.product_id}</DataTableCell>
                           <DataTableCell>{l.plan?.name || l.plan_id}</DataTableCell>
                           <DataTableCell>
@@ -275,13 +300,31 @@ function CustomerDetailDialog({
                           <DataTableCell className="text-xs text-muted-foreground">
                             {formatDate(l.created_at)}
                           </DataTableCell>
+                          <DataTableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={t("licenses.detail")}
+                              aria-label={t("licenses.detail")}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setOpenLicense(l.id)
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </DataTableCell>
                         </DataTableRow>
                       ))}
                       {/* Licences the customer is a member of: someone
                         else's, used with the customer's own key, shown
                         by its hint. */}
                       {(detail.memberships || []).map((m) => (
-                        <DataTableRow key={m.id}>
+                        <DataTableRow
+                          key={m.id}
+                          className={m.license ? "cursor-pointer" : undefined}
+                          onClick={() => m.license && openFromRow(m.license.id)}
+                        >
                           <DataTableCell className="font-medium">
                             {m.license?.product?.name || m.license?.product_id}
                             <div className="text-xs font-normal text-muted-foreground break-all">
@@ -309,6 +352,22 @@ function CustomerDetailDialog({
                           </DataTableCell>
                           <DataTableCell className="text-xs text-muted-foreground">
                             {m.license ? formatDate(m.license.created_at) : "-"}
+                          </DataTableCell>
+                          <DataTableCell className="text-right">
+                            {m.license && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title={t("licenses.detail")}
+                                aria-label={t("licenses.detail")}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (m.license) setOpenLicense(m.license.id)
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
                           </DataTableCell>
                         </DataTableRow>
                       ))}
@@ -421,6 +480,7 @@ function CustomerDetailDialog({
             </Tabs>
           )}
         </DialogBody>
+        {openLicense && <LicenseDetail key={openLicense} id={openLicense} onClose={closeLicense} />}
       </DialogContent>
     </Dialog>
   )

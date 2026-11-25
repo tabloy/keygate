@@ -472,6 +472,68 @@ func (s *Store) RevokeLicense(ctx context.Context, id string) error {
 	})
 }
 
+// ErrLicenseNotRevoked refuses to delete a licence that is still in
+// use: only a revoked or expired one can be deleted. Revoking first ends
+// its activations and sessions and tells webhook receivers
+// (license.revoked), and it can still be undone; the delete then only
+// clears away what is already finished.
+var ErrLicenseNotRevoked = errors.New("only a revoked or expired license can be deleted; revoke it first")
+
+// ErrLicenseNotDeletable refuses to delete a licence whose money can
+// still arrive or move after it is gone: one that has been through a
+// payment provider (a renewal paid later would be fulfilled against
+// nothing, metered usage not yet billed would go with it, a refund would
+// be matched to another licence of the customer), one with an upgrade or
+// renewal checkout, and one with a maintenance period, whose owner can
+// open a renewal checkout at any time without a local row to show it.
+// Such a licence stays revoked.
+var ErrLicenseNotDeletable = errors.New("this license has a payment, checkout or update period on record; it can only be revoked")
+
+// DeleteLicense deletes a revoked or expired licence and, through the
+// foreign keys, all that hangs off it: activations, seats and their
+// member keys, add-ons, usage, metered rows, floating sessions,
+// notifications and the upgrade, renewal and update-terms rows. The
+// audit log keeps its history. It returns the licence as it was, for the
+// caller's audit line and webhook: the row is gone afterwards.
+//
+// The checks run under the licence's row lock, the lock a checkout takes
+// to link a subscription and a reinstate takes to bring a licence back,
+// so neither can slip in between the check and the delete.
+func (s *Store) DeleteLicense(ctx context.Context, id string) (*model.License, error) {
+	var gone *model.License
+	err := RunInTx(ctx, s.DB, func(ctx context.Context, tx bun.Tx) error {
+		lic, err := LockLicenseIn(ctx, tx, id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrLicenseNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if lic.Status != model.StatusRevoked && lic.Status != model.StatusExpired {
+			return ErrLicenseNotRevoked
+		}
+		if lic.PaymentProvider != "" || lic.StripeCustomerID != "" || lic.StripeSubscriptionID != "" ||
+			lic.StripePaymentIntentID != "" || lic.StripeCheckoutSessionID != "" || lic.UpdatesUntil != nil {
+			return ErrLicenseNotDeletable
+		}
+		var checkouts int
+		if err := tx.NewRaw(`SELECT (SELECT count(*) FROM license_upgrades WHERE license_id = ?)
+			+ (SELECT count(*) FROM license_renewals WHERE license_id = ?)`, id, id).Scan(ctx, &checkouts); err != nil {
+			return err
+		}
+		if checkouts > 0 {
+			return ErrLicenseNotDeletable
+		}
+		// The row is held FOR UPDATE above, so this deletes exactly it.
+		if _, err := tx.NewDelete().Model((*model.License)(nil)).Where("id = ?", id).Exec(ctx); err != nil {
+			return err
+		}
+		gone = lic
+		return nil
+	})
+	return gone, err
+}
+
 // ErrLicenseNotSuspendable refuses to suspend a licence that is not in
 // use: suspending is for an active, trialing or past-due one. Above all
 // not a revoked one — reinstating would then hand back what was revoked.

@@ -3393,6 +3393,40 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+    delete:
+      tags: [Admin Licenses]
+      summary: Delete a license
+      description: |
+        Requires the `admin` scope (not `licenses:write`). Deletes the
+        license for good, with its activations, seats and member keys,
+        add-ons, usage and the rest that hangs off it; the audit log keeps
+        its history. Sends `license.deleted`. Only a license that is already
+        `revoked` or `expired` can be deleted, and not one with a payment
+        provider, Stripe customer, subscription, payment or checkout, an
+        upgrade or renewal checkout, or an update period (`updates_until`);
+        those stay revoked. No request body.
+      x-required-scopes: [admin]
+      security:
+        - BearerAuth: []
+        - CookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LicenseID"
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/AdminUnauthorized"
+        "403":
+          $ref: "#/components/responses/AdminForbidden"
+        "404":
+          $ref: "#/components/responses/AdminLicenseNotFound"
+        "409":
+          description: |
+            `LICENSE_NOT_REVOKED`: the license is still in use; revoke it
+            first. `LICENSE_NOT_DELETABLE`: it has a payment, checkout or
+            update period on record; it can only be revoked.
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /admin/licenses/{id}/key:
     get:
       tags: [Admin Licenses]
@@ -5852,6 +5886,43 @@ webhooks:
         "200":
           $ref: "#/components/responses/WebhookAck"
 
+
+  license.deleted:
+    post:
+      tags: [Webhooks]
+      summary: A license was deleted
+      description: |
+        Sent by `DELETE /admin/licenses/{id}`, for a license already
+        revoked or expired (`license.revoked` or `license.expired` came
+        first). The license no longer exists, so the payload carries what a
+        receiver needs to match it.
+      parameters:
+        - $ref: "#/components/parameters/WebhookEventHeader"
+        - $ref: "#/components/parameters/WebhookSignatureHeader"
+        - $ref: "#/components/parameters/WebhookDeliveryHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/WebhookPayload"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      required: [license_id, email, product_id, plan_id, status]
+                      properties:
+                        license_id: { type: string, format: uuid }
+                        email: { type: string }
+                        product_id: { type: string, format: uuid }
+                        plan_id: { type: string, format: uuid }
+                        status: { type: string, enum: [revoked, expired] }
+                        external_customer_id: { type: string }
+                        external_workspace_id: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/WebhookAck"
+
   license.payment_failed:
     post:
       tags: [Webhooks]
@@ -7075,6 +7146,7 @@ components:
         - license.suspended
         - license.reinstated
         - license.revoked
+        - license.deleted
         - license.payment_failed
         - license.payment_recovered
         - license.quantity_changed
