@@ -550,7 +550,7 @@ const en = {
   "settings.resetTemplate": "Reset to Default",
   "settings.resetTemplateTitle": "Reset {template} template?",
   "settings.resetTemplateDesc":
-    "Your customized HTML will be replaced with the bundled default. This action cannot be undone — copy the current HTML out first if you might need it back.",
+    "Your customized HTML and subject will be replaced with the bundled defaults. This action cannot be undone — copy the current HTML and subject out first if you might need them back.",
   "settings.templateSaved": "Template saved.",
   "settings.templateReset": "Template reset to default.",
   "settings.templateDesc":
@@ -563,6 +563,10 @@ const en = {
     "This preview follows simple {{if .Field}} conditions only; parts of this template are shown approximately. The email as sent may differ.",
   "settings.templatePreview": "Preview",
   "settings.templateVariables": "Variables",
+  "settings.templateSubject": "Subject",
+  "settings.templateGroupLicenses": "Licenses",
+  "settings.templateGroupBilling": "Billing",
+  "settings.templateGroupAccount": "Account",
   "settings.system": "System",
   "settings.versionInfo": "Version Information",
   "settings.currentVersion": "Current Version",

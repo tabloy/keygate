@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"errors"
 	"fmt"
 	"html"
@@ -15,8 +16,11 @@ import (
 	"net/mail"
 	"net/smtp"
 	"net/textproto"
+	"strconv"
 	"strings"
+	texttemplate "text/template"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tabloy/keygate/internal/branding"
 	"github.com/tabloy/keygate/internal/store"
@@ -202,20 +206,123 @@ func (s *EmailService) getTemplate(key, defaultTmpl string) string {
 	return custom
 }
 
+// emailTemplate is one email Keygate sends: the setting suffix it is
+// stored under, the group the dashboard lists it in, its default body
+// and subject, and the variables the sender passes it. Bodies use
+// html/template; subjects use text/template (a subject is a header, not
+// HTML) and are kept to one line.
+type emailTemplate struct {
+	Key     string
+	Group   string // "licenses", "billing" or "account"
+	Body    string
+	Subject string
+	// Vars are the email's variables, in the order the dashboard lists
+	// them. Customer emails also get SiteName and PortalURL from
+	// templateData; customer() adds them here.
+	Vars []string
+}
+
+func customer(key, group, body, subject string, vars ...string) emailTemplate {
+	return emailTemplate{key, group, body, subject, append(vars, "SiteName", "PortalURL")}
+}
+
+// staff is an email to a Keygate operator; it is not built with
+// templateData, so it gets exactly the variables listed.
+func staff(key, group, body, subject string, vars ...string) emailTemplate {
+	return emailTemplate{key, group, body, subject, vars}
+}
+
+// emailTemplates lists every email Keygate sends. It is the one list
+// the template editor, the settings an admin may write
+// (email_template_<key> and email_subject_<key>) and the validation are
+// built from. Before, only some emails were listed: the rest were built
+// inline and could not be changed, so an install that restyled its
+// emails still sent the plain defaults for the welcome mail, login codes
+// and billing notices. A new email added here is editable at once; give
+// it a label in the dashboard (email-templates.tsx) and sample values in
+// templateSample.
+var emailTemplates = []emailTemplate{
+	customer("license_created", "licenses", tmplLicenseCreated, "Your license for {{.Product}}", "Product", "Plan", "LicenseKey", "DownloadURL"),
+	customer("license_expiring", "licenses", tmplLicenseExpiring, "{{.Product}} {{if .IsTrial}}trial ending soon{{else}}license expiring soon{{end}}", "Product", "LicenseKey", "ExpiresAt", "DaysLeft", "IsTrial", "FallbackPlan"),
+	customer("updates_ending", "licenses", tmplUpdatesEnding, "{{.Product}} updates ending soon", "Product", "LicenseKey", "UpdatesUntil"),
+	customer("license_expired", "licenses", tmplLicenseExpired, "{{.Product}} license expired", "Product"),
+	customer("trial_expired", "licenses", tmplTrialExpired, "{{.Product}} trial has ended", "Product", "FallbackPlan"),
+	customer("license_suspended", "licenses", tmplLicenseSuspended, "{{.Product}} license suspended", "Product", "Reason"),
+	customer("quota_warning", "licenses", tmplQuotaWarning, "{{.Product}}: {{.Feature}} quota at {{.Pct}}%", "Product", "Feature", "Used", "Limit", "Pct"),
+	customer("seat_invite", "licenses", tmplSeatInvite, "You've been invited to {{.Product}}", "Product", "Inviter", "InviteURL", "DownloadURL"),
+	customer("trial_ending", "billing", tmplTrialEnding, "{{.Product}} trial ending soon", "Product", "TrialEnd"),
+	customer("renewal_reminder", "billing", tmplRenewalReminder, "{{.Product}} renewal coming up", "Product", "RenewalDate"),
+	customer("plan_changed", "billing", tmplPlanChanged, "{{.Product}} plan changed", "Product", "OldPlan", "NewPlan"),
+	customer("subscription_canceled", "billing", tmplSubscriptionCanceled, "{{.Product}} subscription canceled", "Product", "Immediate"),
+	customer("payment_failed", "billing", tmplPaymentFailed, "{{.Product}} payment failed", "Product"),
+	customer("dunning_second", "billing", tmplDunningSecond, "{{.Product}} — payment still outstanding", "Product"),
+	customer("dunning_final", "billing", tmplDunningFinal, "{{.Product}} — final payment notice", "Product"),
+	customer("payment_action_required", "billing", tmplPaymentActionRequired, "{{.Product}} — payment authentication required", "Product", "InvoiceURL"),
+	customer("payment_recovered", "billing", tmplPaymentRecovered, "{{.Product}} — payment recovered", "Product"),
+	customer("welcome", "account", tmplWelcome, "Welcome to {{.SiteName}}", "Name"),
+	customer("login_code", "account", tmplLoginCode, "Your login code", "Code"),
+	staff("admin_invite", "account", tmplAdminInvite, "You've been added to {{.SiteName}}", "SiteName", "Inviter", "Role", "LoginURL"),
+}
+
+// requiredTemplateVars are variables a custom body must use, because
+// the email is useless without them: a login-code email without the
+// code locks every customer out. Saving such a template is refused, and
+// a body that still renders without the value falls back to the
+// default when it is sent.
+var requiredTemplateVars = map[string][]string{
+	"login_code": {"Code"},
+}
+
+func findEmailTemplate(key string) (emailTemplate, bool) {
+	for _, t := range emailTemplates {
+		if t.Key == key {
+			return t, true
+		}
+	}
+	return emailTemplate{}, false
+}
+
+// TemplateKeys returns every email's key, in the dashboard's order.
+func TemplateKeys() []string {
+	keys := make([]string, len(emailTemplates))
+	for i, t := range emailTemplates {
+		keys[i] = t.Key
+	}
+	return keys
+}
+
 // DefaultTemplates returns all default email templates keyed by their setting suffix.
 func DefaultTemplates() map[string]string {
-	return map[string]string{
-		"license_created":   tmplLicenseCreated,
-		"license_expiring":  tmplLicenseExpiring,
-		"updates_ending":    tmplUpdatesEnding,
-		"license_expired":   tmplLicenseExpired,
-		"trial_expired":     tmplTrialExpired,
-		"license_suspended": tmplLicenseSuspended,
-		"quota_warning":     tmplQuotaWarning,
-		"seat_invite":       tmplSeatInvite,
-		"admin_invite":      tmplAdminInvite,
-		"payment_failed":    tmplPaymentFailed,
+	m := make(map[string]string, len(emailTemplates))
+	for _, t := range emailTemplates {
+		m[t.Key] = t.Body
 	}
+	return m
+}
+
+// TemplateInfo describes one editable email for the dashboard.
+type TemplateInfo struct {
+	Key, Group, Body, Subject string
+	Variables                 []string
+}
+
+// Templates returns every email, in the dashboard's order.
+func Templates() []TemplateInfo {
+	out := make([]TemplateInfo, len(emailTemplates))
+	for i, t := range emailTemplates {
+		out[i] = TemplateInfo{t.Key, t.Group, t.Body, t.Subject, append([]string(nil), t.Vars...)}
+	}
+	return out
+}
+
+// TemplateVariables returns the variables each email may use, keyed like
+// DefaultTemplates.
+func TemplateVariables() map[string][]string {
+	m := make(map[string][]string, len(emailTemplates))
+	for _, t := range emailTemplates {
+		m[t.Key] = t.Vars
+	}
+	return m
 }
 
 func (s *EmailService) Send(to, subject, htmlBody string) error {
@@ -667,22 +774,17 @@ func localHostname() string { return "[127.0.0.1]" }
 // RenderLicenseCreated builds the license delivery email. downloadURL is
 // the product's download page ({{.DownloadURL}}); empty leaves it out.
 func (s *EmailService) RenderLicenseCreated(productName, planName, licenseKey, downloadURL string) (subject, body string) {
-	body = s.renderEmail("license_created", tmplLicenseCreated, s.templateData(map[string]any{
+	return s.render("license_created", s.templateData(map[string]any{
 		"Product":     productName,
 		"Plan":        planName,
 		"LicenseKey":  licenseKey,
 		"DownloadURL": downloadURL,
 	}))
-	return "Your license for " + productName, body
 }
 
 func (s *EmailService) SendLicenseCreated(to, productName, planName, licenseKey, downloadURL string) {
 	subject, body := s.RenderLicenseCreated(productName, planName, licenseKey, downloadURL)
-	go func() {
-		if err := s.Send(to, subject, body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", subject, "error", err)
-		}
-	}()
+	s.sendAsync(to, subject, body)
 }
 
 // RenderLicenseExpiring builds the reminder that a license or trial runs
@@ -695,7 +797,7 @@ func (s *EmailService) SendLicenseCreated(to, productName, planName, licenseKey,
 // reminder must not tell a customer they will lose access when they
 // will in fact carry on, on that plan.
 func (s *EmailService) RenderLicenseExpiring(productName, licenseKey, expiresAt string, daysLeft int, trial bool, fallbackPlan string) (subject, body string) {
-	body = s.renderEmail("license_expiring", tmplLicenseExpiring, s.templateData(map[string]any{
+	return s.render("license_expiring", s.templateData(map[string]any{
 		"Product":      productName,
 		"LicenseKey":   licenseKey,
 		"ExpiresAt":    expiresAt,
@@ -703,11 +805,6 @@ func (s *EmailService) RenderLicenseExpiring(productName, licenseKey, expiresAt 
 		"IsTrial":      trial,
 		"FallbackPlan": fallbackPlan,
 	}))
-	subject = productName + " license expiring soon"
-	if trial {
-		subject = productName + " trial ending soon"
-	}
-	return subject, body
 }
 
 // RenderUpdatesEnding builds the 14-day notice that a perpetual
@@ -720,41 +817,41 @@ func (s *EmailService) RenderLicenseExpiring(productName, licenseKey, expiresAt 
 // with backoff, so queuing is also what makes the reminder survive a
 // crash.
 func (s *EmailService) RenderUpdatesEnding(productName, licenseKey, updatesUntil string) (subject, body string) {
-	body = s.renderEmail("updates_ending", tmplUpdatesEnding, s.templateData(map[string]any{
+	return s.render("updates_ending", s.templateData(map[string]any{
 		"Product":      productName,
 		"LicenseKey":   licenseKey,
 		"UpdatesUntil": updatesUntil,
 	}))
-	return productName + " updates ending soon", body
 }
 
-func (s *EmailService) SendQuotaWarning(to, productName, feature string, used, limit int64, pct int) {
-	if s.skipDisabled("quota_warning", to) {
-		return
-	}
-	body := s.renderEmail("quota_warning", tmplQuotaWarning, s.templateData(map[string]any{
+// RenderQuotaWarning builds the notice that a metered feature has
+// reached pct% of its limit.
+func (s *EmailService) RenderQuotaWarning(productName, feature string, used, limit int64, pct int) (subject, body string) {
+	return s.render("quota_warning", s.templateData(map[string]any{
 		"Product": productName,
 		"Feature": feature,
 		"Used":    used,
 		"Limit":   limit,
 		"Pct":     pct,
 	}))
-	subject := fmt.Sprintf("%s: %s quota at %d%%", productName, feature, pct)
-	go func() {
-		if err := s.Send(to, subject, body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", subject, "error", err)
-		}
-	}()
 }
 
-// SendSeatInvite delivers the claim link. acceptURL is the absolute
-// URL pointing at the portal accept-invite page; if the template
-// uses {{InviteURL}} the link renders inline, otherwise we append a
-// plain "Accept the invitation: <URL>" block so even a template
-// admin who forgot to add the placeholder still ships a working
-// link.
-func (s *EmailService) SendSeatInvite(to, productName, inviterName, acceptURL, downloadURL string) {
-	body := s.renderEmail("seat_invite", tmplSeatInvite, s.templateData(map[string]any{
+func (s *EmailService) SendQuotaWarning(to, productName, feature string, used, limit int64, pct int) {
+	if s.skipDisabled("quota_warning", to) {
+		return
+	}
+	subject, body := s.RenderQuotaWarning(productName, feature, used, limit, pct)
+	s.sendAsync(to, subject, body)
+}
+
+// RenderSeatInvite builds the seat claim email. acceptURL is the
+// absolute URL pointing at the portal accept-invite page; if the
+// template uses {{.InviteURL}} the link renders inline, otherwise we
+// append a plain "Accept the invitation: <URL>" block so even a
+// template admin who forgot to add the placeholder still ships a
+// working link.
+func (s *EmailService) RenderSeatInvite(productName, inviterName, acceptURL, downloadURL string) (subject, body string) {
+	subject, body = s.render("seat_invite", s.templateData(map[string]any{
 		"Product":     productName,
 		"Inviter":     inviterName,
 		"InviteURL":   acceptURL,
@@ -766,88 +863,84 @@ func (s *EmailService) SendSeatInvite(to, productName, inviterName, acceptURL, d
 	if acceptURL != "" && !strings.Contains(body, acceptURL) {
 		body += `<p style="margin-top:24px;font-size:13px;color:#555;">Accept the invitation: <a href="` + html.EscapeString(acceptURL) + `">` + html.EscapeString(acceptURL) + `</a></p>`
 	}
-	go func() {
-		if err := s.Send(to, "You've been invited to "+productName, body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", "You've been invited to "+productName, "error", err)
-		}
-	}()
+	return subject, body
+}
+
+// SendSeatInvite delivers the claim link (see RenderSeatInvite).
+func (s *EmailService) SendSeatInvite(to, productName, inviterName, acceptURL, downloadURL string) {
+	subject, body := s.RenderSeatInvite(productName, inviterName, acceptURL, downloadURL)
+	s.sendAsync(to, subject, body)
+}
+
+// RenderLicenseExpired builds the notice that a license has expired.
+func (s *EmailService) RenderLicenseExpired(productName string) (subject, body string) {
+	return s.render("license_expired", s.templateData(map[string]any{
+		"Product": productName,
+	}))
 }
 
 func (s *EmailService) SendLicenseExpired(to, productName string) {
 	if s.skipDisabled("license_expired", to) {
 		return
 	}
-	body := s.renderEmail("license_expired", tmplLicenseExpired, s.templateData(map[string]any{
-		"Product": productName,
-	}))
-	go func() {
-		if err := s.Send(to, productName+" license expired", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", productName+" license expired", "error", err)
-		}
-	}()
+	subject, body := s.RenderLicenseExpired(productName)
+	s.sendAsync(to, subject, body)
 }
 
-// SendTrialExpired tells a customer their trial has ended. fallbackPlan
+// RenderTrialExpired tells a customer their trial has ended. fallbackPlan
 // is the plan the licence moved to (the trial plan's
 // TrialFallbackPlanID), or "" when it expired: one email for the end of
 // a trial either way, so the customer reads what happened to it rather
 // than a bare change of plan names, and the operator writes it once in
 // the template editor.
+func (s *EmailService) RenderTrialExpired(productName, fallbackPlan string) (subject, body string) {
+	return s.render("trial_expired", s.templateData(map[string]any{
+		"Product":      productName,
+		"FallbackPlan": fallbackPlan,
+	}))
+}
+
+// SendTrialExpired sends the end-of-trial email (see RenderTrialExpired).
 func (s *EmailService) SendTrialExpired(to, productName, fallbackPlan string) {
 	if s.skipDisabled("trial_expired", to) {
 		return
 	}
-	body := s.renderEmail("trial_expired", tmplTrialExpired, s.templateData(map[string]any{
-		"Product":      productName,
-		"FallbackPlan": fallbackPlan,
+	subject, body := s.RenderTrialExpired(productName, fallbackPlan)
+	s.sendAsync(to, subject, body)
+}
+
+// RenderLicenseSuspended builds the notice that a license was suspended.
+func (s *EmailService) RenderLicenseSuspended(productName, reason string) (subject, body string) {
+	return s.render("license_suspended", s.templateData(map[string]any{
+		"Product": productName,
+		"Reason":  reason,
 	}))
-	go func() {
-		if err := s.Send(to, productName+" trial has ended", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", productName+" trial has ended", "error", err)
-		}
-	}()
 }
 
 func (s *EmailService) SendLicenseSuspended(to, productName, reason string) {
 	if s.skipDisabled("license_suspended", to) {
 		return
 	}
-	body := s.renderEmail("license_suspended", tmplLicenseSuspended, s.templateData(map[string]any{
-		"Product": productName,
-		"Reason":  reason,
+	subject, body := s.RenderLicenseSuspended(productName, reason)
+	s.sendAsync(to, subject, body)
+}
+
+// RenderSubscriptionCanceled builds the cancellation notice: canceled
+// now (immediate) or at the end of the current billing period. One
+// template covers both, branching on {{.Immediate}}.
+func (s *EmailService) RenderSubscriptionCanceled(productName string, immediate bool) (subject, body string) {
+	return s.render("subscription_canceled", s.templateData(map[string]any{
+		"Product":   productName,
+		"Immediate": immediate,
 	}))
-	go func() {
-		if err := s.Send(to, productName+" license suspended", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", productName+" license suspended", "error", err)
-		}
-	}()
 }
 
 func (s *EmailService) SendSubscriptionCanceled(to, productName string, immediate bool) {
 	if s.skipDisabled("subscription_canceled", to) {
 		return
 	}
-	var tmpl string
-	if immediate {
-		tmpl = `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2>Subscription Canceled</h2>
-<p>Your <strong>` + html.EscapeString(productName) + `</strong> subscription has been canceled immediately.</p>
-<p>Your access has ended. Thank you for being a customer.</p>
-</body></html>`
-	} else {
-		tmpl = `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2>Subscription Will Be Canceled</h2>
-<p>Your <strong>` + html.EscapeString(productName) + `</strong> subscription will be canceled at the end of the current billing period.</p>
-<p>You can continue using the service until then.</p>
-</body></html>`
-	}
-	go func() {
-		if err := s.Send(to, productName+" subscription canceled", tmpl); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
-		}
-	}()
+	subject, body := s.RenderSubscriptionCanceled(productName, immediate)
+	s.sendAsync(to, subject, body)
 }
 
 // RenderPaymentFailed builds the first step of the dunning ladder, a
@@ -856,35 +949,25 @@ func (s *EmailService) SendSubscriptionCanceled(to, productName string, immediat
 // loop and lost to an SMTP outage would leave the customer untold
 // until the license expires, and the queue retries it.
 func (s *EmailService) RenderPaymentFailed(productName string) (subject, body string) {
-	body = s.renderEmail("payment_failed", tmplPaymentFailed, s.templateData(map[string]any{
+	return s.render("payment_failed", s.templateData(map[string]any{
 		"Product": productName,
 	}))
-	return productName + " payment failed", body
 }
 
 // RenderDunningSecond builds the dunning step sent a week into a
 // past-due episode. The reminder job queues it.
 func (s *EmailService) RenderDunningSecond(productName string) (subject, body string) {
-	body = `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2 style="color: #d97706;">Payment Still Outstanding</h2>
-<p>We've been unable to process your payment for <strong>` + html.EscapeString(productName) + `</strong> for over a week.</p>
-<p>Please update your payment method to avoid losing access.</p>
-</body></html>`
-	return productName + " — payment still outstanding", body
+	return s.render("dunning_second", s.templateData(map[string]any{
+		"Product": productName,
+	}))
 }
 
 // RenderDunningFinal builds the last dunning step, two weeks into a
 // past-due episode. The reminder job queues it.
 func (s *EmailService) RenderDunningFinal(productName string) (subject, body string) {
-	body = `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2 style="color: #dc2626;">Final Notice — Access Will Be Suspended</h2>
-<p>Your <strong>` + html.EscapeString(productName) + `</strong> payment has been overdue for 14 days.</p>
-<p>Your access will be suspended soon if payment is not received.</p>
-<p>Please update your payment method immediately.</p>
-</body></html>`
-	return productName + " — final payment notice", body
+	return s.render("dunning_final", s.templateData(map[string]any{
+		"Product": productName,
+	}))
 }
 
 // RenderAdminInvite builds the admin invite. The login link comes from
@@ -892,7 +975,7 @@ func (s *EmailService) RenderDunningFinal(productName string) (subject, body str
 // the invite says nothing reliable about the public address, and behind
 // a proxy it read as http://127.0.0.1:9000.
 func (s *EmailService) RenderAdminInvite(siteName, inviterName, role string) (subject, body string) {
-	return "You've been added to " + siteName, s.renderEmail("admin_invite", tmplAdminInvite, map[string]string{
+	return s.render("admin_invite", map[string]string{
 		"SiteName": siteName,
 		"Inviter":  inviterName,
 		"Role":     role,
@@ -910,133 +993,142 @@ func (s *EmailService) RenderAdminInvite(siteName, inviterName, role string) (su
 // grant on the InviteTeamMember handler. The recipient can still
 // learn out-of-band that they're admin.
 func (s *EmailService) SendAdminInvite(to, siteName, inviterName, role string) {
-	subj, body := s.RenderAdminInvite(siteName, inviterName, role)
-	go func() {
-		if err := s.Send(to, subj, body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "subject", subj, "error", err)
-		}
-	}()
+	subject, body := s.RenderAdminInvite(siteName, inviterName, role)
+	s.sendAsync(to, subject, body)
 }
 
-// SendPaymentRecovered closes the dunning loop: customer fixed the
+// RenderPaymentRecovered closes the dunning loop: customer fixed the
 // card mid-grace and the subscription is back to active. Without
 // this, the last touch the user has from us is "payment failed",
 // which makes a successful retry feel silent.
+func (s *EmailService) RenderPaymentRecovered(productName string) (subject, body string) {
+	return s.render("payment_recovered", s.templateData(map[string]any{
+		"Product": productName,
+	}))
+}
+
 func (s *EmailService) SendPaymentRecovered(to, productName string) {
 	if s.skipDisabled("payment_recovered", to) {
 		return
 	}
-	body := `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2 style="color: #059669;">Payment Recovered — Thanks!</h2>
-<p>Your payment for <strong>` + html.EscapeString(productName) + `</strong> went through. Your subscription is active again, and access is fully restored.</p>
-<p>No further action required.</p>
-</body></html>`
-	go func() {
-		if err := s.Send(to, productName+" — payment recovered", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
-		}
-	}()
+	subject, body := s.RenderPaymentRecovered(productName)
+	s.sendAsync(to, subject, body)
+}
+
+// RenderWelcome builds the welcome email for a new account.
+func (s *EmailService) RenderWelcome(name string) (subject, body string) {
+	// Self-hosted installs set site_name; stock Keygate keeps the
+	// project name so an empty setting still greets as Keygate.
+	data := s.templateData(map[string]any{"Name": name})
+	site, _ := data["SiteName"].(string)
+	site = strings.TrimSpace(site)
+	if site == "" {
+		site = branding.Project
+	}
+	data["SiteName"] = site
+	return s.render("welcome", data)
 }
 
 func (s *EmailService) SendWelcome(to, name string) {
 	if s.skipDisabled("welcome", to) {
 		return
 	}
-	// Self-hosted installs set site_name; stock Keygate keeps the
-	// project name so an empty setting still greets as Keygate.
-	data := s.templateData(map[string]any{"Name": name})
-	site, _ := data["SiteName"].(string)
-	site = strings.TrimSpace(site)
-	data["SiteName"] = site
-	if site == "" {
-		site = branding.Project
-		data["SiteName"] = site
+	subject, body := s.RenderWelcome(name)
+	s.sendAsync(to, subject, body)
+}
+
+// RenderOTPCode builds the login-code email. A customised body that
+// does not show the code as readable text would lock the customer out,
+// so then the default is sent instead (saving such a template is refused
+// too, see ValidateTemplate).
+func (s *EmailService) RenderOTPCode(code string) (subject, body string) {
+	data := s.templateData(map[string]any{"Code": code})
+	subject, body = s.render("login_code", data)
+	if !showsText(body, code) {
+		s.logger.Error("custom login code template does not show the code; sending the default", "template", "login_code")
+		body = renderTemplate(tmplLoginCode, data)
 	}
-	body := s.renderEmail("welcome", tmplWelcome, data)
-	subject := "Welcome to " + site
+	return subject, body
+}
+
+// SendOTPCode renders and sends in the background: rendering reads
+// settings, and the handler must answer an allowed address as fast as a
+// refused one (see OTPSend).
+func (s *EmailService) SendOTPCode(to, code string) {
 	go func() {
+		subject, body := s.RenderOTPCode(code)
 		if err := s.Send(to, subject, body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
+			s.logger.Error("OTP email delivery failed", "to", to, "error", err)
 		}
 	}()
 }
 
-func (s *EmailService) SendOTPCode(to, code string) {
-	body := `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2>Your login code</h2>
-<p>Enter this code to sign in:</p>
-<div style="background: #f4f4f5; border-radius: 8px; padding: 16px; margin: 16px 0; font-family: monospace; font-size: 32px; text-align: center; letter-spacing: 8px; font-weight: bold;">` + code + `</div>
-<p style="color: #666; font-size: 14px;">This code expires in 10 minutes. If you didn't request this, ignore this email.</p>
-</body></html>`
-	go func() {
-		if err := s.Send(to, "Your login code", body); err != nil {
-			s.logger.Error("OTP email delivery failed", "to", to, "error", err)
-		}
-	}()
+// RenderPlanChanged builds the notice that a license moved between plans.
+func (s *EmailService) RenderPlanChanged(productName, oldPlan, newPlan string) (subject, body string) {
+	return s.render("plan_changed", s.templateData(map[string]any{
+		"Product": productName,
+		"OldPlan": oldPlan,
+		"NewPlan": newPlan,
+	}))
 }
 
 func (s *EmailService) SendPlanChanged(to, productName, oldPlan, newPlan string) {
 	if s.skipDisabled("plan_changed", to) {
 		return
 	}
-	body := `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2>Plan Changed</h2>
-<p>Your <strong>` + html.EscapeString(productName) + `</strong> plan has been changed from <strong>` + html.EscapeString(oldPlan) + `</strong> to <strong>` + html.EscapeString(newPlan) + `</strong>.</p>
-</body></html>`
-	go func() {
-		if err := s.Send(to, productName+" plan changed", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
-		}
-	}()
+	subject, body := s.RenderPlanChanged(productName, oldPlan, newPlan)
+	s.sendAsync(to, subject, body)
 }
 
 // RenderRenewalReminder builds the day-before notice that a Stripe
 // subscription renews. The reminder job queues it.
 func (s *EmailService) RenderRenewalReminder(productName, renewalDate string) (subject, body string) {
-	body = `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2>Renewal Reminder</h2>
-<p>Your <strong>` + html.EscapeString(productName) + `</strong> subscription will renew on <strong>` + html.EscapeString(renewalDate) + `</strong>.</p>
-<p>No action is needed if you'd like to continue.</p>
-</body></html>`
-	return productName + " renewal coming up", body
+	return s.render("renewal_reminder", s.templateData(map[string]any{
+		"Product":     productName,
+		"RenewalDate": renewalDate,
+	}))
+}
+
+// RenderPaymentActionRequired asks the customer to authenticate a
+// payment (3-D Secure) on the hosted invoice page.
+func (s *EmailService) RenderPaymentActionRequired(productName, invoiceURL string) (subject, body string) {
+	return s.render("payment_action_required", s.templateData(map[string]any{
+		"Product":    productName,
+		"InvoiceURL": invoiceURL,
+	}))
 }
 
 func (s *EmailService) SendPaymentActionRequired(to, productName, invoiceURL string) {
 	if s.skipDisabled("payment_action_required", to) {
 		return
 	}
-	body := `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2 style="color: #d97706;">Payment Authentication Required</h2>
-<p>Your payment for <strong>` + html.EscapeString(productName) + `</strong> requires additional authentication.</p>
-<p><a href="` + html.EscapeString(invoiceURL) + `" style="display:inline-block;background:#2563eb;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;">Complete Payment</a></p>
-<p style="color:#666;font-size:14px;">If you don't complete this step, your subscription may be interrupted.</p>
-</body></html>`
-	go func() {
-		if err := s.Send(to, productName+" — payment authentication required", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
-		}
-	}()
+	subject, body := s.RenderPaymentActionRequired(productName, invoiceURL)
+	s.sendAsync(to, subject, body)
+}
+
+// RenderTrialEnding builds Stripe's trial-will-end notice.
+func (s *EmailService) RenderTrialEnding(productName, trialEnd string) (subject, body string) {
+	return s.render("trial_ending", s.templateData(map[string]any{
+		"Product":  productName,
+		"TrialEnd": trialEnd,
+	}))
 }
 
 func (s *EmailService) SendTrialEnding(to, productName, trialEnd string) {
 	if s.skipDisabled("trial_ending", to) {
 		return
 	}
-	body := `<!DOCTYPE html>
-<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2>Your Trial is Ending Soon</h2>
-<p>Your <strong>` + html.EscapeString(productName) + `</strong> trial ends on <strong>` + html.EscapeString(trialEnd) + `</strong>.</p>
-<p>After the trial, your subscription will begin automatically. No action needed if you'd like to continue.</p>
-<p style="color:#666;font-size:14px;">If you'd like to cancel, you can do so from your account portal before the trial ends.</p>
-</body></html>`
+	subject, body := s.RenderTrialEnding(productName, trialEnd)
+	s.sendAsync(to, subject, body)
+}
+
+// sendAsync sends one rendered email in the background, logging a
+// failure: the callers are request handlers and webhooks that must not
+// wait on the mail server.
+func (s *EmailService) sendAsync(to, subject, body string) {
 	go func() {
-		if err := s.Send(to, productName+" trial ending soon", body); err != nil {
-			s.logger.Error("email delivery failed", "to", to, "error", err)
+		if err := s.Send(to, subject, body); err != nil {
+			s.logger.Error("email delivery failed", "to", to, "subject", subject, "error", err)
 		}
 	}()
 }
@@ -1165,29 +1257,220 @@ func executeTemplate(src string, data any) (string, error) {
 }
 
 // templateSample has a value of the right type for every variable any
-// template may use, so ValidateTemplate exercises them all.
+// template may use. Validation renders a candidate with the part of it
+// that one email is given (sampleFor).
 var templateSample = map[string]any{
 	"Product": "Product", "Plan": "Pro", "LicenseKey": "KEY", "ExpiresAt": "2026-01-01",
 	"UpdatesUntil": "2026-01-01", "Feature": "api_calls", "Used": int64(80), "Limit": int64(100),
 	"Pct": 80, "Inviter": "a@example.com", "InviteURL": "https://example.com/i", "Reason": "reason",
 	"DaysLeft": 3, "IsTrial": true, "FallbackPlan": "Free", "DownloadURL": "https://example.com/d", "SiteName": "Site",
 	"PortalURL": "https://example.com/portal", "Role": "admin", "LoginURL": "https://example.com/login",
+	"Name": "Alex", "Code": "482913", "OldPlan": "Basic", "NewPlan": "Pro", "Immediate": true,
+	"InvoiceURL": "https://example.com/invoice", "TrialEnd": "2026-01-01", "RenewalDate": "2026-01-01",
 }
 
-// ValidateTemplate reports whether a custom template both parses and
-// renders. Parsing alone is not enough: html/template rejects some
-// templates only when executed (e.g. "{{if}} branches end in different
-// contexts"), which would otherwise surface at send time. A variable
-// that is not one of templateSample's is refused too: the data is a
-// map, so a misspelt {{.LicenceKey}} would otherwise render as nothing
-// and the customer would get a licence email without the key.
-// Sending stays lenient: each email passes only its own variables.
-func ValidateTemplate(src string) error {
+// secretTemplateVars may appear in a body but never in a subject: a
+// subject is logged when the mail is sent and kept in the email queue
+// after the body is wiped (see MarkEmailSent), so a login code, license
+// key or invite token there would outlive the mail.
+var secretTemplateVars = map[string]bool{"Code": true, "LicenseKey": true, "InviteURL": true}
+
+// maxSubjectTemplate bounds a custom subject template, in characters.
+// maxSubjectRendered bounds what it renders to: a subject is one header
+// line, and a long one (a printf padding trick, or many multi-byte
+// characters once encoded) can pass SMTP's 998-byte line limit and get
+// the mail refused. A longer render falls back to the default subject.
+const (
+	maxSubjectTemplate = 300
+	maxSubjectRendered = 200
+)
+
+// render builds one email's subject and body from its templates: the
+// admin's custom ones when set, the defaults otherwise.
+func (s *EmailService) render(key string, data any) (subject, body string) {
+	t, ok := findEmailTemplate(key)
+	if !ok {
+		// Every Render* passes a literal key from emailTemplates, and
+		// the tests render each one, so this is a programming error.
+		panic("unknown email template " + key)
+	}
+	return s.renderSubject(key, t.Subject, data), s.renderEmail(key, t.Body, data)
+}
+
+// renderSubject is renderEmail for the subject line: the custom subject
+// (setting email_subject_<key>) when it is set and renders to a usable
+// line, the default otherwise. Secret variables are taken out of the
+// data first, so a subject stored past validation cannot carry them.
+func (s *EmailService) renderSubject(key, defaultSubj string, data any) string {
+	if s.store != nil {
+		custom, err := s.store.GetSetting(context.Background(), "email_subject_"+key)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			s.logger.Error("could not read custom email subject; sending the default", "template", key, "error", err)
+		}
+		if err == nil && strings.TrimSpace(custom) != "" {
+			out, rerr := executeSubject(custom, withoutSecrets(data))
+			line := strings.TrimSpace(subjectLine.Replace(out))
+			if rerr == nil && line != "" && utf8.RuneCountInString(line) <= maxSubjectRendered {
+				return line
+			}
+			s.logger.Error("custom email subject failed, came out empty or too long; sending the default", "template", key, "error", rerr)
+		}
+	}
+	out, err := executeSubject(defaultSubj, data)
+	if err != nil {
+		// The defaults are checked against every sender's data by the
+		// tests; never mail the template source as a subject.
+		s.logger.Error("default email subject failed to render", "template", key, "error", err)
+		return branding.Project
+	}
+	return strings.TrimSpace(subjectLine.Replace(out))
+}
+
+// withoutSecrets returns data without secretTemplateVars.
+func withoutSecrets(data any) any {
+	switch d := data.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(d))
+		for k, v := range d {
+			if !secretTemplateVars[k] {
+				out[k] = v
+			}
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]string, len(d))
+		for k, v := range d {
+			if !secretTemplateVars[k] {
+				out[k] = v
+			}
+		}
+		return out
+	}
+	return data
+}
+
+// executeSubject renders a subject with text/template: a subject is a
+// header, so "&" and "<" in a product name stay as they are rather than
+// becoming HTML entities. A variable the email does not have is an
+// error, not "<no value>" in the customer's inbox, so the caller falls
+// back to the default subject.
+func executeSubject(src string, data any) (string, error) {
+	t, err := texttemplate.New("subject").Option("missingkey=error").Parse(src)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// sampleFor is templateSample cut down to the variables the email
+// stored under key is given, so a template that names another email's
+// variable is refused when it is saved instead of rendering blank when
+// it is sent. flipped gives the other branch of every {{if}} over a
+// bool, and empty optional strings, so a typo in an {{else}} branch the
+// first sample never takes is caught too.
+func sampleFor(key string, flipped bool) (map[string]any, error) {
+	if _, ok := findEmailTemplate(key); !ok {
+		return nil, fmt.Errorf("unknown email template %q", key)
+	}
+	sample := map[string]any{}
+	for _, v := range TemplateVariables()[key] {
+		val := templateSample[v]
+		if flipped {
+			switch x := val.(type) {
+			case bool:
+				val = !x
+			case string:
+				val = ""
+			}
+		}
+		sample[v] = val
+	}
+	return sample, nil
+}
+
+// ValidateSubject reports whether a custom subject for the email stored
+// under key is one line, at most maxSubjectTemplate characters, and
+// renders using only that email's variables, spelt right and none of
+// them secret.
+func ValidateSubject(key, src string) error {
+	if strings.ContainsAny(src, "\r\n") {
+		return errors.New("a subject must be a single line")
+	}
+	if utf8.RuneCountInString(src) > maxSubjectTemplate {
+		return fmt.Errorf("a subject template may be at most %d characters", maxSubjectTemplate)
+	}
+	for _, flipped := range []bool{false, true} {
+		sample, err := sampleFor(key, flipped)
+		if err != nil {
+			return err
+		}
+		if _, err := executeSubject(src, withoutSecrets(sample)); err != nil {
+			for v := range secretTemplateVars {
+				if strings.Contains(src, "."+v) {
+					return fmt.Errorf("{{.%s}} cannot be used in a subject: subjects are logged and kept after sending", v)
+				}
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateTemplate reports whether a custom body for the email stored
+// under key parses and renders, using only that email's variables.
+// Parsing alone is not enough: html/template rejects some templates
+// only when executed (e.g. "{{if}} branches end in different
+// contexts"), which would otherwise surface at send time. A misspelt
+// variable is refused too: sending is lenient, so {{.LicenceKey}} would
+// otherwise render as nothing and the customer would get a licence email
+// without the key. It is rendered with both samples (see sampleFor).
+//
+// An email in requiredTemplateVars must show those values as text a
+// reader can see. The check uses a value no template can contain
+// literally, so typing a sample code into the template does not pass it.
+func ValidateTemplate(key, src string) error {
 	t, err := template.New("email").Option("missingkey=error").Parse(src)
 	if err != nil {
 		return err
 	}
-	return t.Execute(io.Discard, templateSample)
+	for _, flipped := range []bool{false, true} {
+		sample, err := sampleFor(key, flipped)
+		if err != nil {
+			return err
+		}
+		if err := t.Execute(io.Discard, sample); err != nil {
+			return err
+		}
+	}
+	required := requiredTemplateVars[key]
+	if len(required) == 0 {
+		return nil
+	}
+	sample, _ := sampleFor(key, false)
+	for _, v := range required {
+		sample[v] = "SENTINEL" + strings.ToUpper(strconv.FormatInt(time.Now().UnixNano(), 36))
+	}
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, sample); err != nil {
+		return err
+	}
+	for _, v := range required {
+		if !showsText(buf.String(), fmt.Sprint(sample[v])) {
+			return fmt.Errorf("this email must show {{.%s}} as text the reader can see", v)
+		}
+	}
+	return nil
+}
+
+// showsText reports whether value appears in the readable text of an
+// HTML body, not only inside a tag or attribute (a link the reader
+// cannot see, an image URL).
+func showsText(body, value string) bool {
+	return strings.Contains(htmlToText(body), value)
 }
 
 func renderTemplate(tmplStr string, data any) string {
@@ -1297,4 +1580,73 @@ const tmplTrialExpired = `<!DOCTYPE html>
 <p>Your <strong>{{.Product}}</strong> trial has ended.</p>
 <p>{{if .FallbackPlan}}Your license carries on with the <strong>{{.FallbackPlan}}</strong> plan, with the same key, and that plan's limits now apply. Choose a paid plan from your account to get more.{{else}}Subscribe to a paid plan to continue using all features.{{end}}</p>
 {{if .PortalURL}}<p><a href="{{.PortalURL}}">Open your account</a></p>{{end}}
+</body></html>`
+
+const tmplSubscriptionCanceled = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+{{if .Immediate}}<h2>Subscription Canceled</h2>
+<p>Your <strong>{{.Product}}</strong> subscription has been canceled immediately.</p>
+<p>Your access has ended. Thank you for being a customer.</p>
+{{else}}<h2>Subscription Will Be Canceled</h2>
+<p>Your <strong>{{.Product}}</strong> subscription will be canceled at the end of the current billing period.</p>
+<p>You can continue using the service until then.</p>
+{{end}}</body></html>`
+
+const tmplDunningSecond = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2 style="color: #d97706;">Payment Still Outstanding</h2>
+<p>We've been unable to process your payment for <strong>{{.Product}}</strong> for over a week.</p>
+<p>Please update your payment method to avoid losing access.</p>
+</body></html>`
+
+const tmplDunningFinal = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2 style="color: #dc2626;">Final Notice — Access Will Be Suspended</h2>
+<p>Your <strong>{{.Product}}</strong> payment has been overdue for 14 days.</p>
+<p>Your access will be suspended soon if payment is not received.</p>
+<p>Please update your payment method immediately.</p>
+</body></html>`
+
+const tmplPaymentRecovered = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2 style="color: #059669;">Payment Recovered — Thanks!</h2>
+<p>Your payment for <strong>{{.Product}}</strong> went through. Your subscription is active again, and access is fully restored.</p>
+<p>No further action required.</p>
+</body></html>`
+
+const tmplLoginCode = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2>Your login code</h2>
+<p>Enter this code to sign in:</p>
+<div style="background: #f4f4f5; border-radius: 8px; padding: 16px; margin: 16px 0; font-family: monospace; font-size: 32px; text-align: center; letter-spacing: 8px; font-weight: bold;">{{.Code}}</div>
+<p style="color: #666; font-size: 14px;">This code expires in 10 minutes. If you didn't request this, ignore this email.</p>
+</body></html>`
+
+const tmplPlanChanged = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2>Plan Changed</h2>
+<p>Your <strong>{{.Product}}</strong> plan has been changed from <strong>{{.OldPlan}}</strong> to <strong>{{.NewPlan}}</strong>.</p>
+</body></html>`
+
+const tmplRenewalReminder = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2>Renewal Reminder</h2>
+<p>Your <strong>{{.Product}}</strong> subscription will renew on <strong>{{.RenewalDate}}</strong>.</p>
+<p>No action is needed if you'd like to continue.</p>
+</body></html>`
+
+const tmplPaymentActionRequired = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2 style="color: #d97706;">Payment Authentication Required</h2>
+<p>Your payment for <strong>{{.Product}}</strong> requires additional authentication.</p>
+<p><a href="{{.InvoiceURL}}" style="display:inline-block;background:#2563eb;color:white;padding:10px 24px;border-radius:6px;text-decoration:none;">Complete Payment</a></p>
+<p style="color:#666;font-size:14px;">If you don't complete this step, your subscription may be interrupted.</p>
+</body></html>`
+
+const tmplTrialEnding = `<!DOCTYPE html>
+<html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+<h2>Your Trial is Ending Soon</h2>
+<p>Your <strong>{{.Product}}</strong> trial ends on <strong>{{.TrialEnd}}</strong>.</p>
+<p>After the trial, your subscription will begin automatically. No action needed if you'd like to continue.</p>
+<p style="color:#666;font-size:14px;">If you'd like to cancel, you can do so from your account portal before the trial ends.</p>
 </body></html>`

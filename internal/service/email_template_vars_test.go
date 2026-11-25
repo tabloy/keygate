@@ -92,15 +92,15 @@ func TestValidateTemplate_RejectsRenderTimeErrors(t *testing.T) {
 	if _, err := template.New("t").Parse(bad); err != nil {
 		t.Fatalf("precondition: should parse: %v", err)
 	}
-	if ValidateTemplate(bad) == nil {
+	if ValidateTemplate("license_created", bad) == nil {
 		t.Fatal("a template that fails at render time was accepted")
 	}
-	if err := ValidateTemplate(tmplLicenseCreated); err != nil {
+	if err := ValidateTemplate("license_created", tmplLicenseCreated); err != nil {
 		t.Fatalf("the default template was rejected: %v", err)
 	}
 	// A misspelt variable would render as nothing: the key missing from
 	// the licence email.
-	if ValidateTemplate(`<p>{{.LicenceKey}}</p>`) == nil {
+	if ValidateTemplate("license_created", `<p>{{.LicenceKey}}</p>`) == nil {
 		t.Fatal("a template naming an unknown variable was accepted")
 	}
 	// Every built-in template passes, so one copied into the editor and
@@ -112,7 +112,7 @@ func TestValidateTemplate_RejectsRenderTimeErrors(t *testing.T) {
 		"license_suspended": tmplLicenseSuspended, "payment_failed": tmplPaymentFailed,
 		"license_expired": tmplLicenseExpired, "trial_expired": tmplTrialExpired,
 	} {
-		if err := ValidateTemplate(src); err != nil {
+		if err := ValidateTemplate(name, src); err != nil {
 			t.Errorf("built-in %s template rejected: %v", name, err)
 		}
 	}
