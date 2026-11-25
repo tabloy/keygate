@@ -18,42 +18,46 @@ import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from "@/
 import { type TranslationKeys, useI18n } from "@/i18n"
 import { admin } from "@/lib/api"
 
+// Headings for the groups the server puts each email in.
+const GROUP_TITLE: Record<string, TranslationKeys> = {
+  licenses: "settings.templateGroupLicenses",
+  billing: "settings.templateGroupBilling",
+  account: "settings.templateGroupAccount",
+}
+
+// Label for each email. The list of emails, their group, variables and
+// order come from the server (service.emailTemplates), so an email added
+// there is listed in its group even before it has a label here.
 // fallbackNote: trials that move, or will move, to their plan's fallback
 // plan get this email too, so a customised copy should name it with
 // {{.FallbackPlan}}; the key of the note that says so.
-const TEMPLATE_META: Record<string, { label: string; variables: string[]; fallbackNote?: TranslationKeys }> = {
-  // SiteName and PortalURL are available in every template (see
-  // EmailService.templateData); they are listed last on each.
-  license_created: {
-    label: "License Created",
-    variables: ["Product", "Plan", "LicenseKey", "DownloadURL", "SiteName", "PortalURL"],
-  },
+const TEMPLATE_META: Record<string, { label: string; fallbackNote?: TranslationKeys }> = {
+  license_created: { label: "License Created" },
   license_expiring: {
     label: "License Expiring",
-    variables: ["Product", "LicenseKey", "ExpiresAt", "DaysLeft", "IsTrial", "FallbackPlan", "SiteName", "PortalURL"],
     fallbackNote: "settings.templateFallbackNoteExpiring",
   },
-  updates_ending: {
-    label: "Updates Ending",
-    variables: ["Product", "LicenseKey", "UpdatesUntil", "SiteName", "PortalURL"],
-  },
-  license_expired: { label: "License Expired", variables: ["Product", "SiteName", "PortalURL"] },
-  trial_expired: {
-    label: "Trial Expired",
-    variables: ["Product", "FallbackPlan", "SiteName", "PortalURL"],
-    fallbackNote: "settings.templateFallbackNoteExpired",
-  },
-  license_suspended: { label: "License Suspended", variables: ["Product", "Reason", "SiteName", "PortalURL"] },
-  quota_warning: {
-    label: "Quota Warning",
-    variables: ["Product", "Feature", "Used", "Limit", "Pct", "SiteName", "PortalURL"],
-  },
-  seat_invite: {
-    label: "Seat Invite",
-    variables: ["Product", "Inviter", "InviteURL", "DownloadURL", "SiteName", "PortalURL"],
-  },
-  payment_failed: { label: "Payment Failed", variables: ["Product", "SiteName", "PortalURL"] },
+  updates_ending: { label: "Updates Ending" },
+  license_expired: { label: "License Expired" },
+  trial_expired: { label: "Trial Expired", fallbackNote: "settings.templateFallbackNoteExpired" },
+  license_suspended: { label: "License Suspended" },
+  quota_warning: { label: "Quota Warning" },
+  seat_invite: { label: "Seat Invite" },
+  trial_ending: { label: "Trial Ending (Stripe)" },
+  renewal_reminder: { label: "Renewal Reminder" },
+  plan_changed: { label: "Plan Changed" },
+  subscription_canceled: { label: "Subscription Canceled" },
+  payment_failed: { label: "Payment Failed" },
+  dunning_second: { label: "Payment Still Outstanding" },
+  dunning_final: { label: "Final Payment Notice" },
+  payment_action_required: { label: "Payment Authentication Required" },
+  payment_recovered: { label: "Payment Recovered" },
+  welcome: { label: "Welcome" },
+  login_code: { label: "Login Code" },
+  admin_invite: { label: "Admin Invite" },
 }
+
+const labelOf = (key: string) => TEMPLATE_META[key]?.label || key
 
 const PREVIEW_DATA: Record<string, string> = {
   Product: "AwesomeApp",
@@ -75,6 +79,16 @@ const PREVIEW_DATA: Record<string, string> = {
   InviteURL: "https://licenses.example.com/accept-invite?token=…",
   SiteName: "Acme Licensing",
   PortalURL: "https://licenses.example.com/portal",
+  Name: "Alex",
+  Code: "482913",
+  OldPlan: "Basic",
+  NewPlan: "Pro",
+  Immediate: "true",
+  InvoiceURL: "https://invoice.example.com/i/123",
+  TrialEnd: "2026-06-15",
+  RenewalDate: "2026-06-15",
+  Role: "admin",
+  LoginURL: "https://licenses.example.com/login",
 }
 
 // previewIsExact reports whether fillTemplate can follow every action in
@@ -136,6 +150,7 @@ export default function EmailTemplatesManager() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<string | null>(null)
   const [editValue, setEditValue] = useState("")
+  const [editSubject, setEditSubject] = useState("")
   const [previewing, setPreviewing] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
@@ -144,8 +159,23 @@ export default function EmailTemplatesManager() {
   })
 
   const saveMut = useMutation({
-    mutationFn: (params: { key: string; value: string }) =>
-      admin.updateSettings({ [`email_template_${params.key}`]: params.value }),
+    // Only what was edited is sent, so changing the subject does not
+    // re-save (and re-validate) a body saved under older rules. A body or
+    // subject equal to the default is stored empty, so the email keeps
+    // following the default if a later version changes it.
+    mutationFn: (params: { key: string; value: string; subject: string }) => {
+      const tmpl = templates[params.key]
+      const changes: Record<string, string> = {}
+      if (params.value !== (tmpl?.custom || tmpl?.default || "")) {
+        changes[`email_template_${params.key}`] =
+          params.value.trim() === (tmpl?.default || "").trim() ? "" : params.value
+      }
+      const subject = params.subject.trim()
+      if (subject !== (tmpl?.subject_custom || tmpl?.subject_default || "")) {
+        changes[`email_subject_${params.key}`] = subject === (tmpl?.subject_default || "") ? "" : subject
+      }
+      return Object.keys(changes).length ? admin.updateSettings(changes) : Promise.resolve(null)
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "email-templates"] })
       setEditing(null)
@@ -159,7 +189,7 @@ export default function EmailTemplatesManager() {
   // AlertDialog stops a misclick from wiping work.
   const [confirmReset, setConfirmReset] = useState<string | null>(null)
   const resetMut = useMutation({
-    mutationFn: (key: string) => admin.updateSettings({ [`email_template_${key}`]: "" }),
+    mutationFn: (key: string) => admin.updateSettings({ [`email_template_${key}`]: "", [`email_subject_${key}`]: "" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "email-templates"] })
       setConfirmReset(null)
@@ -168,11 +198,21 @@ export default function EmailTemplatesManager() {
   })
 
   const templates = data?.templates || {}
+  const order = data?.order || []
+  const variablesOf = (key: string) => templates[key]?.variables || []
+  const groupOf = (key: string) => templates[key]?.group || ""
 
   const startEdit = (key: string) => {
     const tmpl = templates[key]
     setEditValue(tmpl?.custom || tmpl?.default || "")
+    setEditSubject(tmpl?.subject_custom || tmpl?.subject_default || "")
     setEditing(key)
+  }
+
+  const getPreviewSubject = (key: string) => {
+    const tmpl = templates[key]
+    if (!tmpl) return ""
+    return fillTemplate(tmpl.subject_custom || tmpl.subject_default || "")
   }
 
   const getPreviewHtml = (key: string) => {
@@ -197,62 +237,73 @@ export default function EmailTemplatesManager() {
             <div className="h-32 bg-muted rounded-lg animate-pulse" />
           ) : (
             <div className="space-y-2">
-              {Object.entries(TEMPLATE_META).map(([key, meta]) => {
+              {order.map((key, i) => {
+                const meta = TEMPLATE_META[key]
                 const tmpl = templates[key]
-                const isCustomized = !!tmpl?.custom
+                const isCustomized = !!tmpl?.custom || !!tmpl?.subject_custom
+                const newGroup = i === 0 || groupOf(order[i - 1]) !== groupOf(key)
 
                 return (
-                  <div key={key} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Code className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <span className="text-sm font-medium">{meta.label}</span>
-                        {isCustomized && (
-                          <Badge variant="secondary" className="ml-2 text-xs">
-                            customized
-                          </Badge>
-                        )}
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {meta.variables.map((v) => `{{.${v}}}`).join(", ")}
-                        </div>
-                        {isCustomized && meta.fallbackNote && !tmpl?.custom?.includes(".FallbackPlan") && (
-                          <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                            {t(meta.fallbackNote)}
+                  <div key={key}>
+                    {newGroup && (
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground pt-3 pb-1">
+                        {groupOf(key) in GROUP_TITLE ? t(GROUP_TITLE[groupOf(key)]) : groupOf(key)}
+                      </h3>
+                    )}
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Code className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="text-sm font-medium">{labelOf(key)}</span>
+                          {isCustomized && (
+                            <Badge variant="secondary" className="ml-2 text-xs">
+                              customized
+                            </Badge>
+                          )}
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {variablesOf(key)
+                              .map((v) => `{{.${v}}}`)
+                              .join(", ")}
                           </div>
-                        )}
+                          {!!tmpl?.custom && meta?.fallbackNote && !tmpl.custom.includes(".FallbackPlan") && (
+                            <div className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                              {t(meta.fallbackNote)}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setPreviewing(key)}
-                        title={t("settings.templatePreview")}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => startEdit(key)}
-                        title={t("settings.editTemplate")}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      {isCustomized && (
+                      <div className="flex items-center gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-orange-600"
-                          onClick={() => setConfirmReset(key)}
-                          title={t("settings.resetTemplate")}
-                          disabled={resetMut.isPending && resetMut.variables === key}
+                          className="h-8 w-8"
+                          onClick={() => setPreviewing(key)}
+                          title={t("settings.templatePreview")}
                         >
-                          <RotateCcw className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => startEdit(key)}
+                          title={t("settings.editTemplate")}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {isCustomized && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-orange-600"
+                            onClick={() => setConfirmReset(key)}
+                            title={t("settings.resetTemplate")}
+                            disabled={resetMut.isPending && resetMut.variables === key}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
@@ -267,15 +318,28 @@ export default function EmailTemplatesManager() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              {t("settings.editTemplate")}: {editing && TEMPLATE_META[editing]?.label}
+              {t("settings.editTemplate")}: {editing && labelOf(editing)}
             </DialogTitle>
           </DialogHeader>
           <DialogBody>
             <div className="space-y-3">
               <div className="text-xs text-muted-foreground">
                 {t("settings.templateVariables")}:{" "}
-                {editing && TEMPLATE_META[editing]?.variables.map((v) => `{{.${v}}}`).join(", ")}
+                {editing &&
+                  variablesOf(editing)
+                    .map((v) => `{{.${v}}}`)
+                    .join(", ")}
               </div>
+              <label className="block text-xs font-medium" htmlFor="email-template-subject">
+                {t("settings.templateSubject")}
+              </label>
+              <input
+                id="email-template-subject"
+                className="w-full font-mono text-xs p-2 border rounded-lg bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
+                value={editSubject}
+                maxLength={300}
+                onChange={(e) => setEditSubject(e.target.value.replace(/[\r\n]+/g, " "))}
+              />
               {editing && TEMPLATE_META[editing]?.fallbackNote && !editValue.includes(".FallbackPlan") && (
                 <div className="text-xs text-amber-700 dark:text-amber-400">
                   {t(TEMPLATE_META[editing].fallbackNote as TranslationKeys)}
@@ -291,7 +355,7 @@ export default function EmailTemplatesManager() {
                   {t("common.cancel")}
                 </Button>
                 <Button
-                  onClick={() => editing && saveMut.mutate({ key: editing, value: editValue })}
+                  onClick={() => editing && saveMut.mutate({ key: editing, value: editValue, subject: editSubject })}
                   disabled={saveMut.isPending}
                 >
                   {saveMut.isPending ? t("common.loading") : t("common.save")}
@@ -307,12 +371,22 @@ export default function EmailTemplatesManager() {
         <DialogContent className="max-w-2xl h-[min(760px,85vh)]">
           <DialogHeader>
             <DialogTitle>
-              {t("settings.templatePreview")}: {previewing && TEMPLATE_META[previewing]?.label}
+              {t("settings.templatePreview")}: {previewing && labelOf(previewing)}
             </DialogTitle>
           </DialogHeader>
           <DialogBody>
-            {previewing && !previewIsExact(templates[previewing]?.custom || templates[previewing]?.default || "") && (
-              <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">{t("settings.templatePreviewApprox")}</p>
+            {previewing &&
+              !(
+                previewIsExact(templates[previewing]?.custom || templates[previewing]?.default || "") &&
+                previewIsExact(templates[previewing]?.subject_custom || templates[previewing]?.subject_default || "")
+              ) && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">{t("settings.templatePreviewApprox")}</p>
+              )}
+            {previewing && (
+              <p className="text-sm mb-2">
+                <span className="text-muted-foreground">{t("settings.templateSubject")}:</span>{" "}
+                {getPreviewSubject(previewing)}
+              </p>
             )}
             {previewing && (
               <iframe
@@ -331,7 +405,7 @@ export default function EmailTemplatesManager() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t("settings.resetTemplateTitle", {
-                template: (confirmReset && TEMPLATE_META[confirmReset]?.label) || "",
+                template: (confirmReset && labelOf(confirmReset)) || "",
               })}
             </AlertDialogTitle>
             <AlertDialogDescription>{t("settings.resetTemplateDesc")}</AlertDialogDescription>

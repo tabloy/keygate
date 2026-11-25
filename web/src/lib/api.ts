@@ -664,7 +664,20 @@ export const admin = {
 
   // Email Templates
   getEmailTemplates: () =>
-    get<{ templates: Record<string, { custom: string; default: string }> }>("/admin/email-templates"),
+    get<{
+      templates: Record<
+        string,
+        {
+          custom: string
+          default: string
+          subject_custom: string
+          subject_default: string
+          group: string
+          variables: string[]
+        }
+      >
+      order: string[]
+    }>("/admin/email-templates"),
 
   // System
   getVersion: () => get<{ version: string; commit: string; build_date: string }>("/version"),

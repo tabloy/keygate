@@ -539,7 +539,7 @@ func TestTrialFallback_ReminderWording(t *testing.T) {
 	if strings.Contains(ending, "moves to") || !strings.Contains(ending, "Choose a plan before then to keep using it.") {
 		t.Fatalf("plain trial wording changed:\n%s", ending)
 	}
-	if err := ValidateTemplate(`<p>{{if .FallbackPlan}}Then {{.FallbackPlan}}{{end}}</p>`); err != nil {
+	if err := ValidateTemplate("license_expiring", `<p>{{if .FallbackPlan}}Then {{.FallbackPlan}}{{end}}</p>`); err != nil {
 		t.Fatalf("a custom template using FallbackPlan was refused: %v", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"regexp"
@@ -264,18 +265,17 @@ var htmlTagRe = regexp.MustCompile(`(?s)<[^>]*>`)
 // htmlToText is a plain-text fallback for providers that want a text
 // part (Cloudflare requires one). It is deliberately crude: strip
 // tags, collapse whitespace. The HTML part is the real body.
-func htmlToText(html string) string {
+func htmlToText(src string) string {
 	// Drop script/style blocks whole so their contents don't leak in.
-	html = regexp.MustCompile(`(?is)<(script|style)[^>]*>.*?</(script|style)>`).ReplaceAllString(html, "")
-	html = strings.ReplaceAll(html, "</p>", "\n\n")
-	html = strings.ReplaceAll(html, "<br>", "\n")
-	html = strings.ReplaceAll(html, "<br/>", "\n")
-	html = strings.ReplaceAll(html, "<br />", "\n")
-	text := htmlTagRe.ReplaceAllString(html, "")
-	text = strings.ReplaceAll(text, "&nbsp;", " ")
-	text = strings.ReplaceAll(text, "&amp;", "&")
-	text = strings.ReplaceAll(text, "&lt;", "<")
-	text = strings.ReplaceAll(text, "&gt;", ">")
+	src = regexp.MustCompile(`(?is)<(script|style)[^>]*>.*?</(script|style)>`).ReplaceAllString(src, "")
+	src = strings.ReplaceAll(src, "</p>", "\n\n")
+	src = strings.ReplaceAll(src, "<br>", "\n")
+	src = strings.ReplaceAll(src, "<br/>", "\n")
+	src = strings.ReplaceAll(src, "<br />", "\n")
+	text := htmlTagRe.ReplaceAllString(src, "")
+	// Decode every entity: html/template writes "+" as &#43; and quotes
+	// as &#34;/&#39;, which a text part must show as the characters.
+	text = html.UnescapeString(strings.ReplaceAll(text, "&nbsp;", " "))
 	// Collapse runs of blank lines and trailing spaces.
 	lines := strings.Split(text, "\n")
 	var out []string

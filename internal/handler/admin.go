@@ -4732,19 +4732,10 @@ func (h *AdminHandler) ChangeLicensePlan(c *gin.Context) {
 // else is rejected so a typo can't quietly create a dead row.
 var settingsWritable = map[string]bool{
 	"site_name": true, "timezone": true, "language": true, "brand_color": true, "logo_url": true,
-	"signup_mode":                      true,
-	service.ReminderDaysSetting:        true,
-	"maintenance_features_enabled":     true,
-	"feed_url_ttl_bound":               true,
-	"email_template_license_created":   true,
-	"email_template_license_expiring":  true,
-	"email_template_updates_ending":    true,
-	"email_template_license_expired":   true,
-	"email_template_trial_expired":     true,
-	"email_template_license_suspended": true,
-	"email_template_quota_warning":     true,
-	"email_template_seat_invite":       true,
-	"email_template_payment_failed":    true,
+	"signup_mode":                  true,
+	service.ReminderDaysSetting:    true,
+	"maintenance_features_enabled": true,
+	"feed_url_ttl_bound":           true,
 	// Email. Each provider owns an independent, namespaced config; the
 	// env vars are the fallback when nothing is set here (see
 	// EmailService.resolve). email_provider only selects which one is
@@ -4768,6 +4759,13 @@ func init() {
 		key := service.NotifySettingKey(kind)
 		settingsWritable[key] = true
 		settingsEnum[key] = []string{"true", "false"}
+	}
+	// Every email Keygate sends has an editable body and subject. The
+	// keys come from the service's list, so an email added there is
+	// editable here without a second list to keep in step.
+	for _, key := range service.TemplateKeys() {
+		settingsWritable["email_template_"+key] = true
+		settingsWritable["email_subject_"+key] = true
 	}
 }
 
@@ -5029,14 +5027,33 @@ func (h *AdminHandler) UpdateSettings(c *gin.Context) {
 	// template source, so the customer receives "{{.LicenseKey}}"
 	// where their key should be. Empty means "back to the default".
 	for key, value := range writes {
-		if !strings.HasPrefix(key, "email_template_") || value == "" {
+		if value == "" {
 			continue
 		}
-		// Rendered once with sample values, not only parsed: html/template
+		isTemplate, isSubject := strings.HasPrefix(key, "email_template_"), strings.HasPrefix(key, "email_subject_")
+		if !isTemplate && !isSubject {
+			continue
+		}
+		// A value saved before (under older, looser rules) and sent back
+		// unchanged is not re-judged: a client that reads the settings
+		// and writes them all back must not be refused for it.
+		if stored, err := h.Store.GetSetting(c, key); err == nil && stored == value {
+			continue
+		}
+		// Rendered with sample values, not only parsed: html/template
 		// rejects some templates only when executed.
-		if err := service.ValidateTemplate(value); err != nil {
-			response.BadRequest(c, key+" is not a valid template: "+err.Error())
-			return
+		if name, ok := strings.CutPrefix(key, "email_template_"); ok {
+			if err := service.ValidateTemplate(name, value); err != nil {
+				response.BadRequest(c, key+" is not a valid template: "+err.Error())
+				return
+			}
+		}
+		// A subject is a header: one line, and the same variable check.
+		if name, ok := strings.CutPrefix(key, "email_subject_"); ok {
+			if err := service.ValidateSubject(name, value); err != nil {
+				response.BadRequest(c, key+" is not a valid subject: "+err.Error())
+				return
+			}
 		}
 	}
 
@@ -5162,22 +5179,44 @@ func (h *AdminHandler) SendTestEmail(c *gin.Context) {
 	response.OK(c, gin.H{"status": "sent", "to": to})
 }
 
-// GetEmailTemplates returns all email templates (custom from DB + hardcoded defaults).
+// GetEmailTemplates returns every email's body and subject (custom from
+// DB + the defaults), its group and the variables it may use. order
+// lists the keys in the order the dashboard shows them. A failed read is
+// an error, not "not customised": the editor would offer the default and
+// a save would overwrite the real custom template.
 func (h *AdminHandler) GetEmailTemplates(c *gin.Context) {
-	defaults := service.DefaultTemplates()
-
 	type templateInfo struct {
-		Custom  string `json:"custom"`
-		Default string `json:"default"`
+		Custom         string   `json:"custom"`
+		Default        string   `json:"default"`
+		SubjectCustom  string   `json:"subject_custom"`
+		SubjectDefault string   `json:"subject_default"`
+		Group          string   `json:"group"`
+		Variables      []string `json:"variables"`
 	}
 
-	result := make(map[string]templateInfo, len(defaults))
-	for key, def := range defaults {
-		custom, _ := h.Store.GetSetting(c, "email_template_"+key)
-		result[key] = templateInfo{Custom: custom, Default: def}
+	all := service.Templates()
+	result := make(map[string]templateInfo, len(all))
+	order := make([]string, len(all))
+	for i, t := range all {
+		custom, err := h.Store.GetSetting(c, "email_template_"+t.Key)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			response.Internal(c, err)
+			return
+		}
+		subject, err := h.Store.GetSetting(c, "email_subject_"+t.Key)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			response.Internal(c, err)
+			return
+		}
+		result[t.Key] = templateInfo{
+			Custom: custom, Default: t.Body,
+			SubjectCustom: subject, SubjectDefault: t.Subject,
+			Group: t.Group, Variables: t.Variables,
+		}
+		order[i] = t.Key
 	}
 
-	response.OK(c, gin.H{"templates": result})
+	response.OK(c, gin.H{"templates": result, "order": order})
 }
 
 // ─── Team (Admin Management) ───
