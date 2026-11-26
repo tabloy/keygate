@@ -275,6 +275,8 @@ const zh = {
   "licenses.label": "标签",
   "licenses.lastVerified": "最后验证",
   "licenses.noActivations": "暂无激活记录。",
+  "licenses.floatingNotListed":
+    "浮动方案统计的是当前正在使用这个许可证的机器，这里不逐一列出；机器停止使用后，席位很快会自动释放。",
   "licenses.usageCounters": "使用计数器",
   "licenses.noUsageCounters": "暂无使用计数器。",
   "licenses.feature": "功能",

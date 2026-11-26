@@ -1074,9 +1074,15 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                   <>
                     <Separator />
                     <div>
+                      {/* What "in use" counts depends on the plan, as in
+                        the list row. A floating plan holds its seats in
+                        its own table and never writes activations. */}
                       <h3 className="font-semibold mb-3">
-                        {t("licenses.activations")} ({lic.activations?.length || 0} /{" "}
-                        {(lic.activation_limit ?? lic.plan?.max_activations) || "-"})
+                        {t("licenses.activations")} (
+                        {lic.plan?.license_model === "floating"
+                          ? (lic.active_session_count ?? 0)
+                          : lic.activations?.length || 0}{" "}
+                        / {(lic.activation_limit ?? lic.plan?.max_activations) || "-"})
                       </h3>
                       {lic.activations && lic.activations.length > 0 ? (
                         <DataTable>
@@ -1126,7 +1132,13 @@ function LicenseDetail({ id, onClose }: { id: string; onClose: () => void }) {
                           </DataTableBody>
                         </DataTable>
                       ) : (
-                        <p className="text-sm text-muted-foreground">{t("licenses.noActivations")}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {t(
+                            lic.plan?.license_model === "floating"
+                              ? "licenses.floatingNotListed"
+                              : "licenses.noActivations",
+                          )}
+                        </p>
                       )}
                     </div>
                   </>
