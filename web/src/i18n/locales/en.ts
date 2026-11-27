@@ -290,6 +290,8 @@ const en = {
   "licenses.label": "Label",
   "licenses.lastVerified": "Last Verified",
   "licenses.noActivations": "No activations yet.",
+  "licenses.floatingNotListed":
+    "On a floating plan this counts the machines using the license right now. They aren't listed here; a seat frees itself shortly after its machine stops.",
   "licenses.usageCounters": "Usage Counters",
   "licenses.noUsageCounters": "No usage counters.",
   "licenses.feature": "Feature",
